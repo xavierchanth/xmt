@@ -12,12 +12,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 await WindowMover.moveFocusedWindowToNextScreen()
             }
         }
-
-        KeyboardShortcuts.onKeyUp(for: .rotateDesktops) {
-            WindowActionCoordinator.shared.perform {
-                await WindowRotator.rotateDesktops()
-            }
-        }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {

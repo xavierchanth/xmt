@@ -1,11 +1,6 @@
 # Swapper
 
-Swapper is a macOS menu bar app for moving windows between displays with global shortcuts.
-
-It currently supports two actions:
-
-- `Move window to next screen`: moves the focused window to the next display with wraparound.
-- `Rotate desktops`: moves every eligible window forward one display.
+Swapper is a macOS menu bar app for moving windows between displays with one configurable global shortcut: `Move window to next screen`. It moves the focused window to the next display with wraparound.
 
 Swapper targets macOS 14+ and uses the Accessibility API to inspect and reposition windows.
 
@@ -16,7 +11,7 @@ This project is currently maintained for personal use. There are no immediate pl
 ## Features
 
 - Lives in the menu bar (`LSUIElement`) instead of showing a Dock icon.
-- Configurable global shortcuts powered by [`KeyboardShortcuts`](https://github.com/sindresorhus/KeyboardShortcuts).
+- One configurable global shortcut powered by [`KeyboardShortcuts`](https://github.com/sindresorhus/KeyboardShortcuts).
 - Accessibility permission prompting on launch, plus reminder handling if permissions are missing.
 - Launch at Login support through `SMAppService`.
 - Native full-screen support for `Move window to next screen`.
@@ -27,10 +22,9 @@ Current behavior is documented in more detail in [SWAPPER_BEHAVIOR.md](./SWAPPER
 
 Highlights:
 
-- Shortcuts fire on key release.
+- The shortcut fires on key release.
 - Only one window-management action runs at a time.
 - Minimized windows are skipped.
-- `Rotate desktops` skips native full-screen windows and obvious floating/dialog/sheet windows.
 - `Move window to next screen` can exit and restore native macOS full-screen when possible.
 
 ## Requirements
@@ -44,11 +38,11 @@ Highlights:
 1. Open `Swapper.xcodeproj` in Xcode.
 2. Build and run the `Swapper` app target.
 3. On first launch, grant Accessibility access when macOS prompts for it.
-4. Use the menu bar icon to open `Settings...` and configure shortcuts.
+4. Use the menu bar icon to open `Settings...` and configure the shortcut.
 
 Once running, Swapper appears in the menu bar. The settings window includes:
 
-- `Shortcuts`: records the two global hotkeys.
+- `Shortcuts`: records the global hotkey.
 - `General`: toggles Launch at Login and shows Accessibility permission status.
 
 ## Development
@@ -56,11 +50,11 @@ Once running, Swapper appears in the menu bar. The settings window includes:
 Project layout:
 
 - `Swapper/App`: app entry point and app delegate
-- `Swapper/WindowManagement`: window discovery, geometry, movement, and rotation logic
+- `Swapper/WindowManagement`: window discovery, geometry, and movement logic
 - `Swapper/Services`: Accessibility permission and reminder handling
 - `Swapper/Settings`: settings UI
 - `Swapper/MenuBar`: menu bar menu UI
-- `SwapperTests`: unit tests for window geometry and classifier behavior
+- `SwapperTests`: unit tests for window geometry
 
 Swift Package dependency:
 
@@ -73,8 +67,6 @@ Run tests from Xcode with the `SwapperTests` target, or from the command line:
 ```bash
 xcodebuild test -project Swapper.xcodeproj -scheme Swapper -destination 'platform=macOS'
 ```
-
-I did not verify the `xcodebuild` command inside this environment because sandbox restrictions blocked Xcode's cache and simulator-related filesystem access.
 
 ## License
 

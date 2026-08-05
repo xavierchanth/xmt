@@ -5,8 +5,4 @@ extension KeyboardShortcuts.Name {
         "moveToNextScreen",
         default: .init(.space, modifiers: [.option])
     )
-    static let rotateDesktops = Self(
-        "rotateAllWindows",
-        default: .init(.space, modifiers: [.option, .shift])
-    )
 }
