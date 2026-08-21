@@ -1,73 +1,82 @@
-# Swapper
+# XMT — Xavier's macOS Tweaks
 
-Swapper is a macOS menu bar app for moving windows between displays with one configurable global shortcut: `Move window to next screen`. It moves the focused window to the next display with wraparound.
+XMT is a personal macOS menu bar app that collects chosen macOS behavior changes into one process, so there is one background app to install, permission, configure, and remember instead of one per tweak. This README covers what ships today and how to build, run, and test it; [the documentation tree](docs/README.md) covers product intent, architecture, and roadmap.
 
-Swapper targets macOS 14+ and uses the Accessibility API to inspect and reposition windows.
+The Xcode target, scheme, and bundle identifier are still named `Swapper`. That rename is an open gap, not a second product — see [naming and identity](docs/roadmap/README.md#naming-and-identity-gap).
+
+## What ships today
+
+One module, **Window Swapper**: a global shortcut (default **Option-Space**) that moves the focused window to the next display, wrapping around, preserving relative geometry, and handling native full-screen windows.
+
+Supporting behavior:
+
+- Lives in the menu bar as an `LSUIElement` app with no Dock icon.
+- Rebindable global shortcut powered by [`KeyboardShortcuts`](https://github.com/sindresorhus/KeyboardShortcuts).
+- Accessibility permission prompt at launch, with status and a re-request button in Settings.
+- Launch at Login through `SMAppService`.
+
+Voice Transcription, Keyboard Customization, and Menu Bar Management are **planned, not implemented**. See [the module inventory](docs/architecture/modules.md#module-inventory).
 
 ## Status
 
-This project is currently maintained for personal use. There are no immediate plans to officially publish it for now.
-
-## Features
-
-- Lives in the menu bar (`LSUIElement`) instead of showing a Dock icon.
-- One configurable global shortcut powered by [`KeyboardShortcuts`](https://github.com/sindresorhus/KeyboardShortcuts).
-- Accessibility permission prompting on launch, plus reminder handling if permissions are missing.
-- Launch at Login support through `SMAppService`.
-- Native full-screen support for `Move window to next screen`.
-
-## Behavior
-
-Current behavior is documented in more detail in [SWAPPER_BEHAVIOR.md](./SWAPPER_BEHAVIOR.md).
-
-Highlights:
-
-- The shortcut fires on key release.
-- Only one window-management action runs at a time.
-- Minimized windows are skipped.
-- `Move window to next screen` can exit and restore native macOS full-screen when possible.
+Maintained for personal use. There are no plans to publish it and no support commitment.
 
 ## Requirements
 
 - macOS 14 or later
 - Xcode 15 or later
-- Accessibility permission granted to Swapper
+- Accessibility permission granted to the app
 
-## Running Locally
+## Installing
 
-1. Open `Swapper.xcodeproj` in Xcode.
-2. Build and run the `Swapper` app target.
-3. On first launch, grant Accessibility access when macOS prompts for it.
-4. Use the menu bar icon to open `Settings...` and configure the shortcut.
+With [`just`](https://github.com/casey/just) installed, build a Release app and copy it to `/Applications`:
 
-Once running, Swapper appears in the menu bar. The settings window includes:
+```bash
+just install
+```
 
-- `Shortcuts`: records the global hotkey.
-- `General`: toggles Launch at Login and shows Accessibility permission status.
+That recipe quits a running copy, replaces `/Applications/Swapper.app`, and launches the result. On first launch, grant Accessibility access when macOS prompts, then open `Settings...` from the menu bar icon to configure the shortcut.
 
-## Development
+To build and launch without installing:
 
-Project layout:
+```bash
+just run
+```
 
-- `Swapper/App`: app entry point and app delegate
-- `Swapper/WindowManagement`: window discovery, geometry, and movement logic
-- `Swapper/Services`: Accessibility permission and reminder handling
-- `Swapper/Settings`: settings UI
-- `Swapper/MenuBar`: menu bar menu UI
-- `SwapperTests`: unit tests for window geometry
+Both build into `.build/xcode`; `just clean` removes that directory.
 
-Swift Package dependency:
+Alternatively, open `Swapper.xcodeproj` in Xcode and run the `Swapper` target.
 
-- `KeyboardShortcuts` `2.4.0`
+Once running, the app appears in the menu bar. The settings window has two tabs: `Shortcuts` records the global hotkey, and `General` toggles Launch at Login and shows Accessibility permission status.
 
 ## Testing
 
-Run tests from Xcode with the `SwapperTests` target, or from the command line:
+`SwapperTests` contains unit tests for window geometry mathematics. The shared `Swapper` scheme does not currently include a test action, so command-line test execution is not configured. This is tracked as a repository gap rather than exposed through a non-working `just` recipe.
+
+## Documentation checks
 
 ```bash
-xcodebuild test -project Swapper.xcodeproj -scheme Swapper -destination 'platform=macOS'
+just docs-check
 ```
+
+This validates heading structure, opening paragraphs, relative links, heading fragments, and reachability from `docs/README.md`. It needs Node and nothing else — no package manager, lockfile, or dependency install. Without `just`, run `node assets/check-docs.mjs`, which scans the same files by default.
+
+`just check` runs all currently configured repository checks. At present, that is the documentation check.
+
+## Repository layout
+
+- `Swapper/App` — app entry point and app delegate
+- `Swapper/WindowManagement` — window discovery, geometry, movement, and coordinate conversion
+- `Swapper/HotKeys` — global shortcut names and defaults
+- `Swapper/Services` — Accessibility permission and reminder handling
+- `Swapper/Settings` — settings window and its tabs
+- `Swapper/MenuBar` — menu bar menu
+- `SwapperTests` — unit tests
+- `docs/` — [product, architecture, specification, and roadmap](docs/README.md)
+- `assets/` — repository tooling, currently the documentation checker
+
+Swift package dependency: `KeyboardShortcuts`, up to the next major version from `2.0.0`.
 
 ## License
 
-Swapper is licensed under the BSD 3-Clause License. See [LICENSE](./LICENSE).
+BSD 3-Clause. See [LICENSE](LICENSE).
