@@ -59,7 +59,7 @@ just docs-check
 
 This validates heading structure, opening paragraphs, relative links, heading fragments, and reachability from `docs/README.md`. It needs Node and nothing else — no package manager, lockfile, or dependency install. Without `just`, run `node assets/check-docs.mjs`, which scans the same files by default.
 
-`just check` runs all currently configured repository checks. 
+`just check` runs the unit tests and documentation validation.
 
 ## Repository layout
 

@@ -14,7 +14,7 @@ Window Mover registers exactly one global shortcut.
 - Default binding: **Option-Space**.
 - The shortcut is user-rebindable on the Window Mover settings page; the recorder is the only place the binding is set.
 - Window Mover has one persisted enabled setting, which defaults to enabled. Changing it takes effect without restarting XMT.
-- When disabled, the registered library callback returns at its boundary before action coordination, permission checks, or window work. KeyboardShortcuts 2.x has no callback-removal API, so its callback registration remains installed, but it performs no module operation while disabled.
+- When disabled, XMT disables the shortcut registration through KeyboardShortcuts, releasing the active global hot key. Re-enabling reacquires it without restarting XMT. The library callback remains installed because KeyboardShortcuts has no callback-removal API, and retains an enabled-state guard so a queued or unexpected callback returns before action coordination, permission checks, or window work.
 - The handler fires on **key up**, not key down. A press-and-hold produces one action when the key is released.
 
 Key-up firing means the action is never repeated by key auto-repeat and never fires while the user is still composing a chord.
@@ -33,7 +33,7 @@ The action's first check is the live Accessibility trust state, re-read at each 
 
 - XMT does not request Accessibility access merely because the app launched. General and Window Mover settings share one live status presentation, identify Window Mover as the consumer, and offer contextual request and System Settings actions.
 - If the shortcut fires without Accessibility access, no window is touched and a reminder alert is shown. The alert offers to open the Accessibility pane of System Settings and re-requests trust.
-- The reminder is shown **at most once** while access remains denied. Suppression is lifted when the app observes that access has been granted. That check runs whenever the app becomes active, and whenever a settings status presentation observes the app becoming active. General also refreshes Launch-at-Login status.
+- The reminder is shown **at most once** while access remains denied. Suppression is lifted when the app observes that access has been granted. Accessibility status refreshes whenever the app becomes active and when either shared status presentation appears. General refreshes Launch-at-Login status when it appears and whenever the app becomes active.
 
 ## Preconditions and no-op cases
 

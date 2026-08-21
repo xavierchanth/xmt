@@ -12,6 +12,7 @@ Swift 5, SwiftUI plus AppKit, macOS 14 minimum, one Swift package dependency (`K
 
 ```bash
 just build        # Release build into .build/xcode
+just test         # unit tests through the shared XMT scheme
 just docs-check   # documentation validation
 just check        # all currently configured repository checks
 just install      # build, replace /Applications/XMT.app, launch

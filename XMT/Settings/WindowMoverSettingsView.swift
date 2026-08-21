@@ -2,15 +2,18 @@ import KeyboardShortcuts
 import SwiftUI
 
 struct WindowMoverSettingsView: View {
-    @AppStorage(WindowMoverModule.enabledDefaultsKey) private var isEnabled = true
+    @ObservedObject private var module = WindowMoverModule.shared
 
     var body: some View {
         Form {
             Section {
-                Toggle("Enable Window Mover", isOn: $isEnabled)
-                    .onChange(of: isEnabled) { _, enabled in
-                        WindowMoverModule.shared.setEnabled(enabled)
-                    }
+                Toggle(
+                    "Enable Window Mover",
+                    isOn: Binding(
+                        get: { module.isEnabled },
+                        set: { module.setEnabled($0) }
+                    )
+                )
             }
 
             Section("Accessibility") {
@@ -22,7 +25,7 @@ struct WindowMoverSettingsView: View {
                     "Move window to next screen:",
                     name: .moveToNextScreen
                 )
-                .disabled(!isEnabled)
+                .disabled(!module.isEnabled)
 
                 Text("Moves the focused window to the next display and supports native full-screen windows.")
                     .font(.footnote)

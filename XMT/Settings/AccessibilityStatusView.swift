@@ -1,7 +1,14 @@
 import SwiftUI
 
 struct AccessibilityStatusView: View {
+    private let consumerDescription: String
     @ObservedObject private var accessibility = AccessibilityService.shared
+
+    init(
+        consumerDescription: String = "Window Mover uses Accessibility to read and move the focused window."
+    ) {
+        self.consumerDescription = consumerDescription
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -22,13 +29,11 @@ struct AccessibilityStatusView: View {
                 }
             }
 
-            Text("Window Mover uses Accessibility to read and move the focused window.")
+            Text(consumerDescription)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
-        .onReceive(
-            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
-        ) { _ in
+        .onAppear {
             accessibility.refresh()
         }
     }

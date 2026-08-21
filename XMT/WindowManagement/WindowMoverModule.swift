@@ -1,24 +1,22 @@
+import Combine
 import Foundation
 import KeyboardShortcuts
 
 /// Lifecycle seam for the compiled-in Window Mover module.
-///
-/// KeyboardShortcuts 2.x does not expose callback removal. The callback is therefore
-/// installed once, and this manager enforces the lifecycle boundary before any module
-/// operation starts. Disabled modules acquire no other resources or perform any work.
 @MainActor
-final class WindowMoverModule {
+final class WindowMoverModule: ObservableObject {
     static let shared = WindowMoverModule()
     static let enabledDefaultsKey = "windowMoverEnabled"
+    static let defaultEnabled = true
 
+    @Published private(set) var isEnabled: Bool
     private var isHandlerInstalled = false
 
     private init() {
-        UserDefaults.standard.register(defaults: [Self.enabledDefaultsKey: true])
-    }
-
-    var isEnabled: Bool {
-        UserDefaults.standard.bool(forKey: Self.enabledDefaultsKey)
+        UserDefaults.standard.register(defaults: [
+            Self.enabledDefaultsKey: Self.defaultEnabled
+        ])
+        isEnabled = UserDefaults.standard.bool(forKey: Self.enabledDefaultsKey)
     }
 
     func register() {
@@ -27,17 +25,32 @@ final class WindowMoverModule {
 
         KeyboardShortcuts.onKeyUp(for: .moveToNextScreen) { [weak self] in
             Task { @MainActor in
+                // Defence in depth if a queued or library callback arrives after disable.
                 guard let self, self.isEnabled else { return }
                 WindowActionCoordinator.shared.perform {
                     await WindowMover.moveFocusedWindowToNextScreen()
                 }
             }
         }
+        applyShortcutState()
     }
 
     func setEnabled(_ enabled: Bool) {
+        guard enabled != isEnabled else { return }
+        isEnabled = enabled
         UserDefaults.standard.set(enabled, forKey: Self.enabledDefaultsKey)
-        guard enabled else { return }
-        AccessibilityService.shared.refresh()
+        applyShortcutState()
+
+        if enabled {
+            AccessibilityService.shared.refresh()
+        }
+    }
+
+    private func applyShortcutState() {
+        if isEnabled {
+            KeyboardShortcuts.enable(.moveToNextScreen)
+        } else {
+            KeyboardShortcuts.disable(.moveToNextScreen)
+        }
     }
 }
