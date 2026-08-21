@@ -33,7 +33,7 @@ The action's first check is the live Accessibility trust state, re-read at each 
 
 - XMT does not request Accessibility access merely because the app launched. General and Window Mover settings share one live status presentation, identify Window Mover as the consumer, and offer contextual request and System Settings actions.
 - If the shortcut fires without Accessibility access, no window is touched and a reminder alert is shown. The alert offers to open the Accessibility pane of System Settings and re-requests trust.
-- The reminder is shown **at most once** while access remains denied. Suppression is lifted when the app observes that access has been granted. Accessibility status refreshes whenever the app becomes active and when either shared status presentation appears. General refreshes Launch-at-Login status when it appears and whenever the app becomes active.
+- The reminder is shown **at most once** while access remains denied. Suppression is lifted when a refresh observes that access has been granted. Accessibility status refreshes whenever the app becomes active, when either shared status presentation appears, and when Window Mover is enabled. General refreshes Launch-at-Login status when it appears and whenever the app becomes active.
 
 ## Preconditions and no-op cases
 

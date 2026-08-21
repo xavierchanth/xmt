@@ -2,7 +2,8 @@ import ServiceManagement
 import SwiftUI
 
 struct GeneralSettingsView: View {
-    @State private var launchAtLogin = false
+    @State private var launchAtLoginStatus = SMAppService.mainApp.status
+    @State private var registrationError: String?
 
     var body: some View {
         Form {
@@ -10,10 +11,16 @@ struct GeneralSettingsView: View {
                 Toggle(
                     "Launch at Login",
                     isOn: Binding(
-                        get: { launchAtLogin },
+                        get: { launchAtLoginStatus == .enabled },
                         set: { setLaunchAtLogin($0) }
                     )
                 )
+
+                if launchAtLoginStatus == .requiresApproval {
+                    Text("Launch at Login requires approval in System Settings → General → Login Items.")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
             }
 
             Section("Permissions") {
@@ -27,6 +34,17 @@ struct GeneralSettingsView: View {
         ) { _ in
             refreshLaunchAtLogin()
         }
+        .alert(
+            "Couldn’t Update Launch at Login",
+            isPresented: Binding(
+                get: { registrationError != nil },
+                set: { if !$0 { registrationError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(registrationError ?? "Please try again.")
+        }
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
@@ -37,12 +55,12 @@ struct GeneralSettingsView: View {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
-            // Status below remains authoritative after either success or failure.
+            registrationError = error.localizedDescription
         }
         refreshLaunchAtLogin()
     }
 
     private func refreshLaunchAtLogin() {
-        launchAtLogin = (SMAppService.mainApp.status == .enabled)
+        launchAtLoginStatus = SMAppService.mainApp.status
     }
 }

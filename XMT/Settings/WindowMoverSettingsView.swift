@@ -21,11 +21,15 @@ struct WindowMoverSettingsView: View {
             }
 
             Section("Shortcut") {
-                KeyboardShortcuts.Recorder(
-                    "Move window to next screen:",
-                    name: .moveToNextScreen
-                )
-                .disabled(!module.isEnabled)
+                if module.isEnabled {
+                    KeyboardShortcuts.Recorder(
+                        "Move window to next screen:",
+                        name: .moveToNextScreen
+                    )
+                } else {
+                    Text("Enable Window Mover to configure or use its shortcut.")
+                        .foregroundStyle(.secondary)
+                }
 
                 Text("Moves the focused window to the next display and supports native full-screen windows.")
                     .font(.footnote)
