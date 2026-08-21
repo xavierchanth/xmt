@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		AA000001 /* SwapperApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100001 /* SwapperApp.swift */; };
+		AA000001 /* XMTApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100001 /* XMTApp.swift */; };
 		AA000002 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100002 /* AppDelegate.swift */; };
 		AA000003 /* HotKeyNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100003 /* HotKeyNames.swift */; };
 		AA000004 /* AXWindowInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100004 /* AXWindowInfo.swift */; };
@@ -15,7 +15,7 @@
 		AA000006 /* WindowMover.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100006 /* WindowMover.swift */; };
 		AA000008 /* AccessibilityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100008 /* AccessibilityService.swift */; };
 		AA000009 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100009 /* SettingsView.swift */; };
-		AA000010 /* ShortcutsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100010 /* ShortcutsSettingsView.swift */; };
+		AA000010 /* WindowMoverSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100010 /* WindowMoverSettingsView.swift */; };
 		AA000011 /* GeneralSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100011 /* GeneralSettingsView.swift */; };
 		AA000012 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100012 /* MenuBarView.swift */; };
 		AA000013 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA100013 /* Assets.xcassets */; };
@@ -26,10 +26,12 @@
 		AA000019 /* WindowGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100016 /* WindowGeometry.swift */; };
 		AA000021 /* WindowGeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100021 /* WindowGeometryTests.swift */; };
 		AA000023 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100023 /* SettingsWindowController.swift */; };
+		AA000024 /* AccessibilityStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100024 /* AccessibilityStatusView.swift */; };
+		AA000025 /* WindowMoverModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100025 /* WindowMoverModule.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		AA100001 /* SwapperApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwapperApp.swift; sourceTree = "<group>"; };
+		AA100001 /* XMTApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XMTApp.swift; sourceTree = "<group>"; };
 		AA100002 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		AA100003 /* HotKeyNames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyNames.swift; sourceTree = "<group>"; };
 		AA100004 /* AXWindowInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXWindowInfo.swift; sourceTree = "<group>"; };
@@ -37,19 +39,21 @@
 		AA100006 /* WindowMover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowMover.swift; sourceTree = "<group>"; };
 		AA100008 /* AccessibilityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityService.swift; sourceTree = "<group>"; };
 		AA100009 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		AA100010 /* ShortcutsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutsSettingsView.swift; sourceTree = "<group>"; };
+		AA100010 /* WindowMoverSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowMoverSettingsView.swift; sourceTree = "<group>"; };
 		AA100011 /* GeneralSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsView.swift; sourceTree = "<group>"; };
 		AA100012 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
 		AA100013 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA100014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		AA100015 /* Swapper.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Swapper.entitlements; sourceTree = "<group>"; };
+		AA100015 /* XMT.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = XMT.entitlements; sourceTree = "<group>"; };
 		AA100016 /* WindowGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowGeometry.swift; sourceTree = "<group>"; };
 		AA100018 /* WindowActionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowActionCoordinator.swift; sourceTree = "<group>"; };
 		AA100019 /* AccessibilityReminder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityReminder.swift; sourceTree = "<group>"; };
-		AA100020 /* SwapperTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SwapperTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA100020 /* XMTTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = XMTTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA100021 /* WindowGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowGeometryTests.swift; sourceTree = "<group>"; };
 		AA100023 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
-		AA100099 /* Swapper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Swapper.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA100024 /* AccessibilityStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityStatusView.swift; sourceTree = "<group>"; };
+		AA100025 /* WindowMoverModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowMoverModule.swift; sourceTree = "<group>"; };
+		AA100099 /* XMT.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = XMT.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -74,14 +78,14 @@
 		AA400000 /* Main */ = {
 			isa = PBXGroup;
 			children = (
-				AA400001 /* Swapper */,
-				AA400080 /* SwapperTests */,
+				AA400001 /* XMT */,
+				AA400080 /* XMTTests */,
 				AA400099 /* Products */,
 				AA400100 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
-		AA400001 /* Swapper */ = {
+		AA400001 /* XMT */ = {
 			isa = PBXGroup;
 			children = (
 				AA400010 /* App */,
@@ -92,13 +96,13 @@
 				AA400060 /* MenuBar */,
 				AA400070 /* Resources */,
 			);
-			path = Swapper;
+			path = XMT;
 			sourceTree = "<group>";
 		};
 		AA400010 /* App */ = {
 			isa = PBXGroup;
 			children = (
-				AA100001 /* SwapperApp.swift */,
+				AA100001 /* XMTApp.swift */,
 				AA100002 /* AppDelegate.swift */,
 			);
 			path = App;
@@ -120,6 +124,7 @@
 				AA100006 /* WindowMover.swift */,
 				AA100016 /* WindowGeometry.swift */,
 				AA100018 /* WindowActionCoordinator.swift */,
+				AA100025 /* WindowMoverModule.swift */,
 			);
 			path = WindowManagement;
 			sourceTree = "<group>";
@@ -137,9 +142,10 @@
 			isa = PBXGroup;
 			children = (
 				AA100009 /* SettingsView.swift */,
-				AA100010 /* ShortcutsSettingsView.swift */,
+				AA100010 /* WindowMoverSettingsView.swift */,
 				AA100011 /* GeneralSettingsView.swift */,
 				AA100023 /* SettingsWindowController.swift */,
+				AA100024 /* AccessibilityStatusView.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -157,24 +163,24 @@
 			children = (
 				AA100013 /* Assets.xcassets */,
 				AA100014 /* Info.plist */,
-				AA100015 /* Swapper.entitlements */,
+				AA100015 /* XMT.entitlements */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
 		};
-		AA400080 /* SwapperTests */ = {
+		AA400080 /* XMTTests */ = {
 			isa = PBXGroup;
 			children = (
 				AA100021 /* WindowGeometryTests.swift */,
 			);
-			path = SwapperTests;
+			path = XMTTests;
 			sourceTree = "<group>";
 		};
 		AA400099 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				AA100099 /* Swapper.app */,
-				AA100020 /* SwapperTests.xctest */,
+				AA100099 /* XMT.app */,
+				AA100020 /* XMTTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -189,9 +195,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		AA500001 /* Swapper */ = {
+		AA500001 /* XMT */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = AA700001 /* Build configuration list for PBXNativeTarget "Swapper" */;
+			buildConfigurationList = AA700001 /* Build configuration list for PBXNativeTarget "XMT" */;
 			buildPhases = (
 				AA300000 /* Sources */,
 				AA300001 /* Frameworks */,
@@ -201,17 +207,17 @@
 			);
 			dependencies = (
 			);
-			name = Swapper;
+			name = XMT;
 			packageProductDependencies = (
 				AA200014 /* KeyboardShortcuts */,
 			);
-			productName = Swapper;
-			productReference = AA100099 /* Swapper.app */;
+			productName = XMT;
+			productReference = AA100099 /* XMT.app */;
 			productType = "com.apple.product-type.application";
 		};
-		AA500002 /* SwapperTests */ = {
+		AA500002 /* XMTTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = AA700002 /* Build configuration list for PBXNativeTarget "SwapperTests" */;
+			buildConfigurationList = AA700002 /* Build configuration list for PBXNativeTarget "XMTTests" */;
 			buildPhases = (
 				AA300004 /* Sources */,
 				AA300003 /* Frameworks */,
@@ -221,9 +227,9 @@
 			);
 			dependencies = (
 			);
-			name = SwapperTests;
-			productName = SwapperTests;
-			productReference = AA100020 /* SwapperTests.xctest */;
+			name = XMTTests;
+			productName = XMTTests;
+			productReference = AA100020 /* XMTTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
@@ -244,7 +250,7 @@
 					};
 				};
 			};
-			buildConfigurationList = AA700000 /* Build configuration list for PBXProject "Swapper" */;
+			buildConfigurationList = AA700000 /* Build configuration list for PBXProject "XMT" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -260,8 +266,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				AA500001 /* Swapper */,
-				AA500002 /* SwapperTests */,
+				AA500001 /* XMT */,
+				AA500002 /* XMTTests */,
 			);
 		};
 /* End PBXProject section */
@@ -289,7 +295,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA000001 /* SwapperApp.swift in Sources */,
+				AA000001 /* XMTApp.swift in Sources */,
 				AA000002 /* AppDelegate.swift in Sources */,
 				AA000003 /* HotKeyNames.swift in Sources */,
 				AA000004 /* AXWindowInfo.swift in Sources */,
@@ -300,9 +306,11 @@
 				AA000008 /* AccessibilityService.swift in Sources */,
 				AA000018 /* AccessibilityReminder.swift in Sources */,
 				AA000009 /* SettingsView.swift in Sources */,
-				AA000010 /* ShortcutsSettingsView.swift in Sources */,
+				AA000010 /* WindowMoverSettingsView.swift in Sources */,
 				AA000011 /* GeneralSettingsView.swift in Sources */,
 				AA000023 /* SettingsWindowController.swift in Sources */,
+				AA000024 /* AccessibilityStatusView.swift in Sources */,
+				AA000025 /* WindowMoverModule.swift in Sources */,
 				AA000012 /* MenuBarView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -441,15 +449,15 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Swapper/Resources/Swapper.entitlements;
+				CODE_SIGN_ENTITLEMENTS = XMT/Resources/XMT.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Swapper/Resources/Info.plist;
+				INFOPLIST_FILE = XMT/Resources/Info.plist;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.swapper.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.xavierchanth.xmt;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -461,15 +469,15 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Swapper/Resources/Swapper.entitlements;
+				CODE_SIGN_ENTITLEMENTS = XMT/Resources/XMT.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Swapper/Resources/Info.plist;
+				INFOPLIST_FILE = XMT/Resources/Info.plist;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.swapper.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.xavierchanth.xmt;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -484,7 +492,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.swapper.appTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.xavierchanth.xmtTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
@@ -500,7 +508,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.swapper.appTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.xavierchanth.xmtTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
@@ -511,7 +519,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		AA700000 /* Build configuration list for PBXProject "Swapper" */ = {
+		AA700000 /* Build configuration list for PBXProject "XMT" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				AA800001 /* Debug */,
@@ -520,7 +528,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		AA700001 /* Build configuration list for PBXNativeTarget "Swapper" */ = {
+		AA700001 /* Build configuration list for PBXNativeTarget "XMT" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				AA800003 /* Debug */,
@@ -529,7 +537,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		AA700002 /* Build configuration list for PBXNativeTarget "SwapperTests" */ = {
+		AA700002 /* Build configuration list for PBXNativeTarget "XMTTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				AA800005 /* Debug */,

@@ -6,7 +6,7 @@ This is the documentation index for XMT — Xavier's macOS Tweaks. It routes rea
 
 XMT documentation is **future-first**: architecture pages describe the intended end state of the app, whether or not that state ships today.
 
-Source and tests under `Swapper/` and `SwapperTests/` are the **final authority on exact released behavior**, above every page in this tree. Where a documentation page and the code disagree about what the app does, the code is correct and the page is a defect to fix.
+Source and tests under `XMT/` and `XMTTests/` are the **final authority on exact released behavior**, above every page in this tree. Where a documentation page and the code disagree about what the app does, the code is correct and the page is a defect to fix.
 
 Among documentation pages, when two of them overlap:
 

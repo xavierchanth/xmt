@@ -8,7 +8,7 @@ enum WindowMover {
     /// - If the window is minimized: silently skips.
     @MainActor
     static func moveFocusedWindowToNextScreen() async {
-        guard AccessibilityService.isGranted else {
+        guard AccessibilityService.shared.isGranted else {
             AccessibilityReminder.showIfNeeded()
             return
         }

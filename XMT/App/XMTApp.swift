@@ -1,11 +1,11 @@
 import SwiftUI
 
 @main
-struct SwapperApp: App {
+struct XMTApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        MenuBarExtra("Swapper", image: "MenuBarIcon") {
+        MenuBarExtra("XMT", image: "MenuBarIcon") {
             MenuBarView()
         }
 

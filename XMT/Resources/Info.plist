@@ -23,7 +23,7 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAccessibilityUsageDescription</key>
-	<string>Swapper needs Accessibility access to move windows between screens.</string>
+	<string>Window Mover needs Accessibility access to move windows between screens.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

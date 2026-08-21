@@ -4,9 +4,9 @@ XMT — Xavier's macOS Tweaks is a personal macOS utility that collects chosen m
 
 ## Name and terminology
 
-The product is **XMT — Xavier's macOS Tweaks**. "macOS" always uses Apple's capitalization. Capabilities inside XMT are called **modules**; the shipping module is **Window Swapper**.
+The product is **XMT — Xavier's macOS Tweaks**. "macOS" always uses Apple's capitalization. Capabilities inside XMT are called **modules**; the shipping module is **Window Mover**.
 
-The Xcode target, scheme, and bundle identifier are still named `Swapper`. That is an unresolved naming gap, not a second product; it is tracked in [the roadmap](roadmap/README.md#naming-and-identity-gap).
+The app, Xcode project, target, scheme, and bundle identity all use XMT.
 
 ## Users
 
@@ -41,7 +41,7 @@ The figures below are **casual observations from Activity Monitor on the author'
 | Hidden Bar | nearly 400 MB |
 | Voice Notes | about 62 MB |
 | HyperKey | about 37 MB |
-| XMT (current `Swapper` build) | usually around 24 MB, observed below 35 MB |
+| XMT (historical pre-rename build) | usually around 24 MB, observed below 35 MB |
 
 The XMT figure is a menu-bar-idle observation. Any growth after opening the Settings window was **not measured**, and no attempt has been made to attribute it. It is plausible that instantiating SwiftUI view and window machinery accounts for some of it, but that is an untested guess, not a finding — the mechanism has not been profiled, the effect size is unknown, and it may not exist at all. Do not cite it as an explanation.
 

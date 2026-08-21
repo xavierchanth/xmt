@@ -16,7 +16,7 @@ struct MenuBarView: View {
 
         Divider()
 
-        Button("Quit Swapper") {
+        Button("Quit XMT") {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q", modifiers: .command)

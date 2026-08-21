@@ -6,7 +6,7 @@ This area describes the **intended** structure of XMT — Xavier's macOS Tweaks:
 
 Architecture pages describe the target design. A module appearing here is not a claim that it exists, that its types are present in the source tree, or that any API named here is callable. Which modules are built and which are not is recorded in one place only, [the roadmap](../roadmap/README.md); for the normative behavior of anything that has shipped, read [the specification](../specification/README.md).
 
-Where architecture and released behavior differ, the source under `Swapper/` is correct and the architecture page describes where the code is headed.
+Where architecture and released behavior differ, the source under `XMT/` is correct and the architecture page describes where the code is headed.
 
 ## Pages
 

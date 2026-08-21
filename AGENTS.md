@@ -4,7 +4,7 @@ Conventions for anyone — human or agent — changing XMT. This page covers wha
 
 ## What this repository is
 
-A single macOS app: XMT — Xavier's macOS Tweaks, a menu bar utility hosting one implemented module, Window Swapper. The Xcode target, scheme, and bundle identifier are still named `Swapper`; treat that as a [known naming gap](docs/roadmap/README.md#naming-and-identity-gap) rather than renaming it incidentally as part of unrelated work.
+A single macOS app: XMT — Xavier's macOS Tweaks, a menu bar utility hosting one implemented module, Window Mover. The Xcode project, target, scheme, module, and app product are named `XMT`; the bundle identifier is `com.xavierchanth.xmt`.
 
 Swift 5, SwiftUI plus AppKit, macOS 14 minimum, one Swift package dependency (`KeyboardShortcuts`). The Xcode project is the build system; there is no `Package.swift`.
 
@@ -14,7 +14,7 @@ Swift 5, SwiftUI plus AppKit, macOS 14 minimum, one Swift package dependency (`K
 just build        # Release build into .build/xcode
 just docs-check   # documentation validation
 just check        # all currently configured repository checks
-just install      # build, replace /Applications/Swapper.app, launch
+just install      # build, replace /Applications/XMT.app, launch
 just run          # build and launch without installing
 just clean        # remove .build/xcode
 ```

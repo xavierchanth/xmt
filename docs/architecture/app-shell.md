@@ -27,9 +27,9 @@ Every module declares the macOS permissions it requires. The shell treats permis
 2. **At activation.** A module's shortcut or trigger checks the live permission state at the moment it fires rather than trusting a value cached at launch, because the user can revoke a grant at any time.
 3. **At the settings surface.** Each module's permission status is visible and re-requestable from Settings.
 
-When a gated action fires without permission, the module reports the denial through the shell rather than presenting its own alert, and the shell shows the reminder at most once per denied state. The reminder unsuppresses when the permission state is observed to have changed, which is checked when the app becomes active. For the normative form of this gate as it applies to a shipping module, see [the Window Swapper specification](../specification/window-swapper.md#accessibility-permission-gate).
+When a gated action fires without permission, the module reports the denial through the shell rather than presenting its own alert, and the shell shows the reminder at most once per denied state. The reminder unsuppresses when the permission state is observed to have changed, which is checked when the app becomes active. For the normative form of this gate as it applies to a shipping module, see [the Window Mover specification](../specification/window-mover.md#accessibility-permission-gate).
 
-Permissions are not shared for convenience. A module may only use a grant it declared; Accessibility being available because Window Swapper needs it does not entitle another module to use it.
+Permissions are not shared for convenience. A module may only use a grant it declared; Accessibility being available because Window Mover needs it does not entitle another module to use it.
 
 ## Module lifecycle
 
@@ -76,5 +76,5 @@ Settings is one window with one tab per concern, built lazily and shared across 
 ## Related documentation
 
 - [Module model](modules.md) — what a module is and what it must provide to the shell.
-- [Window Swapper specification](../specification/window-swapper.md) — normative behavior of a module running inside this shell.
+- [Window Mover specification](../specification/window-mover.md) — normative behavior of a module running inside this shell.
 - [Roadmap](../roadmap/README.md) — which parts of this shell exist and which are outstanding.

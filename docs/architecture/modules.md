@@ -43,14 +43,14 @@ The intended modules, their scope, and their permission boundary. This table sta
 
 | Module | Scope | Declared permissions |
 |---|---|---|
-| Window Swapper | Move the focused window to the next display | Accessibility |
+| Window Mover | Move the focused window to the next display | Accessibility |
 | Voice Transcription | Dictate text into the focused input | Microphone, Speech Recognition |
 | Keyboard Customization | Remap keys and provide a Hyper-key layer | Input Monitoring, Accessibility |
 | Menu Bar Management | Hide and reveal menu bar items | Accessibility |
 
-### Window Swapper
+### Window Mover
 
-Moves the focused window to the next display on a global shortcut, preserving relative geometry and handling native full-screen windows. Its normative behavior is specified in [the Window Swapper specification](../specification/window-swapper.md); source and tests remain the final authority.
+Moves the focused window to the next display on a global shortcut, preserving relative geometry and handling native full-screen windows. Its normative behavior is specified in [the Window Mover specification](../specification/window-mover.md); source and tests remain the final authority.
 
 Boundary: this module reads and writes window geometry through Accessibility and does nothing else. Display arrangement, spaces, and window contents are outside its scope.
 

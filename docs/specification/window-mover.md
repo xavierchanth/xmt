@@ -1,18 +1,20 @@
-# Window Swapper specification
+# Window Mover specification
 
-Window Swapper moves the focused window to the next display. This page specifies its behavior as currently implemented in the `Swapper` target: the trigger, the permission gate, the preconditions, screen selection, geometry mapping, the reconciliation passes, and native full-screen handling.
+Window Mover moves the focused window to the next display. This page specifies its behavior as currently implemented in the `XMT` target: the trigger, the permission gate, the preconditions, screen selection, geometry mapping, the reconciliation passes, and native full-screen handling.
 
-This is a specification of released behavior, not a design target. Every claim below was read from the source in `Swapper/WindowManagement/`, `Swapper/HotKeys/`, `Swapper/Services/`, and `Swapper/App/`, and from the tests in `SwapperTests/WindowGeometryTests.swift`. Where this page and the source disagree, the source is correct. For where the module is going rather than where it is, see [the module model](../architecture/modules.md#window-swapper).
+This is a specification of released behavior, not a design target. Every claim below was read from the source in `XMT/WindowManagement/`, `XMT/HotKeys/`, `XMT/Services/`, and `XMT/App/`, and from the tests in `XMTTests/WindowGeometryTests.swift`. Where this page and the source disagree, the source is correct. For where the module is going rather than where it is, see [the module model](../architecture/modules.md#window-mover).
 
 Normative language: **MUST**, **MUST NOT**, and **MAY** in this document describe invariants the current implementation upholds, not requirements on future work.
 
 ## Trigger
 
-Window Swapper registers exactly one global shortcut.
+Window Mover registers exactly one global shortcut.
 
 - Shortcut name: `moveToNextScreen`, labelled `Move window to next screen` in Settings.
 - Default binding: **Option-Space**.
-- The shortcut is user-rebindable through the Shortcuts tab; the recorder is the only place the binding is set.
+- The shortcut is user-rebindable on the Window Mover settings page; the recorder is the only place the binding is set.
+- Window Mover has one persisted enabled setting, which defaults to enabled. Changing it takes effect without restarting XMT.
+- When disabled, the registered library callback returns at its boundary before action coordination, permission checks, or window work. KeyboardShortcuts 2.x has no callback-removal API, so its callback registration remains installed, but it performs no module operation while disabled.
 - The handler fires on **key up**, not key down. A press-and-hold produces one action when the key is released.
 
 Key-up firing means the action is never repeated by key auto-repeat and never fires while the user is still composing a chord.
@@ -29,9 +31,9 @@ The whole action runs on the main actor.
 
 The action's first check is the live Accessibility trust state, re-read at each invocation rather than cached from launch.
 
-- The app requests Accessibility access once at launch if it is not already granted.
+- XMT does not request Accessibility access merely because the app launched. General and Window Mover settings share one live status presentation, identify Window Mover as the consumer, and offer contextual request and System Settings actions.
 - If the shortcut fires without Accessibility access, no window is touched and a reminder alert is shown. The alert offers to open the Accessibility pane of System Settings and re-requests trust.
-- The reminder is shown **at most once** while access remains denied. Suppression is lifted when the app observes that access has been granted. That check runs whenever the app becomes active, and again from the General settings tab when it is open and the app becomes active, which also refreshes the displayed permission and Launch-at-Login status.
+- The reminder is shown **at most once** while access remains denied. Suppression is lifted when the app observes that access has been granted. That check runs whenever the app becomes active, and whenever a settings status presentation observes the app becoming active. General also refreshes Launch-at-Login status.
 
 ## Preconditions and no-op cases
 
@@ -85,7 +87,7 @@ The 16 pt tolerance and the fill fallback are covered by unit tests, as are the 
 
 ## Reconciliation
 
-Applications do not always accept a requested size. They clamp to minimum or maximum sizes, snap to increments, or reshape. Window Swapper writes the requested frame and then corrects the origin so the window lands where the user expects even when the size it got is not the size it asked for.
+Applications do not always accept a requested size. They clamp to minimum or maximum sizes, snap to increments, or reshape. Window Mover writes the requested frame and then corrects the origin so the window lands where the user expects even when the size it got is not the size it asked for.
 
 The correction anchors the window to the **nearest edge** of the destination screen frame. Horizontally, whichever of the left or right edge the requested frame was closer to is preserved; vertically, whichever of the top or bottom edge it was closer to. When the two distances on an axis are exactly equal, that axis is **centered** instead. The realized size is kept; only the origin moves.
 
@@ -94,7 +96,7 @@ Reconciliation can run **two correction phases**:
 1. **First phase.** Read back the realized frame. Compute the corrected origin from the requested frame, the realized size, and the destination screen frame. Write the origin if it differs from the realized origin.
 2. **Second phase, conditionally.** If the realized size differs from the requested size by more than **1 pt** on either axis, write the requested size once more, read the frame back again, recompute the corrected origin, and write it if it differs. The 1 pt threshold absorbs rounding rather than triggering a retry for it.
 
-After the second phase the app's realized result is accepted as final. Window Swapper does not loop, does not escalate, and does not report that a window refused its requested size. Reconciliation is skipped entirely if the window's frame cannot be read back.
+After the second phase the app's realized result is accepted as final. Window Mover does not loop, does not escalate, and does not report that a window refused its requested size. Reconciliation is skipped entirely if the window's frame cannot be read back.
 
 ## Native full-screen path
 
@@ -114,6 +116,6 @@ The 200 ms and 300 ms delays and the 3 second deadlines are fixed constants, cho
 
 ## Related documentation
 
-- [Module model](../architecture/modules.md#window-swapper) — where this module sits in the intended architecture.
+- [Module model](../architecture/modules.md#window-mover) — where this module sits in the intended architecture.
 - [App shell](../architecture/app-shell.md#permission-gating) — the general permission-gating and lifecycle rules this module follows.
 - [Roadmap](../roadmap/README.md) — known gaps in this module, including the screen-frame question.

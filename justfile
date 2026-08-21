@@ -1,10 +1,10 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
-project := "Swapper.xcodeproj"
-scheme := "Swapper"
+project := "XMT.xcodeproj"
+scheme := "XMT"
 build_dir := ".build/xcode"
-app := build_dir + "/Build/Products/Release/Swapper.app"
-install_path := "/Applications/Swapper.app"
+app := build_dir + "/Build/Products/Release/XMT.app"
+install_path := "/Applications/XMT.app"
 
 # List available commands.
 default:
@@ -19,9 +19,9 @@ build:
         -destination "platform=macOS" \
         -derivedDataPath "{{build_dir}}"
 
-# Build and install Swapper in /Applications, then launch it.
+# Build and install XMT in /Applications, then launch it.
 install: build
-    pkill -x Swapper 2>/dev/null || true
+    pkill -x XMT 2>/dev/null || true
     if [[ -e "{{install_path}}" ]]; then rm -rf "{{install_path}}"; fi
     ditto "{{app}}" "{{install_path}}"
     open "{{install_path}}"
@@ -34,8 +34,17 @@ run: build
 docs-check:
     node assets/check-docs.mjs
 
+# Run unit tests.
+test:
+    xcodebuild test \
+        -project "{{project}}" \
+        -scheme "{{scheme}}" \
+        -configuration Debug \
+        -destination "platform=macOS" \
+        -derivedDataPath "{{build_dir}}"
+
 # Run all configured repository checks.
-check: docs-check
+check: docs-check test
 
 # Remove local build output.
 clean:

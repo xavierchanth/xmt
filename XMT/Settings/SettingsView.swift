@@ -3,26 +3,24 @@ import SwiftUI
 struct SettingsView: View {
     var body: some View {
         TabView {
-            ShortcutsSettingsView()
-                .tabItem {
-                    Label("Shortcuts", systemImage: "keyboard")
-                }
-
             GeneralSettingsView()
                 .tabItem {
                     Label("General", systemImage: "gear")
                 }
+
+            WindowMoverSettingsView()
+                .tabItem {
+                    Label("Window Mover", systemImage: "rectangle.on.rectangle")
+                }
         }
-        .frame(width: 450, height: 220)
+        .frame(width: 560, height: 360)
         .padding(20)
         .background(SettingsWindowAccessor())
     }
 }
 
 private struct SettingsWindowAccessor: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        NSView()
-    }
+    func makeNSView(context: Context) -> NSView { NSView() }
 
     func updateNSView(_ nsView: NSView, context: Context) {
         DispatchQueue.main.async {
