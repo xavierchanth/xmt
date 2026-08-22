@@ -21,8 +21,8 @@ Maintained for personal use. There are no plans to publish it and no support com
 
 ## Requirements
 
-- macOS 14 or later
-- Xcode 15 or later
+- macOS 26 or later
+- Xcode 26 or later
 - Accessibility permission granted to the app
 
 ## Installing

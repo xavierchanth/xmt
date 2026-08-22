@@ -44,7 +44,7 @@ The intended modules, their scope, and their permission boundary. This table sta
 | Module | Scope | Declared permissions |
 |---|---|---|
 | Window Mover | Move the focused window to the next display | Accessibility |
-| Voice Transcription | Dictate text into the focused input | Microphone, Speech Recognition |
+| Voice Transcription | Dictate text, retain the last transcript, and optionally paste it into the focused input | Microphone; Input Monitoring for Fn gestures; Accessibility when auto-paste is enabled |
 | Keyboard Customization | Remap keys and provide a Hyper-key layer | Input Monitoring, Accessibility |
 | Menu Bar Management | Hide and reveal menu bar items | Accessibility |
 
@@ -56,11 +56,19 @@ Boundary: this module reads and writes window geometry through Accessibility and
 
 ### Voice Transcription
 
-Intended design: a push-to-talk shortcut starts an on-device speech session, and recognized text is inserted into the focused input. The audio input and the recognition session are acquired when the shortcut begins and released when it ends, so the module holds no microphone resource at rest.
+The primary gestures are **hold Fn** for push-to-talk and **Fn-Space** to toggle recording. A configurable shortcut provider and a dedicated Fn-event provider feed one shell-owned arbitrator, as described in [trigger providers](app-shell.md#trigger-providers). Starting either gesture creates one session; ending push-to-talk or toggling again closes capture and allows recognition to finish. Conflicting or overlapping transitions do not create concurrent sessions.
 
-The target design assumes Apple's on-device **SpeechAnalyzer** API for recognition. That is a design intent, not an integration: no XMT code uses it. It also carries a compatibility consequence that has to be settled before adoption. SpeechAnalyzer requires a substantially newer macOS than the app's current `MACOSX_DEPLOYMENT_TARGET` of 14.0 — confirm its exact minimum against Apple's documentation before planning around it — so adopting it means one of three things — raising the deployment target and dropping support for the older macOS versions the app currently runs on, gating the module behind an availability check so it simply does not appear on older systems, or choosing a different recognition API. Nothing here presumes which.
+Each session selects an input from the user's explicit ordered device list. Whether selection may fall back to the current system-default input is a separate setting, not an implied final list entry. Capture and Apple's on-device **SpeechAnalyzer** with **SpeechTranscriber** are action-scoped and released after completion. The app targets macOS 26 directly for these APIs rather than carrying an older-system availability branch.
 
-Boundary: this module owns capture, recognition, and insertion of text. It does not own the shortcut system or the permission prompts, which belong to [the shell](app-shell.md).
+Audio is held in a bounded in-memory queue during normal processing. Temporary recovery audio may be written only for an interrupted or not-yet-committed session, with enough session state to reconcile it after relaunch; successful or deliberately discarded sessions remove it. Recovery is bounded, private to the app, and not a recordings library. Reconciliation must be idempotent so one pending session cannot commit twice.
+
+A completed result replaces the module's last transcript. Automatic paste is optional: when enabled, commit preserves the transcript first and then asks a separate paste service to insert it into the focused input. A paste failure does not discard the transcript. When auto-paste is disabled, no Accessibility insertion is attempted.
+
+The module declares Microphone permission for capture and Input Monitoring for Fn observation. Accessibility is required only for enabled auto-paste. Whether SpeechAnalyzer/SpeechTranscriber also requires the `NSSpeechRecognitionUsageDescription` privacy key is intentionally left to integration evidence from public SDK documentation; [the roadmap](../roadmap/README.md) tracks that uncertainty. Permission acquisition and presentation remain shell responsibilities.
+
+Voice settings, including triggers, ordered devices, separate system-default fallback, recovery policy, transcript handling, and auto-paste, participate in the shared [versioned declarative configuration](configuration.md) and its precedence rules.
+
+Boundary: this module owns device selection, capture, recognition, recovery reconciliation, transcript commit, and optional paste. It does not own trigger registration, configuration loading, or permission prompts, which belong to [the shell](app-shell.md).
 
 ### Keyboard Customization
 

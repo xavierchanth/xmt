@@ -12,6 +12,7 @@ Where architecture and released behavior differ, the source under `XMT/` is corr
 
 - [App shell](app-shell.md) — the single-process host: lifecycle, permission gating, settings surface, failure isolation, and resource posture that all modules share.
 - [Module model](modules.md) — what a module is, the compile-time modularity rule, the module contract, and the planned module inventory.
+- [Declarative configuration](configuration.md) — versioning, precedence, validation, and atomic load/reload semantics.
 
 ## Related documentation
 

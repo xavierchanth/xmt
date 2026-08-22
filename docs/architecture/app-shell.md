@@ -69,12 +69,25 @@ The rules the shell follows:
 
 These rules explain why resource use stays small. They do not promise a number.
 
+## Trigger providers
+
+The shell coordinates two trigger providers behind one event vocabulary. The shortcut provider owns ordinary configurable global shortcuts. The Fn provider observes the Function key transitions needed for hold-Fn push-to-talk and the Fn-Space toggle without pretending those gestures are ordinary shortcut-library bindings. Providers acquire and release their registrations together with the consuming module and publish events to an arbitrator; neither starts module work directly. Arbitration suppresses duplicate or contradictory transitions and preserves the single-flight rule.
+
+The Fn observer is an Input Monitoring boundary. Voice Transcription declares that permission in addition to its capture permission; observing Fn must not grant the module broader keyboard-remapping ownership. Configurable alternatives remain with the shortcut provider, and the declarative representation of those alternatives remains independent of the shortcut library's private storage.
+
+## Configuration resolution
+
+The shell owns loading and resolving the versioned declarative configuration because precedence must be consistent across modules. Built-in defaults are overlaid by persisted Settings values and then by values explicitly present in the file. A file is validated as a whole and published atomically; invalid input leaves the last known-good effective snapshot active. Missing files and removed files are valid and resolve from defaults plus persisted values.
+
+Reloading is event-driven rather than polled and cannot itself activate a module action. The full rules, including version rejection and file-controlled UI values, are defined in [declarative configuration](configuration.md).
+
 ## Settings surface
 
-Settings is one window with one tab per concern, built lazily and shared across modules. A module contributes its own settings content and its permission status row; it does not open its own window. Shortcut recording is centralized so that shortcut names, defaults, and conflicts are visible in one place.
+Settings is one window with one tab per concern, built lazily and shared across modules. A module contributes its own settings content and its permission status row; it does not open its own window. Shortcut recording is centralized so that shortcut names, defaults, and conflicts are visible in one place. Settings displays effective values from the shared resolver and identifies values overridden by declarative configuration rather than presenting a write as effective when it is not.
 
 ## Related documentation
 
 - [Module model](modules.md) — what a module is and what it must provide to the shell.
+- [Declarative configuration](configuration.md) — source precedence and load/reload semantics.
 - [Window Mover specification](../specification/window-mover.md) — normative behavior of a module running inside this shell.
 - [Roadmap](../roadmap/README.md) — which parts of this shell exist and which are outstanding.

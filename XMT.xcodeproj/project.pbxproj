@@ -28,6 +28,34 @@
 		AA000023 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100023 /* SettingsWindowController.swift */; };
 		AA000024 /* AccessibilityStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100024 /* AccessibilityStatusView.swift */; };
 		AA000025 /* WindowMoverModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100025 /* WindowMoverModule.swift */; };
+		B000001 /* FnEventObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100001 /* FnEventObserver.swift */; };
+		B000002 /* TriggerArbitrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100002 /* TriggerArbitrator.swift */; };
+		B000003 /* TriggerEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100003 /* TriggerEvents.swift */; };
+		B000004 /* ConfigFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100004 /* ConfigFile.swift */; };
+		B000005 /* EffectiveSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100005 /* EffectiveSettings.swift */; };
+		B000006 /* ConfigReloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100006 /* ConfigReloader.swift */; };
+		B000007 /* ShortcutDTO.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100007 /* ShortcutDTO.swift */; };
+		B000008 /* DeviceSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100008 /* DeviceSelector.swift */; };
+		B000009 /* DeviceTable.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100009 /* DeviceTable.swift */; };
+		B000010 /* BluetoothLinkOracle.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100010 /* BluetoothLinkOracle.swift */; };
+		B000011 /* AudioCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100011 /* AudioCaptureService.swift */; };
+		B000012 /* BoundedAudioQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100012 /* BoundedAudioQueue.swift */; };
+		B000013 /* VoiceSessionMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100013 /* VoiceSessionMachine.swift */; };
+		B000014 /* PendingRecordingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100014 /* PendingRecordingStore.swift */; };
+		B000015 /* Reconciliation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100015 /* Reconciliation.swift */; };
+		B000016 /* TranscriberSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100016 /* TranscriberSession.swift */; };
+		B000017 /* AssetStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100017 /* AssetStatus.swift */; };
+		B000018 /* TranscriptCommitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100018 /* TranscriptCommitter.swift */; };
+		B000019 /* PasteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100019 /* PasteService.swift */; };
+		B000020 /* VoiceTranscriptionModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100020 /* VoiceTranscriptionModule.swift */; };
+		B000021 /* VoiceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100021 /* VoiceSettingsView.swift */; };
+		B000022 /* DevicePriorityListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100022 /* DevicePriorityListView.swift */; };
+		B000023 /* TriggerArbitratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100023 /* TriggerArbitratorTests.swift */; };
+		B000024 /* ConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100024 /* ConfigTests.swift */; };
+		B000025 /* DeviceSelectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100025 /* DeviceSelectorTests.swift */; };
+		B000026 /* SessionMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100026 /* SessionMachineTests.swift */; };
+		B000027 /* ReconciliationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100027 /* ReconciliationTests.swift */; };
+		B000028 /* CommitSequenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100028 /* CommitSequenceTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -54,6 +82,34 @@
 		AA100024 /* AccessibilityStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityStatusView.swift; sourceTree = "<group>"; };
 		AA100025 /* WindowMoverModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowMoverModule.swift; sourceTree = "<group>"; };
 		AA100099 /* XMT.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = XMT.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B100001 /* FnEventObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FnEventObserver.swift; sourceTree = "<group>"; };
+		B100002 /* TriggerArbitrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriggerArbitrator.swift; sourceTree = "<group>"; };
+		B100003 /* TriggerEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriggerEvents.swift; sourceTree = "<group>"; };
+		B100004 /* ConfigFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigFile.swift; sourceTree = "<group>"; };
+		B100005 /* EffectiveSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectiveSettings.swift; sourceTree = "<group>"; };
+		B100006 /* ConfigReloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigReloader.swift; sourceTree = "<group>"; };
+		B100007 /* ShortcutDTO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutDTO.swift; sourceTree = "<group>"; };
+		B100008 /* DeviceSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSelector.swift; sourceTree = "<group>"; };
+		B100009 /* DeviceTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceTable.swift; sourceTree = "<group>"; };
+		B100010 /* BluetoothLinkOracle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothLinkOracle.swift; sourceTree = "<group>"; };
+		B100011 /* AudioCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureService.swift; sourceTree = "<group>"; };
+		B100012 /* BoundedAudioQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundedAudioQueue.swift; sourceTree = "<group>"; };
+		B100013 /* VoiceSessionMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSessionMachine.swift; sourceTree = "<group>"; };
+		B100014 /* PendingRecordingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingRecordingStore.swift; sourceTree = "<group>"; };
+		B100015 /* Reconciliation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Reconciliation.swift; sourceTree = "<group>"; };
+		B100016 /* TranscriberSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriberSession.swift; sourceTree = "<group>"; };
+		B100017 /* AssetStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetStatus.swift; sourceTree = "<group>"; };
+		B100018 /* TranscriptCommitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptCommitter.swift; sourceTree = "<group>"; };
+		B100019 /* PasteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteService.swift; sourceTree = "<group>"; };
+		B100020 /* VoiceTranscriptionModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTranscriptionModule.swift; sourceTree = "<group>"; };
+		B100021 /* VoiceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSettingsView.swift; sourceTree = "<group>"; };
+		B100022 /* DevicePriorityListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePriorityListView.swift; sourceTree = "<group>"; };
+		B100023 /* TriggerArbitratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriggerArbitratorTests.swift; sourceTree = "<group>"; };
+		B100024 /* ConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigTests.swift; sourceTree = "<group>"; };
+		B100025 /* DeviceSelectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSelectorTests.swift; sourceTree = "<group>"; };
+		B100026 /* SessionMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMachineTests.swift; sourceTree = "<group>"; };
+		B100027 /* ReconciliationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconciliationTests.swift; sourceTree = "<group>"; };
+		B100028 /* CommitSequenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommitSequenceTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -95,6 +151,9 @@
 				AA400050 /* Settings */,
 				AA400060 /* MenuBar */,
 				AA400070 /* Resources */,
+				B400001 /* Triggers */,
+				B400002 /* Configuration */,
+				B400003 /* VoiceTranscription */,
 			);
 			path = XMT;
 			sourceTree = "<group>";
@@ -146,6 +205,8 @@
 				AA100011 /* GeneralSettingsView.swift */,
 				AA100023 /* SettingsWindowController.swift */,
 				AA100024 /* AccessibilityStatusView.swift */,
+				B100021 /* VoiceSettingsView.swift */,
+				B100022 /* DevicePriorityListView.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -172,6 +233,12 @@
 			isa = PBXGroup;
 			children = (
 				AA100021 /* WindowGeometryTests.swift */,
+				B100023 /* TriggerArbitratorTests.swift */,
+				B100024 /* ConfigTests.swift */,
+				B100025 /* DeviceSelectorTests.swift */,
+				B100026 /* SessionMachineTests.swift */,
+				B100027 /* ReconciliationTests.swift */,
+				B100028 /* CommitSequenceTests.swift */,
 			);
 			path = XMTTests;
 			sourceTree = "<group>";
@@ -190,6 +257,71 @@
 			children = (
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		B400001 /* Triggers */ = {
+			isa = PBXGroup;
+			children = (
+				B100001 /* FnEventObserver.swift */,
+				B100002 /* TriggerArbitrator.swift */,
+				B100003 /* TriggerEvents.swift */,
+			);
+			path = Triggers;
+			sourceTree = "<group>";
+		};
+		B400002 /* Configuration */ = {
+			isa = PBXGroup;
+			children = (
+				B100004 /* ConfigFile.swift */,
+				B100005 /* EffectiveSettings.swift */,
+				B100006 /* ConfigReloader.swift */,
+				B100007 /* ShortcutDTO.swift */,
+			);
+			path = Configuration;
+			sourceTree = "<group>";
+		};
+		B400003 /* VoiceTranscription */ = {
+			isa = PBXGroup;
+			children = (
+				B400004 /* Audio */,
+				B400005 /* Session */,
+				B400006 /* Output */,
+				B100020 /* VoiceTranscriptionModule.swift */,
+			);
+			path = VoiceTranscription;
+			sourceTree = "<group>";
+		};
+		B400004 /* Audio */ = {
+			isa = PBXGroup;
+			children = (
+				B100008 /* DeviceSelector.swift */,
+				B100009 /* DeviceTable.swift */,
+				B100010 /* BluetoothLinkOracle.swift */,
+				B100011 /* AudioCaptureService.swift */,
+				B100012 /* BoundedAudioQueue.swift */,
+			);
+			path = Audio;
+			sourceTree = "<group>";
+		};
+		B400005 /* Session */ = {
+			isa = PBXGroup;
+			children = (
+				B100013 /* VoiceSessionMachine.swift */,
+				B100014 /* PendingRecordingStore.swift */,
+				B100015 /* Reconciliation.swift */,
+				B100016 /* TranscriberSession.swift */,
+				B100017 /* AssetStatus.swift */,
+			);
+			path = Session;
+			sourceTree = "<group>";
+		};
+		B400006 /* Output */ = {
+			isa = PBXGroup;
+			children = (
+				B100018 /* TranscriptCommitter.swift */,
+				B100019 /* PasteService.swift */,
+			);
+			path = Output;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -312,6 +444,28 @@
 				AA000024 /* AccessibilityStatusView.swift in Sources */,
 				AA000025 /* WindowMoverModule.swift in Sources */,
 				AA000012 /* MenuBarView.swift in Sources */,
+				B000001 /* FnEventObserver.swift in Sources */,
+				B000002 /* TriggerArbitrator.swift in Sources */,
+				B000003 /* TriggerEvents.swift in Sources */,
+				B000004 /* ConfigFile.swift in Sources */,
+				B000005 /* EffectiveSettings.swift in Sources */,
+				B000006 /* ConfigReloader.swift in Sources */,
+				B000007 /* ShortcutDTO.swift in Sources */,
+				B000008 /* DeviceSelector.swift in Sources */,
+				B000009 /* DeviceTable.swift in Sources */,
+				B000010 /* BluetoothLinkOracle.swift in Sources */,
+				B000011 /* AudioCaptureService.swift in Sources */,
+				B000012 /* BoundedAudioQueue.swift in Sources */,
+				B000013 /* VoiceSessionMachine.swift in Sources */,
+				B000014 /* PendingRecordingStore.swift in Sources */,
+				B000015 /* Reconciliation.swift in Sources */,
+				B000016 /* TranscriberSession.swift in Sources */,
+				B000017 /* AssetStatus.swift in Sources */,
+				B000018 /* TranscriptCommitter.swift in Sources */,
+				B000019 /* PasteService.swift in Sources */,
+				B000020 /* VoiceTranscriptionModule.swift in Sources */,
+				B000021 /* VoiceSettingsView.swift in Sources */,
+				B000022 /* DevicePriorityListView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -321,6 +475,12 @@
 			files = (
 				AA000019 /* WindowGeometry.swift in Sources */,
 				AA000021 /* WindowGeometryTests.swift in Sources */,
+				B000023 /* TriggerArbitratorTests.swift in Sources */,
+				B000024 /* ConfigTests.swift in Sources */,
+				B000025 /* DeviceSelectorTests.swift in Sources */,
+				B000026 /* SessionMachineTests.swift in Sources */,
+				B000027 /* ReconciliationTests.swift in Sources */,
+				B000028 /* CommitSequenceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -380,7 +540,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -437,7 +597,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;

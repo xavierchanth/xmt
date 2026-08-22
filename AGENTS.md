@@ -6,7 +6,7 @@ Conventions for anyone — human or agent — changing XMT. This page covers wha
 
 A single macOS app: XMT — Xavier's macOS Tweaks, a menu bar utility hosting one implemented module, Window Mover. The Xcode project, target, scheme, module, and app product are named `XMT`; the bundle identifier is `com.xavierchanth.xmt`.
 
-Swift 5, SwiftUI plus AppKit, macOS 14 minimum, one Swift package dependency (`KeyboardShortcuts`). The Xcode project is the build system; there is no `Package.swift`.
+Swift 5, SwiftUI plus AppKit, macOS 26 minimum, one Swift package dependency (`KeyboardShortcuts`). The Xcode project is the build system; there is no `Package.swift`.
 
 ## Building and testing
 

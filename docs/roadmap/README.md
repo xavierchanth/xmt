@@ -11,7 +11,7 @@ There are no formal initiative records and no tracker in this repository. This p
 | [Window Mover](../specification/window-mover.md) | Shipping. The only implemented module. |
 | [App shell](../architecture/app-shell.md) | Partial. Menu bar presence, lazy settings, shared Accessibility presentation, single-flight actions, and the first compiled-in module lifecycle exist; there is no general registration list or per-module permission declaration API. |
 | [Module model](../architecture/modules.md) | Partial. Window Mover has a small compiled-in lifecycle manager and settings boundary; no general module abstraction exists. |
-| Voice Transcription | Not started. |
+| Voice Transcription | Foundation only. The macOS 26 target, microphone usage string, architecture decisions, and inert source/test project scaffolding are present; no trigger, configuration, audio, speech, recovery, transcript, or paste behavior is implemented. |
 | Keyboard Customization | Not started. |
 | Menu Bar Management | Not started, and not certain to be feasible. |
 
@@ -21,7 +21,7 @@ The project, target, scheme, source and test directories, app product, and bundl
 
 ## Shell gaps
 
-The first compiled-in lifecycle seam now persists Window Mover's single enabled state and gates every shortcut callback dynamically. Disabling releases the active global hot key through `KeyboardShortcuts.disable`, and re-enabling reacquires it through `KeyboardShortcuts.enable`. KeyboardShortcuts exposes no callback-removal API, so the callback closure remains installed as inert library state and retains a defensive enabled-state guard; it returns before coordination, permission checks, or window work if invoked while disabled. The module acquires no other passive resource.
+The first compiled-in lifecycle seam now persists Window Mover's single enabled state and gates every shortcut callback dynamically. Disabling releases the active global hot key through `KeyboardShortcuts.disable`, and re-enabling reacquires it through `KeyboardShortcuts.enable`. The current implementation leaves its callback closure installed as inert library state and retains a defensive enabled-state guard; it does not yet use KeyboardShortcuts' available `removeHandler(for:)` API. The guard returns before coordination, permission checks, or window work if invoked while disabled. The module acquires no other passive resource.
 
 There is still no general module registration list or per-module permission declaration API. Those abstractions remain deferred until another compiled-in module provides concrete requirements.
 
@@ -37,7 +37,7 @@ There is still no general module registration list or per-module permission decl
 
 The intended order, easiest and most valuable first:
 
-1. **Voice Transcription.** Highest personal value and the clearest replacement of a separate app. Two unknowns gate it: whether the intended on-device speech API suits push-to-talk use, and what to do about that API's macOS availability, which is far above the app's current deployment target of 14.0 — raising the target, gating the module by availability, or picking another API are all open. Both are described in [the module's design constraints](../architecture/modules.md#voice-transcription); neither is decided. This module is also what should force the shell's module lifecycle to become real, since it acquires and releases audio resources.
+1. **Voice Transcription.** Highest personal value and the clearest replacement of a separate app. The design decision is to target macOS 26 directly and integrate Apple's SpeechAnalyzer/SpeechTranscriber, with hold-Fn push-to-talk, Fn-Space toggle, versioned declarative configuration, ordered input devices plus an independent system-default fallback, bounded temporary recovery, a last transcript, and optional auto-paste. Phase 1 is foundation only; runtime integration remains next. Integration must confirm through public Apple documentation whether SpeechAnalyzer/SpeechTranscriber requires `NSSpeechRecognitionUsageDescription`; the installed macOS 26 SDK exposes the APIs but does not itself establish that privacy key requirement, so only `NSMicrophoneUsageDescription` is present now. The public API's suitability and asset/session failure modes remain integration risks, not reasons to retain macOS 14 compatibility. This module is also what should force the shell's module lifecycle to become real, since it acquires and releases audio resources.
 2. **Keyboard Customization.** Start with remapping and a Hyper-key layer. Home-row modifiers come later and separately: tap-versus-hold timing is where such tools become unreliable, and it must not gate the simpler work.
 3. **Menu Bar Management.** Last, and the highest risk in the project. macOS offers no adequate public API for controlling other applications' menu bar items, so any implementation depends on fragile Accessibility manipulation that can break across macOS releases. Abandoning this module is an accepted outcome; the fallback is to keep using a dedicated utility for it.
 
