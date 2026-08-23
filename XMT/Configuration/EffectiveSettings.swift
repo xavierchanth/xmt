@@ -27,7 +27,7 @@ struct SettingsValues: Equatable, Sendable {
 struct BuiltInSettings: Equatable, Sendable {
     var windowMoverEnabled = true
     var windowMoverShortcut: ShortcutDTO = .key(key: "m", modifiers: ["command", "option"])
-    var voiceEnabled = false
+    var voiceEnabled = true
     var voiceShortcut: ShortcutDTO = .modifierHold("fn")
     var autoPaste = true
     var keepLastTranscript = true

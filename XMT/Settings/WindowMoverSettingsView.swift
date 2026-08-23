@@ -14,6 +14,7 @@ struct WindowMoverSettingsView: View {
                         set: { module.setEnabled($0) }
                     )
                 )
+                .disabled(module.isEnabledManaged)
             }
 
             Section("Accessibility") {
@@ -26,6 +27,7 @@ struct WindowMoverSettingsView: View {
                         "Move window to next screen:",
                         name: .moveToNextScreen
                     )
+                    .disabled(module.isShortcutManaged)
                 } else {
                     Text("Enable Window Mover to configure or use its shortcut.")
                         .foregroundStyle(.secondary)

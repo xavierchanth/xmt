@@ -35,7 +35,7 @@ final class ConfigTests: XCTestCase {
         XCTAssertTrue(EffectiveSettings.resolve(config: nil, local: local).voiceEnabled.value)
         let file = try decode(#"{"version":1,"voice":{"enabled":false}}"#)
         XCTAssertFalse(EffectiveSettings.resolve(config: file, local: local).voiceEnabled.value)
-        XCTAssertFalse(EffectiveSettings.resolve(config: nil).voiceEnabled.value)
+        XCTAssertTrue(EffectiveSettings.resolve(config: nil).voiceEnabled.value)
     }
 
     func testUnsupportedMalformedAndInvalidKnownValues() {

@@ -10,6 +10,8 @@ final class WindowMoverModule: ObservableObject {
     static let defaultEnabled = true
 
     @Published private(set) var isEnabled: Bool
+    @Published private(set) var isEnabledManaged = false
+    @Published private(set) var isShortcutManaged = false
     private var isHandlerInstalled = false
 
     private init() {
@@ -36,13 +38,26 @@ final class WindowMoverModule: ObservableObject {
     }
 
     func setEnabled(_ enabled: Bool) {
-        guard enabled != isEnabled else { return }
+        guard !isEnabledManaged, enabled != isEnabled else { return }
         isEnabled = enabled
         UserDefaults.standard.set(enabled, forKey: Self.enabledDefaultsKey)
         applyShortcutState()
 
         if enabled {
             AccessibilityService.shared.refresh()
+        }
+    }
+
+    func applyManaged(enabled: ResolvedSetting<Bool>, shortcut: ResolvedSetting<ShortcutDTO>) {
+        isEnabledManaged = enabled.isManaged
+        isShortcutManaged = shortcut.isManaged
+        if isEnabled != enabled.value {
+            isEnabled = enabled.value
+            if !enabled.isManaged { UserDefaults.standard.set(enabled.value, forKey: Self.enabledDefaultsKey) }
+            applyShortcutState()
+        }
+        if shortcut.isManaged, let converted = try? shortcut.value.keyboardShortcut() {
+            KeyboardShortcuts.setShortcut(converted, for: .moveToNextScreen)
         }
     }
 

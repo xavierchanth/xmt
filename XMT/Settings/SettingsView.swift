@@ -12,8 +12,13 @@ struct SettingsView: View {
                 .tabItem {
                     Label("Window Mover", systemImage: "rectangle.on.rectangle")
                 }
+
+            VoiceSettingsView()
+                .tabItem {
+                    Label("Voice", systemImage: "waveform")
+                }
         }
-        .frame(width: 560, height: 360)
+        .frame(width: 620, height: 560)
         .padding(20)
         .background(SettingsWindowAccessor())
     }

@@ -24,7 +24,7 @@ struct GeneralSettingsView: View {
             }
 
             Section("Permissions") {
-                AccessibilityStatusView()
+                AccessibilityStatusView(consumerDescription: "Window Mover uses Accessibility to move windows. Voice Transcription uses it only for optional Auto-paste; Fn gestures use Input Monitoring and recording uses Microphone access.")
             }
         }
         .formStyle(.grouped)
