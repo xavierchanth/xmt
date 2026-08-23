@@ -56,6 +56,16 @@
 		B000026 /* SessionMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100026 /* SessionMachineTests.swift */; };
 		B000027 /* ReconciliationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100027 /* ReconciliationTests.swift */; };
 		B000028 /* CommitSequenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100028 /* CommitSequenceTests.swift */; };
+		B000029 /* FnEventObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100001 /* FnEventObserver.swift */; };
+		B000030 /* TriggerArbitrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100002 /* TriggerArbitrator.swift */; };
+		B000031 /* TriggerEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100003 /* TriggerEvents.swift */; };
+		B000032 /* ConfigFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100004 /* ConfigFile.swift */; };
+		B000033 /* EffectiveSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100005 /* EffectiveSettings.swift */; };
+		B000034 /* ConfigReloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100006 /* ConfigReloader.swift */; };
+		B000035 /* ShortcutDTO.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100007 /* ShortcutDTO.swift */; };
+		B000036 /* DeviceSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100008 /* DeviceSelector.swift */; };
+		B000037 /* BoundedAudioQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100012 /* BoundedAudioQueue.swift */; };
+		B000038 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = AA200014 /* KeyboardShortcuts */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -125,6 +135,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B000038 /* KeyboardShortcuts in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -360,6 +371,9 @@
 			dependencies = (
 			);
 			name = XMTTests;
+			packageProductDependencies = (
+				AA200014 /* KeyboardShortcuts */,
+			);
 			productName = XMTTests;
 			productReference = AA100020 /* XMTTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -475,6 +489,15 @@
 			files = (
 				AA000019 /* WindowGeometry.swift in Sources */,
 				AA000021 /* WindowGeometryTests.swift in Sources */,
+				B000029 /* FnEventObserver.swift in Sources */,
+				B000030 /* TriggerArbitrator.swift in Sources */,
+				B000031 /* TriggerEvents.swift in Sources */,
+				B000032 /* ConfigFile.swift in Sources */,
+				B000033 /* EffectiveSettings.swift in Sources */,
+				B000034 /* ConfigReloader.swift in Sources */,
+				B000035 /* ShortcutDTO.swift in Sources */,
+				B000036 /* DeviceSelector.swift in Sources */,
+				B000037 /* BoundedAudioQueue.swift in Sources */,
 				B000023 /* TriggerArbitratorTests.swift in Sources */,
 				B000024 /* ConfigTests.swift in Sources */,
 				B000025 /* DeviceSelectorTests.swift in Sources */,

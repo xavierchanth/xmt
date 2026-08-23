@@ -24,6 +24,8 @@
 	<true/>
 	<key>NSAccessibilityUsageDescription</key>
 	<string>Window Mover needs Accessibility access to move windows between screens.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Voice Transcription checks whether a selected Bluetooth microphone is already connected before using it.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Voice Transcription needs microphone access to transcribe spoken audio.</string>
 	<key>NSPrincipalClass</key>
