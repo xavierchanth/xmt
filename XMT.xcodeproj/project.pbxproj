@@ -66,6 +66,11 @@
 		B000036 /* DeviceSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100008 /* DeviceSelector.swift */; };
 		B000037 /* BoundedAudioQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100012 /* BoundedAudioQueue.swift */; };
 		B000038 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = AA200014 /* KeyboardShortcuts */; };
+		B000039 /* VoiceSessionMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100013 /* VoiceSessionMachine.swift */; };
+		B000040 /* PendingRecordingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100014 /* PendingRecordingStore.swift */; };
+		B000041 /* Reconciliation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100015 /* Reconciliation.swift */; };
+		B000042 /* TranscriptCommitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100018 /* TranscriptCommitter.swift */; };
+		B000043 /* PasteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100019 /* PasteService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -498,6 +503,11 @@
 				B000035 /* ShortcutDTO.swift in Sources */,
 				B000036 /* DeviceSelector.swift in Sources */,
 				B000037 /* BoundedAudioQueue.swift in Sources */,
+				B000039 /* VoiceSessionMachine.swift in Sources */,
+				B000040 /* PendingRecordingStore.swift in Sources */,
+				B000041 /* Reconciliation.swift in Sources */,
+				B000042 /* TranscriptCommitter.swift in Sources */,
+				B000043 /* PasteService.swift in Sources */,
 				B000023 /* TriggerArbitratorTests.swift in Sources */,
 				B000024 /* ConfigTests.swift in Sources */,
 				B000025 /* DeviceSelectorTests.swift in Sources */,
