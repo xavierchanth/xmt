@@ -41,15 +41,13 @@ Unvalidated by manual exercise:
 - **Fn gestures.** The event tap, the 150 ms hold threshold, Fn-Space consumption, the secure-input watchdog, and tap re-enable after a system disable have only been exercised as pure reducers in tests. Whether the default threshold feels right, and whether consuming Fn-Space breaks any expected macOS behavior, is unknown.
 - **Bluetooth and AirPods.** The fail-closed name matching has never been run against a real paired headset. Whether AirPods report a usable Core Audio name, whether the connected check is accurate at the moment of selection, and whether switching to a headset microphone degrades transcription are all open.
 - **Auto-paste.** The synthetic Command-V to the PID captured at arm time has not been tried against a real editor, and the assumption that the frontmost application at arm time is still the right target at commit time is unverified.
-- **Permission prompts.** The launch-silent, contextual request flow for Microphone, Input Monitoring, and Accessibility has not been walked through on a machine without the grants.
+- **Permission prompts.** The launch-silent, contextual request flow for Microphone, Input Monitoring, Accessibility, and any Speech framework authorization has not been walked through on a machine without the grants. The relevant usage-description strings are present, but whether SpeechAnalyzer presents a separate speech-recognition prompt remains unobserved.
 - **Recovery in anger.** Reconciliation is well covered by tests over a fake store, but no real interrupted session has been recovered, retried, or deleted.
 
 Known implementation gaps, independent of validation:
 
-- **`NSSpeechRecognitionUsageDescription` is still unconfirmed.** The key is absent from `Info.plist`. Whether `SpeechAnalyzer`/`SpeechTranscriber` requires it has not been established from public Apple documentation, and the app has not been run to find out. `NSMicrophoneUsageDescription`, `NSAccessibilityUsageDescription`, and `NSBluetoothAlwaysUsageDescription` are present.
-- **`voice.shortcut` does nothing.** It is accepted and validated by the configuration file but no code reads the resolved value; the Fn gestures are fixed. Either wire it up or remove it from the schema.
 - **No settings control for two values.** The Fn hold threshold and maximum session duration are file-only.
-- **A retried recovery recording is never pasted.** It has no captured target application, so with auto-paste enabled the paste step always fails and the transcript is left on the clipboard.
+- **Auto-paste requires a captured target.** Retries have no trustworthy target, and a live session armed while XMT is frontmost deliberately captures none. In either case the transcript is committed to the clipboard and optional cache without synthesizing a paste.
 - **Coverage stops at the pure layers.** Trigger arbitration, the session reducer, device selection, the bounded queue, reconciliation, commit ordering, and configuration are unit-tested. Capture, the analyzer session, the event tap, the module coordinator, and every SwiftUI surface are not.
 
 Until at least a recording, a transcription, and a paste have been performed by hand, Voice Transcription should be described as implemented, not as shipping.
@@ -57,7 +55,6 @@ Until at least a recording, a transcription, and a paste have been performed by 
 ## Configuration gaps
 
 - **Reload is explicit, not observed.** [Declarative configuration](../architecture/configuration.md#loading-and-reloads) intends file-system observation with coalescing. The implementation reloads at launch, whenever the app becomes active, and on a Settings button. Nothing watches the file, which is the intended design's remaining delta and not a defect in the current behavior.
-- **The built-in Window Mover shortcut is inert.** The resolver's built-in value differs from the recorder's default and is applied only when the file supplies one. Two defaults for one binding is a trap worth removing.
 - **Diagnostics surface only in Voice settings.** A malformed file that also governs Window Mover reports its diagnostic on the Voice tab.
 
 ## Window Mover gaps

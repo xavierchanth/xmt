@@ -26,7 +26,7 @@ struct SettingsValues: Equatable, Sendable {
 /// Compile-time defaults are complete, making resolution total and trap-free.
 struct BuiltInSettings: Equatable, Sendable {
     var windowMoverEnabled = true
-    var windowMoverShortcut: ShortcutDTO = .key(key: "m", modifiers: ["command", "option"])
+    var windowMoverShortcut: ShortcutDTO = .key(key: "space", modifiers: ["option"])
     var voiceEnabled = true
     var voiceShortcut: ShortcutDTO = .modifierHold("fn")
     var autoPaste = true

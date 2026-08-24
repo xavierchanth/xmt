@@ -136,7 +136,7 @@ When a session fails after capture has started, its audio is promoted to the pen
 - **Retry Recording** re-analyzes the pending audio file with a fresh analyzer at the recording's own locale and commits the result.
 - **Delete Recording** removes the pending pair and returns to idle.
 
-A retried transcript has no captured target application, so with auto-paste enabled the paste step fails and the transcript is left on the clipboard.
+A retried transcript has no captured target application, so XMT skips auto-paste for retries and leaves the transcript on the clipboard.
 
 ## Transcript commit
 
@@ -146,7 +146,7 @@ Commit is ordered so the transcript survives every later failure. It is covered 
 2. The clipboard is cleared and set to the transcript. A clipboard failure aborts the commit before anything else happens.
 3. If **keep last transcript** is enabled, the text is written atomically to `last-transcript.txt` in the same cache directory, replacing any previous file. If it is disabled, an existing file is removed.
 4. Recovery artifacts for the session are deleted. This deletion is the commit point.
-5. Only then, if **auto-paste** is enabled, a logical Command-V is posted.
+5. Only then, if **auto-paste** is enabled and a trustworthy target application was captured, a logical Command-V is posted.
 
 The module also keeps the transcript in memory as the last transcript, exposed as `Copy Last Transcript` in the menu and in settings. The clipboard is never restored or wiped afterwards, so a failed paste still leaves usable text.
 
@@ -154,7 +154,7 @@ The module also keeps the transcript in memory as the last transcript, exposed a
 
 Auto-paste posts a synthetic Command-V key-down and key-up to the process that was frontmost **when the session armed**, excluding XMT itself. It resolves the physical key that produces an unmodified `v` in the current keyboard layout rather than assuming a US layout. It never writes Accessibility values.
 
-Paste fails, without discarding anything, when Accessibility trust is absent, when no target process was captured, when the keyboard layout cannot be read, or when the events cannot be created. A paste failure sets the paste-failed status with the error description for three seconds and then returns to idle.
+When no target process was captured — including retries and sessions armed while XMT itself was frontmost — XMT skips auto-paste and leaves the transcript on the clipboard. When a target exists, paste can still fail without discarding anything if Accessibility trust is absent, the keyboard layout cannot be read, or the events cannot be created. A paste failure sets the paste-failed status with the error description for three seconds and then returns to idle.
 
 ### No speech and failures
 

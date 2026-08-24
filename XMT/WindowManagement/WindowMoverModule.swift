@@ -8,18 +8,29 @@ final class WindowMoverModule: ObservableObject {
     static let shared = WindowMoverModule()
     static let enabledDefaultsKey = "windowMoverEnabled"
     static let defaultEnabled = true
+    private static let shortcutBackupActiveKey = "windowMoverShortcutBackupActive"
+    private static let shortcutBackupDataKey = "windowMoverShortcutBackupData"
 
     @Published private(set) var isEnabled: Bool
     @Published private(set) var isEnabledManaged = false
     @Published private(set) var isShortcutManaged = false
     var persistedEnabled: Bool { UserDefaults.standard.bool(forKey: Self.enabledDefaultsKey) }
+    var persistedShortcut: ShortcutDTO? {
+        unmanagedShortcut.flatMap(ShortcutDTO.fromKeyboardShortcut)
+    }
     private var isHandlerInstalled = false
+    private var unmanagedShortcut: KeyboardShortcuts.Shortcut?
 
     private init() {
         UserDefaults.standard.register(defaults: [
             Self.enabledDefaultsKey: Self.defaultEnabled
         ])
         isEnabled = UserDefaults.standard.bool(forKey: Self.enabledDefaultsKey)
+        if UserDefaults.standard.bool(forKey: Self.shortcutBackupActiveKey) {
+            unmanagedShortcut = Self.loadShortcutBackup()
+        } else {
+            unmanagedShortcut = KeyboardShortcuts.getShortcut(for: .moveToNextScreen)
+        }
     }
 
     func register() {
@@ -51,15 +62,45 @@ final class WindowMoverModule: ObservableObject {
 
     func applyManaged(enabled: ResolvedSetting<Bool>, shortcut: ResolvedSetting<ShortcutDTO>) {
         isEnabledManaged = enabled.isManaged
-        isShortcutManaged = shortcut.isManaged
         if isEnabled != enabled.value {
             isEnabled = enabled.value
             if !enabled.isManaged { UserDefaults.standard.set(enabled.value, forKey: Self.enabledDefaultsKey) }
             applyShortcutState()
         }
-        if shortcut.isManaged, let converted = try? shortcut.value.keyboardShortcut() {
-            KeyboardShortcuts.setShortcut(converted, for: .moveToNextScreen)
+
+        let defaults = UserDefaults.standard
+        let hasBackup = defaults.bool(forKey: Self.shortcutBackupActiveKey)
+        isShortcutManaged = shortcut.isManaged
+        if shortcut.isManaged {
+            if !hasBackup {
+                unmanagedShortcut = KeyboardShortcuts.getShortcut(for: .moveToNextScreen)
+                Self.saveShortcutBackup(unmanagedShortcut)
+            }
+            if let converted = try? shortcut.value.keyboardShortcut() {
+                KeyboardShortcuts.setShortcut(converted, for: .moveToNextScreen)
+            }
+        } else if hasBackup {
+            KeyboardShortcuts.setShortcut(unmanagedShortcut, for: .moveToNextScreen)
+            defaults.removeObject(forKey: Self.shortcutBackupDataKey)
+            defaults.set(false, forKey: Self.shortcutBackupActiveKey)
+        } else {
+            unmanagedShortcut = KeyboardShortcuts.getShortcut(for: .moveToNextScreen)
         }
+    }
+
+    private static func saveShortcutBackup(_ shortcut: KeyboardShortcuts.Shortcut?) {
+        let defaults = UserDefaults.standard
+        defaults.set(true, forKey: shortcutBackupActiveKey)
+        if let shortcut, let data = try? JSONEncoder().encode(shortcut) {
+            defaults.set(data, forKey: shortcutBackupDataKey)
+        } else {
+            defaults.removeObject(forKey: shortcutBackupDataKey)
+        }
+    }
+
+    private static func loadShortcutBackup() -> KeyboardShortcuts.Shortcut? {
+        guard let data = UserDefaults.standard.data(forKey: shortcutBackupDataKey) else { return nil }
+        return try? JSONDecoder().decode(KeyboardShortcuts.Shortcut.self, from: data)
     }
 
     private func applyShortcutState() {

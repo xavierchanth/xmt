@@ -66,7 +66,7 @@ Audio is held in a bounded in-memory queue during normal processing. Temporary r
 
 A completed result replaces the module's last transcript. Automatic paste is optional: when enabled, commit preserves the transcript first and then asks a separate paste service to insert it into the focused input. A paste failure does not discard the transcript. When auto-paste is disabled, no Accessibility insertion is attempted.
 
-The module declares Microphone permission for capture and Input Monitoring for Fn observation. Accessibility is required only for enabled auto-paste. Whether SpeechAnalyzer/SpeechTranscriber also requires the `NSSpeechRecognitionUsageDescription` privacy key is intentionally left to integration evidence from public SDK documentation; [the roadmap](../roadmap/README.md) tracks that uncertainty. Permission acquisition and presentation remain shell responsibilities.
+The module declares Microphone permission for capture and Input Monitoring for Fn observation. Accessibility is required only for enabled auto-paste. XMT also includes a speech-recognition usage description defensively; whether SpeechAnalyzer presents that authorization flow remains a [hardware-validation question](../roadmap/README.md#voice-transcription-validation-gaps). Permission acquisition and presentation remain shell responsibilities.
 
 Voice settings, including triggers, ordered devices, separate system-default fallback, recovery policy, transcript handling, and auto-paste, participate in the shared [versioned declarative configuration](configuration.md) and its precedence rules.
 

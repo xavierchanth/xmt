@@ -79,6 +79,10 @@ struct ConfigFile: Codable, Equatable, Sendable {
             do { try shortcut.validate() } catch { throw ConfigDiagnostic.invalidValue(path: "windowMover.shortcut", reason: String(describing: error)) }
         }
         if let shortcut = voice.shortcut {
+            guard case let .modifierHold(modifier) = shortcut,
+                  ["fn", "function"].contains(modifier.lowercased()) else {
+                throw ConfigDiagnostic.invalidValue(path: "voice.shortcut", reason: "Voice Transcription v1 requires an Fn modifier hold")
+            }
             do { try shortcut.validate() } catch { throw ConfigDiagnostic.invalidValue(path: "voice.shortcut", reason: String(describing: error)) }
         }
         if let locale = voice.locale, locale.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

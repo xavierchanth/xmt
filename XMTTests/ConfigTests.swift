@@ -65,6 +65,9 @@ final class ConfigTests: XCTestCase {
         XCTAssertThrowsError(try ShortcutDTO.key(key: "k", modifiers: ["shift", "shift"]).validate())
         XCTAssertNoThrow(try ShortcutDTO.modifierHold("fn").validate())
         XCTAssertThrowsError(try ShortcutDTO.modifierHold("fn").keyboardShortcut())
+        XCTAssertEqual(ShortcutDTO.fromKeyboardShortcut(converted), .key(key: "k", modifiers: ["command", "shift"]))
+        XCTAssertThrowsError(try decode(#"{"version":1,"voice":{"shortcut":{"type":"modifierHold","modifier":"command"}}}"#))
+        XCTAssertNoThrow(try decode(#"{"version":1,"voice":{"shortcut":{"type":"modifierHold","modifier":"fn"}}}"#))
         for value in [ordinary, .modifierHold("fn")] {
             XCTAssertEqual(try JSONDecoder().decode(ShortcutDTO.self, from: JSONEncoder().encode(value)), value)
         }

@@ -136,8 +136,8 @@ final class VoiceTranscriptionModule: ObservableObject {
 
     private func apply(_ value: EffectiveSettings) {
         effective = value; managedKeys = Set(EffectiveSettings.Key.allCases.filter { key in
-            switch key { case .voiceEnabled: return value.voiceEnabled.isManaged; case .autoPaste: return value.autoPaste.isManaged
-            case .keepLastTranscript: return value.keepLastTranscript.isManaged; case .locale: return value.locale.isManaged
+            switch key { case .voiceEnabled: return value.voiceEnabled.isManaged; case .voiceShortcut: return value.voiceShortcut.isManaged
+            case .autoPaste: return value.autoPaste.isManaged; case .keepLastTranscript: return value.keepLastTranscript.isManaged; case .locale: return value.locale.isManaged
             case .inputDevicePriority: return value.inputDevicePriority.isManaged; case .fallbackToSystemDefault: return value.fallbackToSystemDefault.isManaged
             default: return false }
         })
@@ -254,11 +254,16 @@ final class VoiceTranscriptionModule: ObservableObject {
             case .pending: try store.deletePending(); try store.clearActive()
             }
             partialTranscript = ""; _ = machine.handle(.committed); status = .noSpeech
+            transcriber = nil; await assets.releaseReservation()
             Task { try? await Task.sleep(for: .seconds(2)); if status == .noSpeech { status = .idle } }
             reconcileObservation()
             return
         }
-        let result = try await TranscriptCommitter().commit(clean, settings: .init(keepLastTranscript: keepLastTranscript, autoPaste: autoPaste), targetPID: target)
+        let result = try await TranscriptCommitter().commit(
+            clean,
+            settings: .init(keepLastTranscript: keepLastTranscript, autoPaste: autoPaste && target != nil),
+            targetPID: target
+        )
         lastTranscript = clean; partialTranscript = ""; _ = machine.handle(.committed)
         if let error = result.pasteError {
             status = .pasteFailed(error.localizedDescription)
@@ -293,7 +298,9 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     private func currentLocalSettings() -> SettingsValues {
-        SettingsValues(windowMoverEnabled: WindowMoverModule.shared.persistedEnabled, voiceEnabled: isEnabled,
+        SettingsValues(windowMoverEnabled: WindowMoverModule.shared.persistedEnabled,
+                       windowMoverShortcut: WindowMoverModule.shared.persistedShortcut,
+                       voiceEnabled: isEnabled, voiceShortcut: .modifierHold("fn"),
                        autoPaste: autoPaste, keepLastTranscript: keepLastTranscript, locale: localeIdentifier,
                        inputDevicePriority: devicePriority, fallbackToSystemDefault: fallbackToSystemDefault)
     }

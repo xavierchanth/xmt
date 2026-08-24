@@ -31,6 +31,17 @@ enum ShortcutDTO: Equatable, Sendable {
         return KeyboardShortcuts.Shortcut(key, modifiers: flags)
     }
 
+    static func fromKeyboardShortcut(_ shortcut: KeyboardShortcuts.Shortcut) -> ShortcutDTO? {
+        guard let key = shortcut.key,
+              let keyName = keys.first(where: { $0.value == key })?.key else { return nil }
+        let known: [(String, NSEvent.ModifierFlags)] = [
+            ("command", .command), ("control", .control), ("option", .option), ("shift", .shift)
+        ]
+        let supported: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
+        guard shortcut.modifiers.subtracting(supported).isEmpty else { return nil }
+        return .key(key: keyName, modifiers: known.compactMap { shortcut.modifiers.contains($0.1) ? $0.0 : nil })
+    }
+
     func validate() throws {
         switch self {
         case .key:

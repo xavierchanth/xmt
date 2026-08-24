@@ -47,7 +47,7 @@ Field meanings are owned by the modules: [Voice Transcription](voice-transcripti
 A shortcut is one of two shapes, distinguished by `type`:
 
 - `key` — a `key` name plus an optional `modifiers` array drawn from `command`, `control`, `option`, and `shift`. Key names cover digits, letters, `f1` through `f20`, and named keys such as `space`, `return`, `tab`, `escape`, `delete`, `forwarddelete`, the arrows, `home`, `end`, `pageup`, `pagedown`, and the punctuation keys. Names are case-insensitive.
-- `modifierHold` — a `modifier` name from `command`, `control`, `option`, `shift`, `fn`, or `function`.
+- `modifierHold` — the modifier name `fn` or its alias `function`. Voice Transcription v1 is the only module accepting this shape.
 
 When `type` is omitted, a document containing `modifier` is read as a modifier hold and anything else as a key shortcut. A modifier hold is deliberately not representable as a key shortcut with optional bits.
 
@@ -56,7 +56,7 @@ When `type` is omitted, a document containing `modifier` is read as a modifier h
 Decoding is all-or-nothing: a document is decoded, version-checked, and fully validated before any value is published. Diagnostics distinguish an unreadable file, malformed JSON with the failing coding path, an unsupported version, and an invalid value with its path and reason. The validated constraints are:
 
 - `windowMover.shortcut` MUST be a key shortcut — a modifier hold is rejected for Window Mover — and MUST convert to a real key and modifier set.
-- `voice.shortcut` MUST be a valid shortcut of either shape.
+- `voice.shortcut` MUST be a modifier hold naming `fn` or `function`; key shortcuts and other modifiers are rejected.
 - `voice.locale` MUST NOT be blank.
 - `voice.fnHoldThresholdMs` MUST be between 50 and 500.
 - `voice.maxSessionSeconds` MUST be between 1 and 3600.
@@ -68,16 +68,13 @@ An empty `inputDevicePriority` array is a valid explicit value and is distinct f
 
 Effective settings resolve per key, from lowest to highest precedence:
 
-1. **Built-in defaults.** Window Mover enabled; Voice enabled; auto-paste on; keep last transcript on; locale `en-US`; Fn hold threshold 150 ms; maximum session 300 seconds; empty device priority; system-default fallback on.
+1. **Built-in defaults.** Window Mover enabled with Option-Space; Voice enabled with Fn gestures; auto-paste on; keep last transcript on; locale `en-US`; Fn hold threshold 150 ms; maximum session 300 seconds; empty device priority; system-default fallback on.
 2. **Persisted local values** written by the settings UI.
 3. **Values explicitly present in the configuration file.**
 
 Resolution is per key, not per section: omitting a key leaves the persisted value in force rather than resetting it, and removing the file returns every key to defaults plus persisted values. Each resolved value carries its source, so a change of source alone counts as a change. `XMTTests/ConfigTests.swift` covers the precedence matrix, per-key independence, and removal.
 
-Two built-in defaults are inert in the current implementation and MUST NOT be read as behavior:
-
-- The built-in Window Mover shortcut differs from the shortcut the app actually uses. The live binding is owned by the shortcut recorder and defaults to Option-Space; the resolver's value is applied only when the configuration file supplies it.
-- `voice.shortcut` is accepted, validated, and resolved, but no code reads the resolved value. Setting it changes nothing today; the Fn gestures are fixed.
+The Window Mover shortcut may be managed by the file. XMT preserves the prior recorder value when management begins and restores it when the key is removed. Voice Transcription v1 accepts only an Fn modifier-hold value for `voice.shortcut`; other trigger shapes are rejected atomically because the implemented gesture pair is fixed to hold-Fn and Fn-Space.
 
 ## Managed values
 
