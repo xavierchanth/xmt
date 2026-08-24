@@ -2,6 +2,8 @@ import SwiftUI
 
 struct DevicePriorityListView: View {
     @ObservedObject var module: VoiceTranscriptionModule
+    var priorityManaged = false
+    var fallbackManaged = false
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -15,7 +17,7 @@ struct DevicePriorityListView: View {
                         Button(role: .destructive) { module.devicePriority.remove(at: index) } label: { Image(systemName: "minus.circle") }
                     }
                 }
-            }.frame(minHeight: 90)
+            }.frame(minHeight: 90).disabled(priorityManaged)
             Menu("Add input device") {
                 ForEach(module.availableDevices, id: \.uid) { device in
                     Button(device.name) {
@@ -23,8 +25,8 @@ struct DevicePriorityListView: View {
                         module.devicePriority.append(.init(name: device.name, uid: device.uid))
                     }
                 }
-            }
-            Toggle("Fall back to the system default input", isOn: $module.fallbackToSystemDefault)
+            }.disabled(priorityManaged)
+            Toggle("Fall back to the system default input", isOn: $module.fallbackToSystemDefault).disabled(fallbackManaged)
         }
     }
 

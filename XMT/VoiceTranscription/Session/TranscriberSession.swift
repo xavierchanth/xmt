@@ -32,10 +32,29 @@ actor TranscriberSession {
         guard case .ready = state else { throw SessionError.alreadyUsed }
         state = .running
         do {
-            try await analyzer.prepareToAnalyze(in: nil)
+            let target = try await bestAvailableAudioFormat()
+            try await analyzer.prepareToAnalyze(in: target)
             resultTask = consumeResults(update: update)
-            try await analyzer.start(inputSequence: buffers.map { AnalyzerInput(buffer: $0) })
+            // Conversion runs in the analyzer-consumer task, never in the realtime audio tap.
+            let converted = buffers.map { try Self.convert($0, to: target) }
+            try await analyzer.start(inputSequence: converted.map { AnalyzerInput(buffer: $0) })
         } catch { await cleanup(); throw error }
+    }
+
+    static func convert(_ source: AVAudioPCMBuffer, to target: AVAudioFormat) throws -> AVAudioPCMBuffer {
+        if source.format == target { return source }
+        guard let converter = AVAudioConverter(from: source.format, to: target) else { throw SessionError.noCompatibleAudioFormat }
+        let ratio = target.sampleRate / source.format.sampleRate
+        let capacity = AVAudioFrameCount(ceil(Double(source.frameLength) * ratio)) + 1
+        guard let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { throw SessionError.noCompatibleAudioFormat }
+        var supplied = false, conversionError: NSError?
+        let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
+            if supplied { inputStatus.pointee = .noDataNow; return nil }
+            supplied = true; inputStatus.pointee = .haveData; return source
+        }
+        if let conversionError { throw conversionError }
+        guard status != .error else { throw SessionError.noCompatibleAudioFormat }
+        return output
     }
 
     /// Input must already have reached end-of-sequence. A non-finishing producer is treated as a

@@ -101,7 +101,7 @@ public final class AudioCaptureService: @unchecked Sendable {
                     self.requestFailure((error as? AudioCaptureError) ?? .handoffOverflow(recoveryURL: recoveryURL), token: token)
                 }
             }
-            worker = Task { [weak self, handoff, output] in
+            worker = Task { [self, handoff, output] in
                 var failure: AudioCaptureError?
                 do {
                     for try await buffer in handoff {
@@ -115,7 +115,7 @@ public final class AudioCaptureService: @unchecked Sendable {
                 catch { failure = .recoveryFileFailed(error) }
                 // Closing the last strong reference finalizes the CAF before terminal publication.
                 recoveryFile = nil
-                self?.control.async { [weak self] in self?.workerFinished(failure, token: token) }
+                self.control.async { [weak self] in self?.workerFinished(failure, token: token) }
             }
             observer = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange,
                                                                object: engine, queue: nil) { [weak self] _ in

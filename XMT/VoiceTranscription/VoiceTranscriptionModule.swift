@@ -10,7 +10,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     static let shared = VoiceTranscriptionModule()
 
     enum Status: Equatable {
-        case disabled, idle, recording, finalizing, pending, degraded(String), failed(String)
+        case disabled, idle, arming, recording, finalizing, pending, noSpeech, pasteFailed(String), degraded(String), failed(String)
     }
 
     @Published private(set) var status: Status = .disabled
@@ -30,9 +30,11 @@ final class VoiceTranscriptionModule: ObservableObject {
     private var machine = VoiceSessionMachine()
     private var observer: FnEventObserver?
     private var observation: FnEventObserver.Observation?
+    private var observerThresholdMs: Int?
     private var capture: AudioCaptureService?
     private var transcriber: TranscriberSession?
-    private var analysisTask: Task<Void, Never>?
+    private var analysisTask: Task<Error?, Never>?
+    private var armTask: Task<Void, Never>?
     private var maxTimer: Timer?
     private var targetPID: pid_t?
     private let store = PendingRecordingStore()
@@ -57,9 +59,10 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     func stop() {
-        observation?.cancel(); observation = nil; observer = nil
+        observation?.cancel(); observation = nil; observer = nil; observerThresholdMs = nil
         maxTimer?.invalidate(); maxTimer = nil
         capture?.stop(); capture = nil
+        armTask?.cancel(); armTask = nil
         analysisTask?.cancel(); analysisTask = nil
         if let transcriber { Task { await transcriber.cancel(); await assets.releaseReservation() } }
         transcriber = nil; partialTranscript = ""
@@ -86,14 +89,17 @@ final class VoiceTranscriptionModule: ObservableObject {
 
     func retryPending() {
         guard case .pending = status, let pending = (try? store.loadPending()) ?? nil else { return }
+        let session = VoiceSessionMachine.Session(id: UUID(), startedAt: Date(), localeIdentifier: pending.metadata.localeIdentifier)
+        guard case .accepted = machine.handle(.retryBegan(session)) else { return }
         status = .finalizing; partialTranscript = ""
         Task {
             do {
                 let text = try await TranscriberSession.retry(fileURL: pending.audioURL, locale: Locale(identifier: pending.metadata.localeIdentifier)) { [weak self] update in
                     Task { @MainActor in self?.partialTranscript = update.text }
                 }
+                _ = machine.handle(.finalized(session))
                 try await commit(text, target: nil)
-            } catch { status = .failed(error.localizedDescription) }
+            } catch { captureFailed(error) }
         }
     }
 
@@ -119,6 +125,7 @@ final class VoiceTranscriptionModule: ObservableObject {
 
     private func loadConfig() async {
         guard let reloader else { return }
+        await reloader.updateLocal(currentLocalSettings())
         do { _ = try await reloader.reload(); configDiagnostic = nil }
         catch { configDiagnostic = String(describing: error) }
     }
@@ -134,16 +141,24 @@ final class VoiceTranscriptionModule: ObservableObject {
         isEnabled = value.voiceEnabled.value; autoPaste = value.autoPaste.value; keepLastTranscript = value.keepLastTranscript.value
         localeIdentifier = value.locale.value; devicePriority = value.inputDevicePriority.value; fallbackToSystemDefault = value.fallbackToSystemDefault.value
         applying = false
-        if isEnabled { startObserving() } else { stop() }
+        if isEnabled { reconcileObservation() } else { stop() }
         WindowMoverModule.shared.applyManaged(enabled: value.windowMoverEnabled, shortcut: value.windowMoverShortcut)
+    }
+
+    private func reconcileObservation() {
+        guard observerThresholdMs != effective.fnHoldThresholdMs.value else { return }
+        guard case .idle = machine.state else { return }
+        observation?.cancel(); observation = nil; observer = nil; observerThresholdMs = nil
+        startObserving()
     }
 
     private func startObserving() {
         guard isEnabled, observation == nil else { if isEnabled, status == .disabled { status = .idle }; return }
+        guard CGPreflightListenEventAccess() else { status = .degraded("Input Monitoring access is required"); return }
         let observer = FnEventObserver(holdThreshold: Double(effective.fnHoldThresholdMs.value) / 1000)
         do {
             observation = try observer.observe { [weak self] event in self?.handle(event) }
-            self.observer = observer
+            self.observer = observer; observerThresholdMs = effective.fnHoldThresholdMs.value
             if status == .disabled { status = .idle }
         } catch { status = .degraded("Input Monitoring access is required") }
     }
@@ -171,52 +186,73 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     private func arm(_ mode: VoiceSessionMachine.Mode, _ session: VoiceSessionMachine.Session) {
-        guard status == .idle, AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else { status = .degraded("Microphone access is required"); return }
-        do {
-            let device = try DeviceSelector(devices: DeviceTable(), bluetooth: BluetoothLinkOracle()).select(
-                priorities: devicePriority.map { AudioDevicePreference(uid: $0.uid, exactName: $0.name) }, allowSystemDefaultFallback: fallbackToSystemDefault)
-            let url = try store.prepareActive(.init(sessionID: session.id, timestamp: session.startedAt, localeIdentifier: session.localeIdentifier, failureReason: "active"))
-            let locale = Locale(identifier: session.localeIdentifier)
-            guard try trySyncAwait({ try await self.assets.reserve(locale: locale) }) else {
-                status = .degraded("Speech assets are not installed"); return
+        guard status == .idle, armTask == nil else { return }
+        guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
+            _ = machine.handle(.armingRefused(.permissionDenied)); status = .degraded("Microphone access is required"); return
+        }
+        status = .arming
+        armTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let device = try DeviceSelector(devices: DeviceTable(), bluetooth: BluetoothLinkOracle()).select(
+                    priorities: devicePriority.map { AudioDevicePreference(uid: $0.uid, exactName: $0.name) }, allowSystemDefaultFallback: fallbackToSystemDefault)
+                let locale = Locale(identifier: session.localeIdentifier)
+                guard try await assets.reserve(locale: locale) else { throw VoiceSessionMachine.DegradedReason.assetsMissing }
+                try Task.checkCancellation()
+                let transcriber = try await TranscriberSession(locale: locale)
+                try Task.checkCancellation()
+                let url = try store.prepareActive(.init(sessionID: session.id, timestamp: session.startedAt, localeIdentifier: session.localeIdentifier, failureReason: "active"))
+                let capture = AudioCaptureService(); let stream = try capture.start(device: device, recoveryURL: url)
+                self.capture = capture; self.transcriber = transcriber; targetPID = PasteService.frontmostPID(); partialTranscript = ""
+                _ = machine.handle(.armed(mode, session)); status = .recording; armTask = nil
+                analysisTask = Task { [weak self, capture] in
+                    do { try await transcriber.start(buffers: stream.buffers) { update in Task { @MainActor in self?.partialTranscript = update.text } }; _ = capture; return nil }
+                    catch { _ = capture; return error }
+                }
+                maxTimer = Timer.scheduledTimer(withTimeInterval: Double(effective.maxSessionSeconds.value), repeats: false) { [weak self] _ in
+                    Task { @MainActor in self?.stopForMaximumDuration() }
+                }
+            } catch {
+                armTask = nil; status = .degraded(Self.degradedMessage(error)); await assets.releaseReservation()
             }
-            let transcriber = try trySyncAwait { try await TranscriberSession(locale: locale) }
-            let capture = AudioCaptureService(); let stream = try capture.start(device: device, recoveryURL: url)
-            self.capture = capture; self.transcriber = transcriber; targetPID = PasteService.frontmostPID(); partialTranscript = ""
-            _ = machine.handle(.armed(mode, session)); status = .recording
-            analysisTask = Task { [weak self] in
-                do { try await transcriber.start(buffers: stream.buffers) { update in Task { @MainActor in self?.partialTranscript = update.text } } }
-                catch { await MainActor.run { self?.captureFailed(error) } }
-            }
-            maxTimer = Timer.scheduledTimer(withTimeInterval: Double(effective.maxSessionSeconds.value), repeats: false) { [weak self] _ in
-                Task { @MainActor in self?.finish(session) }
-            }
-        } catch {
-            status = .degraded(error.localizedDescription)
-            Task { await assets.releaseReservation() }
         }
     }
 
     private func finish(_ session: VoiceSessionMachine.Session) {
         guard status == .recording else { return }; status = .finalizing
-        maxTimer?.invalidate(); maxTimer = nil; capture?.stop(); capture = nil
+        maxTimer?.invalidate(); maxTimer = nil
+        let drainingCapture = capture
+        drainingCapture?.stop()
         Task {
+            if let error = await analysisTask?.value { captureFailed(error); return }
+            capture = nil; analysisTask = nil
             do { let text = try await transcriber?.finish() ?? ""; _ = machine.handle(.finalized(session)); try await commit(text, target: targetPID) }
             catch { captureFailed(error) }
+            _ = drainingCapture
         }
     }
 
     private func commit(_ text: String, target: pid_t?) async throws {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clean.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
-        _ = try await TranscriptCommitter().commit(clean, settings: .init(keepLastTranscript: keepLastTranscript, autoPaste: autoPaste), targetPID: target)
-        lastTranscript = clean; partialTranscript = ""; _ = machine.handle(.committed); status = .idle
-        transcriber = nil; await assets.releaseReservation()
+        guard !clean.isEmpty else {
+            try store.clearActive(); partialTranscript = ""; _ = machine.handle(.committed); status = .noSpeech
+            Task { try? await Task.sleep(for: .seconds(2)); if status == .noSpeech { status = .idle } }
+            reconcileObservation()
+            return
+        }
+        let result = try await TranscriptCommitter().commit(clean, settings: .init(keepLastTranscript: keepLastTranscript, autoPaste: autoPaste), targetPID: target)
+        lastTranscript = clean; partialTranscript = ""; _ = machine.handle(.committed)
+        if let error = result.pasteError {
+            status = .pasteFailed(error.localizedDescription)
+            Task { try? await Task.sleep(for: .seconds(3)); if case .pasteFailed = status { status = .idle } }
+        } else { status = .idle }
+        transcriber = nil; await assets.releaseReservation(); reconcileObservation()
     }
 
     private func captureFailed(_ error: Error) {
         capture?.stop(); capture = nil; transcriber = nil; maxTimer?.invalidate(); maxTimer = nil
-        if let pending = try? store.promoteActive(failureReason: String(describing: error)) {
+        let pending = ((try? store.loadPending()) ?? nil) ?? (try? store.promoteActive(failureReason: String(describing: error)))
+        if let pending {
             _ = machine.handle(.failed(.init(id: pending.metadata.sessionID, audioURL: pending.audioURL))); status = .pending
         } else { status = .failed(error.localizedDescription) }
         partialTranscript = ""
@@ -228,16 +264,28 @@ final class VoiceTranscriptionModule: ObservableObject {
         }
     }
 
+    private func stopForMaximumDuration() {
+        guard case .recording(let mode, let session) = machine.state else { return }
+        interpret(machine.handle(VoiceSessionMachine.maximumStopEvent(mode: mode, session: session)))
+    }
+
+    private func currentLocalSettings() -> SettingsValues {
+        SettingsValues(windowMoverEnabled: WindowMoverModule.shared.persistedEnabled, voiceEnabled: isEnabled,
+                       autoPaste: autoPaste, keepLastTranscript: keepLastTranscript, locale: localeIdentifier,
+                       inputDevicePriority: devicePriority, fallbackToSystemDefault: fallbackToSystemDefault)
+    }
+
+    private static func degradedMessage(_ error: Error) -> String {
+        if let reason = error as? VoiceSessionMachine.DegradedReason {
+            switch reason { case .assetsMissing: return "Speech assets are not installed"; case .noInputDevice: return "No eligible input device";
+            case .permissionDenied: return "Required permission is missing"; case .unsupportedLocale: return "Locale is unsupported" }
+        }
+        if error is DeviceSelectionError { return "No eligible input device" }
+        return error.localizedDescription
+    }
+
     private func persist(_ key: String, _ value: Any) { if !applying { UserDefaults.standard.set(value, forKey: key) } }
     private func persistAndReconfigure(_ key: String, _ value: Bool) { persist(key, value); if !applying { value ? startObserving() : stop() } }
     private func saveDevices() { if !applying, let data = try? JSONEncoder().encode(devicePriority) { UserDefaults.standard.set(data, forKey: "voice.devices") } }
     private func describe(_ value: VoiceAssetManager.Status) -> String { String(describing: value) }
-}
-
-/// Bridges an async initializer before capture starts. The run loop remains responsive and no OS action is performed.
-@MainActor private func trySyncAwait<T>(_ operation: @escaping @Sendable () async throws -> T) throws -> T {
-    let semaphore = DispatchSemaphore(value: 0); var result: Result<T, Error>!
-    Task.detached { do { result = .success(try await operation()) } catch { result = .failure(error) }; semaphore.signal() }
-    while semaphore.wait(timeout: .now() + 0.01) == .timedOut { RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.001)) }
-    return try result.get()
 }

@@ -6,7 +6,7 @@ struct VoiceSessionMachine: Equatable {
     struct Session: Equatable { let id: UUID; let startedAt: Date; let localeIdentifier: String }
     struct Pending: Equatable { let id: UUID; let audioURL: URL }
     enum FailureReason: String, Codable, Equatable { case capture, transcription, commit, interrupted }
-    enum DegradedReason: Equatable { case unsupportedLocale, assetsMissing, noInputDevice, permissionDenied }
+    enum DegradedReason: Error, Equatable { case unsupportedLocale, assetsMissing, noInputDevice, permissionDenied }
     enum State: Equatable {
         case idle
         case recording(Mode, Session)
@@ -34,6 +34,10 @@ struct VoiceSessionMachine: Equatable {
     enum Outcome: Equatable { case accepted([Command]); case dropped; case refused(DegradedReason) }
 
     private(set) var state: State = .idle
+
+    static func maximumStopEvent(mode: Mode, session: Session) -> Event {
+        mode == .latched ? .toggle(session) : .pushToTalkEnded
+    }
 
     mutating func handle(_ event: Event) -> Outcome {
         switch (state, event) {

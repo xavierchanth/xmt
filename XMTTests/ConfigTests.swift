@@ -109,6 +109,24 @@ final class ConfigTests: XCTestCase {
         XCTAssertTrue(result.effective.autoPaste.value); XCTAssertEqual(result.effective.autoPaste.source, .builtIn)
     }
 
+    func testReloadUsesUpdatedLiveLocalBaseline() async throws {
+        final class Box: @unchecked Sendable { var removed = false }
+        let box = Box()
+        var original = SettingsValues(); original.windowMoverEnabled = true; original.autoPaste = true
+        let loader = ConfigReloader(url: URL(fileURLWithPath: "/unused"), local: original) { _ in
+            if box.removed { throw NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoSuchFileError) }
+            return Data(#"{"version":1,"voice":{"locale":"fr-FR"}}"#.utf8)
+        }
+        _ = try await loader.reload()
+        var edited = original; edited.windowMoverEnabled = false; edited.autoPaste = false
+        await loader.updateLocal(edited); box.removed = true
+        let result = try await loader.reload()
+        XCTAssertFalse(result.effective.windowMoverEnabled.value)
+        XCTAssertFalse(result.effective.autoPaste.value)
+        XCTAssertEqual(result.effective.windowMoverEnabled.source, .local)
+        XCTAssertEqual(result.effective.autoPaste.source, .local)
+    }
+
     func testChangedKeysIncludesSourceOnlyManagementChange() throws {
         var local = SettingsValues(); local.voiceEnabled = true
         let unmanaged = EffectiveSettings.resolve(config: nil, local: local)

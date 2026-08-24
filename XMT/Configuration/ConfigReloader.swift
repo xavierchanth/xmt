@@ -12,7 +12,7 @@ actor ConfigReloader {
     typealias Apply = @Sendable (ConfigLoadResult) async -> Void
 
     let url: URL
-    private let local: SettingsValues
+    private var local: SettingsValues
     private let builtIn: BuiltInSettings
     private let read: @Sendable (URL) throws -> Data
     private var applyCallbacks: [Apply] = []
@@ -31,6 +31,9 @@ actor ConfigReloader {
     }
 
     func addApplyCallback(_ callback: @escaping Apply) { applyCallbacks.append(callback) }
+
+    /// Replaces the persisted/UI baseline used by subsequent reloads.
+    func updateLocal(_ values: SettingsValues) { local = values }
 
     /// Calls are serialized through publication, including asynchronous callbacks. Thus
     /// actor reentrancy cannot publish B while callbacks for A are still running.

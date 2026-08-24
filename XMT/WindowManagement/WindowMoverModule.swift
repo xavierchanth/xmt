@@ -12,6 +12,7 @@ final class WindowMoverModule: ObservableObject {
     @Published private(set) var isEnabled: Bool
     @Published private(set) var isEnabledManaged = false
     @Published private(set) var isShortcutManaged = false
+    var persistedEnabled: Bool { UserDefaults.standard.bool(forKey: Self.enabledDefaultsKey) }
     private var isHandlerInstalled = false
 
     private init() {

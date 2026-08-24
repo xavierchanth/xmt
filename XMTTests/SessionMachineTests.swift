@@ -51,6 +51,13 @@ final class SessionMachineTests: XCTestCase {
         XCTAssertEqual(m.handle(.toggle(session())), .dropped)
     }
 
+    func testMaximumDurationUsesReducerStopForBothModes() {
+        let ptt = session(); var first = VoiceSessionMachine(); _ = first.handle(.armed(.pushToTalk, ptt))
+        XCTAssertEqual(first.handle(VoiceSessionMachine.maximumStopEvent(mode: .pushToTalk, session: ptt)), .accepted([.stop(ptt)]))
+        let latched = session(); var second = VoiceSessionMachine(); _ = second.handle(.armed(.latched, latched))
+        XCTAssertEqual(second.handle(VoiceSessionMachine.maximumStopEvent(mode: .latched, session: latched)), .accepted([.stop(latched)]))
+    }
+
     func testArmingRefusalIsOutcomeNotState() {
         var m = VoiceSessionMachine()
         XCTAssertEqual(m.handle(.armingRefused(.noInputDevice)), .refused(.noInputDevice)); XCTAssertEqual(m.state, .idle)

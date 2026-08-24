@@ -22,7 +22,9 @@ struct VoiceSettingsView: View {
                 Button("Copy Last Transcript") { module.copyLastTranscript() }.disabled(module.lastTranscript.isEmpty)
             }
             Section("Input priority") {
-                DevicePriorityListView(module: module).disabled(module.managedKeys.contains(.inputDevicePriority))
+                DevicePriorityListView(module: module,
+                                       priorityManaged: module.managedKeys.contains(.inputDevicePriority),
+                                       fallbackManaged: module.managedKeys.contains(.fallbackToSystemDefault))
             }
             if module.status == .pending || { if case .failed = module.status { return true }; return false }() {
                 Section("Recovery") { Button("Retry Recording") { module.retryPending() }; Button("Delete Recording", role: .destructive) { module.deletePending() } }
