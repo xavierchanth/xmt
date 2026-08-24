@@ -8,12 +8,15 @@ There are no formal initiative records and no tracker in this repository. This p
 
 | Item | State |
 |---|---|
-| [Window Mover](../specification/window-mover.md) | Shipping. The only implemented module. |
-| [App shell](../architecture/app-shell.md) | Partial. Menu bar presence, lazy settings, shared Accessibility presentation, single-flight actions, and the first compiled-in module lifecycle exist; there is no general registration list or per-module permission declaration API. |
-| [Module model](../architecture/modules.md) | Partial. Window Mover has a small compiled-in lifecycle manager and settings boundary; no general module abstraction exists. |
-| Voice Transcription | Core implementation in progress. Trigger arbitration, configuration, prioritized capture, streaming Speech integration, recovery reconciliation, transcript commit, and paste services exist with tested pure layers, but the module, settings, menu, and managed-configuration wiring are not integrated. |
+| [Window Mover](../specification/window-mover.md) | Shipping. |
+| [Voice Transcription](../specification/voice-transcription.md) | Implemented and integrated, **not yet validated on hardware**. Triggers, capture, speech analysis, recovery, commit, paste, menu, settings, and configuration are wired into the app and specified; no part of the runtime path has been exercised against a real microphone, a real Speech model download, or a real Fn press. See [validation gaps](#voice-transcription-validation-gaps). |
+| [Configuration](../specification/configuration.md) | Implemented for both modules, with explicit reloads only. File watching remains unimplemented; see [configuration gaps](#configuration-gaps). |
+| [App shell](../architecture/app-shell.md) | Partial. Menu bar presence, lazy settings, shared Accessibility presentation, single-flight actions, shared configuration resolution, and two compiled-in module lifecycles exist; there is no general registration list or per-module permission declaration API. |
+| [Module model](../architecture/modules.md) | Partial. Both modules have their own compiled-in lifecycle manager and settings boundary; no general module abstraction exists. |
 | Keyboard Customization | Not started. |
 | Menu Bar Management | Not started, and not certain to be feasible. |
+
+"Implemented" here means the code exists, compiles into the shipping target, and is reachable from the app. It does not mean the behavior has been observed working.
 
 ## Identity migration
 
@@ -23,7 +26,39 @@ The project, target, scheme, source and test directories, app product, and bundl
 
 The first compiled-in lifecycle seam now persists Window Mover's single enabled state and gates every shortcut callback dynamically. Disabling releases the active global hot key through `KeyboardShortcuts.disable`, and re-enabling reacquires it through `KeyboardShortcuts.enable`. The current implementation leaves its callback closure installed as inert library state and retains a defensive enabled-state guard; it does not yet use KeyboardShortcuts' available `removeHandler(for:)` API. The guard returns before coordination, permission checks, or window work if invoked while disabled. The module acquires no other passive resource.
 
-There is still no general module registration list or per-module permission declaration API. Those abstractions remain deferred until another compiled-in module provides concrete requirements.
+Voice Transcription added the second compiled-in lifecycle seam: enabling it installs an event tap, disabling it and app termination release the tap, the capture engine, the analyzer, the timers, and the asset reservation. That is the concrete resource-releasing module the shell design was waiting for, but it was integrated as a second singleton rather than through a shared abstraction.
+
+There is still no general module registration list or per-module permission declaration API. Those abstractions remain deferred; two hand-wired modules are now enough evidence to design one, and doing so is the natural next shell increment.
+
+## Voice Transcription validation gaps
+
+The module is implemented, wired into the app delegate, the menu, Settings, and configuration, and it builds into the Release target. What is missing is evidence that it works. **Nothing below has been observed on hardware**, and the [specification](../specification/voice-transcription.md) states only what the code does, never what a device did.
+
+Unvalidated by manual exercise:
+
+- **Microphone capture.** No recording has been made. Device binding by UID, the hardware tap format, the 1-second first-buffer deadline, the 32-buffer queue depth, and CAF recovery writing are untested against real audio hardware.
+- **Speech analysis and assets.** No asset status check, download, reservation, or transcription has been run. Whether the progressive-transcription preset, the format conversion, and the 5-second finalization bound behave as intended in practice is unknown, as is whether the queue depth and finalization bound are the right values.
+- **Fn gestures.** The event tap, the 150 ms hold threshold, Fn-Space consumption, the secure-input watchdog, and tap re-enable after a system disable have only been exercised as pure reducers in tests. Whether the default threshold feels right, and whether consuming Fn-Space breaks any expected macOS behavior, is unknown.
+- **Bluetooth and AirPods.** The fail-closed name matching has never been run against a real paired headset. Whether AirPods report a usable Core Audio name, whether the connected check is accurate at the moment of selection, and whether switching to a headset microphone degrades transcription are all open.
+- **Auto-paste.** The synthetic Command-V to the PID captured at arm time has not been tried against a real editor, and the assumption that the frontmost application at arm time is still the right target at commit time is unverified.
+- **Permission prompts.** The launch-silent, contextual request flow for Microphone, Input Monitoring, and Accessibility has not been walked through on a machine without the grants.
+- **Recovery in anger.** Reconciliation is well covered by tests over a fake store, but no real interrupted session has been recovered, retried, or deleted.
+
+Known implementation gaps, independent of validation:
+
+- **`NSSpeechRecognitionUsageDescription` is still unconfirmed.** The key is absent from `Info.plist`. Whether `SpeechAnalyzer`/`SpeechTranscriber` requires it has not been established from public Apple documentation, and the app has not been run to find out. `NSMicrophoneUsageDescription`, `NSAccessibilityUsageDescription`, and `NSBluetoothAlwaysUsageDescription` are present.
+- **`voice.shortcut` does nothing.** It is accepted and validated by the configuration file but no code reads the resolved value; the Fn gestures are fixed. Either wire it up or remove it from the schema.
+- **No settings control for two values.** The Fn hold threshold and maximum session duration are file-only.
+- **A retried recovery recording is never pasted.** It has no captured target application, so with auto-paste enabled the paste step always fails and the transcript is left on the clipboard.
+- **Coverage stops at the pure layers.** Trigger arbitration, the session reducer, device selection, the bounded queue, reconciliation, commit ordering, and configuration are unit-tested. Capture, the analyzer session, the event tap, the module coordinator, and every SwiftUI surface are not.
+
+Until at least a recording, a transcription, and a paste have been performed by hand, Voice Transcription should be described as implemented, not as shipping.
+
+## Configuration gaps
+
+- **Reload is explicit, not observed.** [Declarative configuration](../architecture/configuration.md#loading-and-reloads) intends file-system observation with coalescing. The implementation reloads at launch, whenever the app becomes active, and on a Settings button. Nothing watches the file, which is the intended design's remaining delta and not a defect in the current behavior.
+- **The built-in Window Mover shortcut is inert.** The resolver's built-in value differs from the recorder's default and is applied only when the file supplies one. Two defaults for one binding is a trap worth removing.
+- **Diagnostics surface only in Voice settings.** A malformed file that also governs Window Mover reports its diagnostic on the Voice tab.
 
 ## Window Mover gaps
 
@@ -37,7 +72,7 @@ There is still no general module registration list or per-module permission decl
 
 The intended order, easiest and most valuable first:
 
-1. **Voice Transcription.** Highest personal value and the clearest replacement of a separate app. The design decision is to target macOS 26 directly and integrate Apple's SpeechAnalyzer/SpeechTranscriber, with hold-Fn push-to-talk, Fn-Space toggle, versioned declarative configuration, ordered input devices plus an independent system-default fallback, bounded temporary recovery, a last transcript, and optional auto-paste. Trigger, configuration, audio capture, session, recovery, and output infrastructure now exist but remain disconnected from the app; module and UI integration are next. Integration must confirm through public Apple documentation whether SpeechAnalyzer/SpeechTranscriber requires `NSSpeechRecognitionUsageDescription`; the installed macOS 26 SDK exposes the APIs but does not itself establish that privacy key requirement. `NSMicrophoneUsageDescription` is present, and Bluetooth usage is disclosed because input selection reads paired-device connection state without initiating connections. Asset/session failure modes and hardware validation remain integration risks, not reasons to retain macOS 14 compatibility. This module is also what should force the shell's module lifecycle to become real, since it acquires and releases audio resources.
+1. **Voice Transcription.** Implemented and integrated; its behavior is specified in [the Voice Transcription specification](../specification/voice-transcription.md). The remaining work is not more code but hardware validation, listed in [validation gaps](#voice-transcription-validation-gaps) above. Nothing else should start before a real recording has been made, transcribed, and pasted, because that exercise is the only thing that can tell whether the threshold, queue depth, timeouts, and device rules were chosen sensibly — and because the module holds a microphone and an event tap, which is exactly the kind of thing that should not sit unverified in a resident menu bar app.
 2. **Keyboard Customization.** Start with remapping and a Hyper-key layer. Home-row modifiers come later and separately: tap-versus-hold timing is where such tools become unreliable, and it must not gate the simpler work.
 3. **Menu Bar Management.** Last, and the highest risk in the project. macOS offers no adequate public API for controlling other applications' menu bar items, so any implementation depends on fragile Accessibility manipulation that can break across macOS releases. Abandoning this module is an accepted outcome; the fallback is to keep using a dedicated utility for it.
 

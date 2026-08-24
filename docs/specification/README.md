@@ -10,7 +10,9 @@ Planned modules have no page here. They are described as target design under [ar
 
 ## Pages
 
-- [Window Mover](window-mover.md) — the shortcut, permission gate, screen selection, geometry mapping, reconciliation, and full-screen handling of the only implemented module.
+- [Window Mover](window-mover.md) — the shortcut, permission gate, screen selection, geometry mapping, reconciliation, and full-screen handling of the window module.
+- [Voice Transcription](voice-transcription.md) — the platform floor, module lifecycle, Fn gestures and arbitration, permissions, speech assets, device selection, capture and recovery, transcript commit, and the menu and settings surfaces.
+- [Configuration](configuration.md) — the declarative file's location, schema, validation, three-layer precedence, managed values, and reload behavior shared by both modules.
 
 ## Related documentation
 

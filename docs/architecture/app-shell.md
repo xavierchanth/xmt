@@ -90,4 +90,5 @@ Settings is one window with one tab per concern, built lazily and shared across 
 - [Module model](modules.md) — what a module is and what it must provide to the shell.
 - [Declarative configuration](configuration.md) — source precedence and load/reload semantics.
 - [Window Mover specification](../specification/window-mover.md) — normative behavior of a module running inside this shell.
+- [Voice Transcription specification](../specification/voice-transcription.md) — normative behavior of the module that exercises the Fn trigger provider and per-action resources.
 - [Roadmap](../roadmap/README.md) — which parts of this shell exist and which are outstanding.

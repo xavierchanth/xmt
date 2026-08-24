@@ -56,6 +56,8 @@ Boundary: this module reads and writes window geometry through Accessibility and
 
 ### Voice Transcription
 
+This section states target design. For the behavior the module actually implements, read [the Voice Transcription specification](../specification/voice-transcription.md); source and tests remain the final authority.
+
 The primary gestures are **hold Fn** for push-to-talk and **Fn-Space** to toggle recording. A configurable shortcut provider and a dedicated Fn-event provider feed one shell-owned arbitrator, as described in [trigger providers](app-shell.md#trigger-providers). Starting either gesture creates one session; ending push-to-talk or toggling again closes capture and allows recognition to finish. Conflicting or overlapping transitions do not create concurrent sessions.
 
 Each session selects an input from the user's explicit ordered device list. Whether selection may fall back to the current system-default input is a separate setting, not an implied final list entry. Capture and Apple's on-device **SpeechAnalyzer** with **SpeechTranscriber** are action-scoped and released after completion. The app targets macOS 26 directly for these APIs rather than carrying an older-system availability branch.

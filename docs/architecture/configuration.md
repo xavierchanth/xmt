@@ -1,6 +1,6 @@
 # Declarative configuration
 
-This page defines the intended configuration boundary shared by XMT's shell and modules. It describes a versioned, declarative input and deterministic resolution rules; it does not claim that configuration loading is implemented. Delivery state remains in the [roadmap](../roadmap/README.md).
+This page defines the intended configuration boundary shared by XMT's shell and modules: a versioned, declarative input and deterministic resolution rules. It is target design and does not describe what the app does today; the file's normative behavior is [the configuration specification](../specification/configuration.md), and delivery state remains in the [roadmap](../roadmap/README.md).
 
 ## Sources and precedence
 
@@ -24,6 +24,7 @@ No configuration load starts Voice Transcription work by itself. Audio capture, 
 
 ## Related documentation
 
+- [Configuration specification](../specification/configuration.md) — the file location, schema, validation, precedence, and reload behavior that are implemented.
 - [App shell](app-shell.md) — lifecycle, trigger providers, and publication of effective settings.
 - [Module model](modules.md#voice-transcription) — Voice Transcription's target behavior and settings.
 - [Roadmap](../roadmap/README.md) — delivery state and integration risks.

@@ -4,16 +4,21 @@ XMT is a personal macOS menu bar app that collects chosen macOS behavior changes
 
 ## What ships today
 
-One module, **Window Mover**: a global shortcut (default **Option-Space**) that moves the focused window to the next display, wrapping around, preserving relative geometry, and handling native full-screen windows.
+Two modules are built in.
+
+**Window Mover** — a global shortcut (default **Option-Space**) that moves the focused window to the next display, wrapping around, preserving relative geometry, and handling native full-screen windows. Specified in [the Window Mover specification](docs/specification/window-mover.md).
+
+**Voice Transcription** — hold **Fn** to dictate, or press **Fn-Space** to latch recording on and off. Speech is analyzed on device with macOS 26's `SpeechAnalyzer`, the transcript goes to the clipboard and optionally pastes itself into the focused input, and an interrupted recording is kept so it can be retried once. Specified in [the Voice Transcription specification](docs/specification/voice-transcription.md). It is implemented and integrated but **has not yet been validated against real microphone, Speech, or paste behavior**; see [validation gaps](docs/roadmap/README.md#voice-transcription-validation-gaps) before relying on it.
 
 Supporting behavior:
 
 - Lives in the menu bar as an `LSUIElement` app with no Dock icon.
 - Rebindable global shortcut powered by [`KeyboardShortcuts`](https://github.com/sindresorhus/KeyboardShortcuts).
-- Contextual Accessibility status and request actions in Settings; launch does not prompt.
+- Contextual permission status and request actions in Settings; launch does not prompt.
+- An optional declarative config file at `~/.config/xmt/config.json`, specified in [the configuration specification](docs/specification/configuration.md).
 - Launch at Login through `SMAppService`.
 
-Voice Transcription, Keyboard Customization, and Menu Bar Management are **planned, not implemented**. See [the module inventory](docs/architecture/modules.md#module-inventory).
+Keyboard Customization and Menu Bar Management are **planned, not implemented**. See [the module inventory](docs/architecture/modules.md#module-inventory).
 
 ## Status
 
@@ -23,7 +28,9 @@ Maintained for personal use. There are no plans to publish it and no support com
 
 - macOS 26 or later
 - Xcode 26 or later
-- Accessibility permission granted to the app
+- Accessibility permission for Window Mover, and for Voice Transcription's optional auto-paste
+- Microphone and Input Monitoring permission for Voice Transcription
+- Speech assets for the configured locale, downloadable from the Voice settings tab
 
 ## Installing
 
@@ -33,7 +40,7 @@ With [`just`](https://github.com/casey/just) installed, build a Release app and 
 just install
 ```
 
-That recipe quits a running copy, replaces `/Applications/XMT.app`, and launches the result. Open `Settings...` from the menu bar icon to configure Window Mover and grant Accessibility access contextually.
+That recipe quits a running copy, replaces `/Applications/XMT.app`, and launches the result. Open `Settings...` from the menu bar icon to configure each module and grant its permissions contextually.
 
 To build and launch without installing:
 
@@ -45,11 +52,11 @@ Both build into `.build/xcode`; `just clean` removes that directory.
 
 Alternatively, open `XMT.xcodeproj` in Xcode and run the `XMT` target.
 
-Once running, the app appears in the menu bar. The settings window shows `General` first for Launch at Login and the permission overview, then `Window Mover` for its enabled state, Accessibility status, shortcut, and behavior note.
+Once running, the app appears in the menu bar. The settings window shows `General` first for Launch at Login and the permission overview, then `Window Mover` for its enabled state, Accessibility status, shortcut, and behavior note, then `Voice` for its enabled state, speech assets, permissions, output and locale settings, input-device priority, and configuration reload.
 
 ## Testing
 
-`XMTTests` contains unit tests for window geometry mathematics. Run them through the shared `XMT` scheme with `just test`; `just check` runs both tests and documentation checks.
+`XMTTests` contains unit tests for window geometry, trigger arbitration, the voice session reducer, input-device selection and the bounded audio queue, recovery reconciliation, transcript commit ordering, and configuration decoding, precedence, and reload. Run them through the shared `XMT` scheme with `just test`; `just check` runs both tests and documentation checks. Capture, speech analysis, the event tap, and the SwiftUI surfaces are not covered.
 
 ## Documentation checks
 
@@ -64,11 +71,15 @@ This validates heading structure, opening paragraphs, relative links, heading fr
 ## Repository layout
 
 - `XMT/App` — app entry point and app delegate
-- `XMT/WindowManagement` — window discovery, geometry, movement, and coordinate conversion
+- `XMT/WindowManagement` — window discovery, geometry, movement, coordinate conversion, and the Window Mover lifecycle
+- `XMT/VoiceTranscription` — the voice module coordinator plus its `Audio`, `Session`, and `Output` layers
+- `XMT/Triggers` — the Fn event tap and the pure trigger arbitrator
+- `XMT/Configuration` — config file decoding, settings resolution, and the reloader
 - `XMT/HotKeys` — global shortcut names and defaults
 - `XMT/Services` — Accessibility permission and reminder handling
 - `XMT/Settings` — settings window and its tabs
 - `XMT/MenuBar` — menu bar menu
+- `XMT/Resources` — `Info.plist`, entitlements, and asset catalog
 - `XMTTests` — unit tests
 - `docs/` — [product, architecture, specification, and roadmap](docs/README.md)
 - `assets/` — repository tooling, currently the documentation checker

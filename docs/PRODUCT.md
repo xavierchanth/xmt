@@ -4,7 +4,7 @@ XMT — Xavier's macOS Tweaks is a personal macOS utility that collects chosen m
 
 ## Name and terminology
 
-The product is **XMT — Xavier's macOS Tweaks**. "macOS" always uses Apple's capitalization. Capabilities inside XMT are called **modules**; the shipping module is **Window Mover**.
+The product is **XMT — Xavier's macOS Tweaks**. "macOS" always uses Apple's capitalization. Capabilities inside XMT are called **modules**. The named modules are **Window Mover**, **Voice Transcription**, **Keyboard Customization**, and **Menu Bar Management**; which of them exist is [the roadmap](roadmap/README.md)'s to say.
 
 The app, Xcode project, target, scheme, and bundle identity all use XMT.
 
@@ -50,5 +50,5 @@ No performance guarantee follows from any of this. The commitment XMT makes is a
 ## Related documentation
 
 - [Architecture](architecture/README.md) — how the intended shell and modules realize these goals.
-- [Specification](specification/README.md) — normative behavior of the implemented module.
+- [Specification](specification/README.md) — normative behavior of the implemented modules.
 - [Roadmap](roadmap/README.md) — what is not built yet, and in what order.

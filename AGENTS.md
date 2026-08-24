@@ -4,9 +4,11 @@ Conventions for anyone — human or agent — changing XMT. This page covers wha
 
 ## What this repository is
 
-A single macOS app: XMT — Xavier's macOS Tweaks, a menu bar utility hosting one implemented module, Window Mover. The Xcode project, target, scheme, module, and app product are named `XMT`; the bundle identifier is `com.xavierchanth.xmt`.
+A single macOS app: XMT — Xavier's macOS Tweaks, a menu bar utility hosting two compiled-in modules, Window Mover and Voice Transcription. The Xcode project, target, scheme, module, and app product are named `XMT`; the bundle identifier is `com.xavierchanth.xmt`.
 
-Swift 5, SwiftUI plus AppKit, macOS 26 minimum, one Swift package dependency (`KeyboardShortcuts`). The Xcode project is the build system; there is no `Package.swift`.
+Swift 5, SwiftUI plus AppKit, macOS 26 minimum (`MACOSX_DEPLOYMENT_TARGET = 26.0`), one Swift package dependency (`KeyboardShortcuts`). Voice Transcription additionally uses `Speech`, `AVFoundation`, `CoreAudio`, and `IOBluetooth` from the SDK, and the macOS 26 speech types are used without an availability fallback. The app is not sandboxed. The Xcode project is the build system; there is no `Package.swift`.
+
+Source layout by area: `XMT/App`, `XMT/WindowManagement`, `XMT/VoiceTranscription` (with `Audio`, `Session`, `Output`), `XMT/Triggers`, `XMT/Configuration`, `XMT/HotKeys`, `XMT/Services`, `XMT/Settings`, `XMT/MenuBar`, `XMT/Resources`, and `XMTTests`.
 
 ## Building and testing
 
@@ -27,9 +29,11 @@ just clean        # remove .build/xcode
 ## Code conventions
 
 - Window-management logic stays split between pure geometry (`WindowGeometry`, unit-testable, no AppKit state) and effectful movement (`WindowMover`, `AXWindowInfo`). Put new arithmetic in the pure layer and test it.
+- Voice Transcription follows the same split: `TriggerArbitrator`, `VoiceSessionMachine`, `DeviceSelector`, and `Reconciliation` are pure and tested; `VoiceTranscriptionModule` is the only place that performs effects and interprets their commands. Put new decision logic in the pure layer.
+- Configuration resolution is total and trap-free: built-in defaults are complete, and every setting resolves to a value plus its source. A file-supplied value must disable its settings control rather than being silently overwritten.
 - Accessibility calls fail routinely. Return without action on an unexpected result; do not trap, and do not alert the user for an inapplicable shortcut press.
 - User-visible actions run on the main actor and are single-flight: drop overlapping triggers rather than queueing them.
-- Do not add idle work — no polling, timers, or background scans while no action is running. The product's [resource posture](docs/architecture/app-shell.md#resource-posture) depends on it.
+- Do not add idle work — no polling, timers, or background scans while no action is running. The product's [resource posture](docs/architecture/app-shell.md#resource-posture) depends on it. The existing timers are all action-scoped: the Fn hold threshold and secure-input watchdog exist only during a gesture, and the maximum-duration timer only during a recording.
 - New capabilities are compiled in, not loaded dynamically. See [the module model](docs/architecture/modules.md).
 
 ## Documentation conventions
