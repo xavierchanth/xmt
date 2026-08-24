@@ -7,6 +7,60 @@ import Foundation
 
 enum PasteError: Error { case accessibilityNotTrusted, noTargetApplication, keyboardLayoutUnavailable, eventCreationFailed }
 
+/// One-shot output action for the retained transcript. It intentionally has no dependency on
+/// recording state, auto-paste settings, transcript commit, or recovery storage.
+struct LatestTranscriptPaster {
+    enum Outcome: Equatable {
+        case pasted
+        case noTranscript
+        case noTarget
+        case clipboardFailed
+        case pasteFailed
+    }
+
+    struct Dependencies {
+        var frontmostPID: () -> pid_t?
+        var setClipboard: (String) throws -> Void
+        var paste: (String, pid_t?) async throws -> Void
+
+        @MainActor static var live: Dependencies {
+            let board = NSPasteboard.general, service = PasteService()
+            return .init(
+                frontmostPID: { PasteService.frontmostPID() },
+                setClipboard: {
+                    board.clearContents()
+                    guard board.setString($0, forType: .string) else { throw CocoaError(.fileWriteUnknown) }
+                },
+                paste: { try await service.paste(text: $0, targetPID: $1) }
+            )
+        }
+    }
+
+    var dependencies: Dependencies
+
+    init(dependencies: Dependencies) { self.dependencies = dependencies }
+    @MainActor init() { dependencies = .live }
+
+    @MainActor func pasteLatest(_ transcript: String) async -> Outcome {
+        let target = dependencies.frontmostPID()
+        return await pasteLatest(transcript, targetPID: target)
+    }
+
+    @MainActor func pasteLatest(_ transcript: String, targetPID target: pid_t?) async -> Outcome {
+        guard !transcript.isEmpty else { return .noTranscript }
+        do { try dependencies.setClipboard(transcript) }
+        catch { return .clipboardFailed }
+        guard let target else { return .noTarget }
+        do {
+            try await dependencies.paste(transcript, target)
+            return .pasted
+        } catch {
+            // The transcript deliberately remains on the clipboard for manual paste.
+            return .pasteFailed
+        }
+    }
+}
+
 /// Posts logical Command-V only; it never mutates AX values or restores/wipes the clipboard after
 /// posting. Consequently the completed transcript remains useful even when paste delivery fails.
 struct PasteService: PasteServicing {

@@ -3,6 +3,7 @@ import AVFoundation
 import ApplicationServices
 import Combine
 import Foundation
+import KeyboardShortcuts
 
 /// Main-actor lifecycle and effect coordinator for Voice Transcription.
 @MainActor
@@ -20,6 +21,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     @Published private(set) var assetStatus = "Not checked"
     @Published private(set) var configDiagnostic: String?
     @Published private(set) var managedKeys: Set<EffectiveSettings.Key> = []
+    @Published private(set) var temporaryFeedback: String?
     @Published var isEnabled: Bool { didSet { persistAndReconfigure("voice.enabled", isEnabled) } }
     @Published var autoPaste: Bool { didSet { persist("voice.autoPaste", autoPaste) } }
     @Published var keepLastTranscript: Bool { didSet { persist("voice.keepLastTranscript", keepLastTranscript) } }
@@ -43,6 +45,16 @@ final class VoiceTranscriptionModule: ObservableObject {
     private var effective = EffectiveSettings.resolve(config: nil)
     private var reloader: ConfigReloader?
     private var applying = false
+    private var isPasteLatestHandlerInstalled = false
+    private var unmanagedPasteLatestShortcut: KeyboardShortcuts.Shortcut?
+    private var feedbackGeneration: UInt64 = 0
+    private var isPastingLatest = false
+    private static let pasteLatestShortcutBackupActiveKey = "voice.pasteLatestShortcutBackupActive"
+    private static let pasteLatestShortcutBackupDataKey = "voice.pasteLatestShortcutBackupData"
+
+    var persistedPasteLatestTranscriptShortcut: ShortcutDTO? {
+        unmanagedPasteLatestShortcut.flatMap(ShortcutDTO.fromKeyboardShortcut)
+    }
 
     private init() {
         let d = UserDefaults.standard
@@ -52,10 +64,16 @@ final class VoiceTranscriptionModule: ObservableObject {
         keepLastTranscript = d.bool(forKey: "voice.keepLastTranscript"); fallbackToSystemDefault = d.bool(forKey: "voice.fallback")
         localeIdentifier = d.string(forKey: "voice.locale") ?? "en-US"
         devicePriority = (d.data(forKey: "voice.devices").flatMap { try? JSONDecoder().decode([InputDeviceDTO].self, from: $0) }) ?? []
+        if d.bool(forKey: Self.pasteLatestShortcutBackupActiveKey) {
+            unmanagedPasteLatestShortcut = Self.loadPasteLatestShortcutBackup()
+        } else {
+            unmanagedPasteLatestShortcut = KeyboardShortcuts.getShortcut(for: .pasteLatestTranscript)
+        }
     }
 
     func register() {
         reconcileRecovery()
+        registerPasteLatestShortcut()
         Task { await configureAndReload() }
     }
 
@@ -68,6 +86,7 @@ final class VoiceTranscriptionModule: ObservableObject {
         analysisTask?.cancel(); analysisTask = nil
         if let transcriber { Task { await transcriber.cancel(); await assets.releaseReservation() } }
         transcriber = nil; partialTranscript = ""
+        KeyboardShortcuts.disable(.pasteLatestTranscript)
         if status != .pending { machine = VoiceSessionMachine(); status = .disabled }
     }
 
@@ -76,7 +95,7 @@ final class VoiceTranscriptionModule: ObservableObject {
             Task { @MainActor in if granted { self?.recoverDegradedAndObserve() } }
         }
         if CGRequestListenEventAccess() { recoverDegradedAndObserve() }
-        if autoPaste { AccessibilityService.shared.requestIfNeeded() }
+        AccessibilityService.shared.requestIfNeeded()
     }
 
     func refreshDevices() {
@@ -90,6 +109,24 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     func copyLastTranscript() { guard !lastTranscript.isEmpty else { return }; NSPasteboard.general.clearContents(); NSPasteboard.general.setString(lastTranscript, forType: .string) }
+
+    func pasteLatestTranscript() {
+        guard isEnabled, !isPastingLatest else { return }
+        isPastingLatest = true
+        let transcript = lastTranscript
+        let targetPID = PasteService.frontmostPID()
+        Task {
+            let outcome = await LatestTranscriptPaster().pasteLatest(transcript, targetPID: targetPID)
+            isPastingLatest = false
+            switch outcome {
+            case .pasted: showTemporaryFeedback("Pasted latest transcript")
+            case .noTranscript: showTemporaryFeedback("No transcript to paste")
+            case .noTarget: showTemporaryFeedback("No target app; transcript copied")
+            case .clipboardFailed: showTemporaryFeedback("Could not copy transcript")
+            case .pasteFailed: showTemporaryFeedback("Paste failed; transcript copied")
+            }
+        }
+    }
 
     func retryPending() {
         guard case .pending = status, let pending = (try? store.loadPending()) ?? nil else { return }
@@ -137,6 +174,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     private func apply(_ value: EffectiveSettings) {
         effective = value; managedKeys = Set(EffectiveSettings.Key.allCases.filter { key in
             switch key { case .voiceEnabled: return value.voiceEnabled.isManaged; case .voiceShortcut: return value.voiceShortcut.isManaged
+            case .pasteLatestTranscriptShortcut: return value.pasteLatestTranscriptShortcut.isManaged
             case .autoPaste: return value.autoPaste.isManaged; case .keepLastTranscript: return value.keepLastTranscript.isManaged; case .locale: return value.locale.isManaged
             case .inputDevicePriority: return value.inputDevicePriority.isManaged; case .fallbackToSystemDefault: return value.fallbackToSystemDefault.isManaged
             default: return false }
@@ -145,6 +183,10 @@ final class VoiceTranscriptionModule: ObservableObject {
         isEnabled = value.voiceEnabled.value; autoPaste = value.autoPaste.value; keepLastTranscript = value.keepLastTranscript.value
         localeIdentifier = value.locale.value; devicePriority = value.inputDevicePriority.value; fallbackToSystemDefault = value.fallbackToSystemDefault.value
         applying = false
+        applyPasteLatestShortcut(value.pasteLatestTranscriptShortcut)
+        if keepLastTranscript, lastTranscript.isEmpty {
+            lastTranscript = (try? TranscriptCommitter.loadRetainedTranscript()) ?? ""
+        }
         if isEnabled { recoverDegradedAndObserve() } else { stop() }
         WindowMoverModule.shared.applyManaged(enabled: value.windowMoverEnabled, shortcut: value.windowMoverShortcut)
     }
@@ -301,14 +343,74 @@ final class VoiceTranscriptionModule: ObservableObject {
         SettingsValues(windowMoverEnabled: WindowMoverModule.shared.persistedEnabled,
                        windowMoverShortcut: WindowMoverModule.shared.persistedShortcut,
                        voiceEnabled: isEnabled, voiceShortcut: .modifierHold("fn"),
+                       pasteLatestTranscriptShortcut: persistedPasteLatestTranscriptShortcut,
                        autoPaste: autoPaste, keepLastTranscript: keepLastTranscript, locale: localeIdentifier,
                        inputDevicePriority: devicePriority, fallbackToSystemDefault: fallbackToSystemDefault)
     }
 
     private func recoverDegradedAndObserve() {
+        KeyboardShortcuts.enable(.pasteLatestTranscript)
         if case .degraded = machine.state { _ = machine.handle(.resetDegraded) }
         if case .degraded = status { status = .idle }
         reconcileObservation()
+    }
+
+    private func registerPasteLatestShortcut() {
+        guard !isPasteLatestHandlerInstalled else { return }
+        isPasteLatestHandlerInstalled = true
+        KeyboardShortcuts.onKeyUp(for: .pasteLatestTranscript) { [weak self] in
+            Task { @MainActor in
+                guard let self, self.isEnabled else { return }
+                self.pasteLatestTranscript()
+            }
+        }
+        if isEnabled { KeyboardShortcuts.enable(.pasteLatestTranscript) }
+        else { KeyboardShortcuts.disable(.pasteLatestTranscript) }
+    }
+
+    private func applyPasteLatestShortcut(_ shortcut: ResolvedSetting<ShortcutDTO>) {
+        let defaults = UserDefaults.standard
+        let hasBackup = defaults.bool(forKey: Self.pasteLatestShortcutBackupActiveKey)
+        if shortcut.isManaged {
+            if !hasBackup {
+                unmanagedPasteLatestShortcut = KeyboardShortcuts.getShortcut(for: .pasteLatestTranscript)
+                Self.savePasteLatestShortcutBackup(unmanagedPasteLatestShortcut)
+            }
+            if let converted = try? shortcut.value.keyboardShortcut() {
+                KeyboardShortcuts.setShortcut(converted, for: .pasteLatestTranscript)
+            }
+        } else if hasBackup {
+            KeyboardShortcuts.setShortcut(unmanagedPasteLatestShortcut, for: .pasteLatestTranscript)
+            defaults.removeObject(forKey: Self.pasteLatestShortcutBackupDataKey)
+            defaults.set(false, forKey: Self.pasteLatestShortcutBackupActiveKey)
+        } else {
+            unmanagedPasteLatestShortcut = KeyboardShortcuts.getShortcut(for: .pasteLatestTranscript)
+        }
+    }
+
+    private static func savePasteLatestShortcutBackup(_ shortcut: KeyboardShortcuts.Shortcut?) {
+        let defaults = UserDefaults.standard
+        defaults.set(true, forKey: pasteLatestShortcutBackupActiveKey)
+        if let shortcut, let data = try? JSONEncoder().encode(shortcut) {
+            defaults.set(data, forKey: pasteLatestShortcutBackupDataKey)
+        } else {
+            defaults.removeObject(forKey: pasteLatestShortcutBackupDataKey)
+        }
+    }
+
+    private static func loadPasteLatestShortcutBackup() -> KeyboardShortcuts.Shortcut? {
+        guard let data = UserDefaults.standard.data(forKey: pasteLatestShortcutBackupDataKey) else { return nil }
+        return try? JSONDecoder().decode(KeyboardShortcuts.Shortcut.self, from: data)
+    }
+
+    private func showTemporaryFeedback(_ message: String) {
+        feedbackGeneration &+= 1
+        let generation = feedbackGeneration
+        temporaryFeedback = message
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            if feedbackGeneration == generation { temporaryFeedback = nil }
+        }
     }
 
     private static func degradedReason(_ error: Error) -> VoiceSessionMachine.DegradedReason {
@@ -328,7 +430,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     private func persist(_ key: String, _ value: Any) { if !applying { UserDefaults.standard.set(value, forKey: key) } }
-    private func persistAndReconfigure(_ key: String, _ value: Bool) { persist(key, value); if !applying { value ? startObserving() : stop() } }
+    private func persistAndReconfigure(_ key: String, _ value: Bool) { persist(key, value); if !applying { value ? recoverDegradedAndObserve() : stop() } }
     private func saveDevices() { if !applying, let data = try? JSONEncoder().encode(devicePriority) { UserDefaults.standard.set(data, forKey: "voice.devices") } }
     private func describe(_ value: VoiceAssetManager.Status) -> String { String(describing: value) }
 }

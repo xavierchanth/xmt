@@ -18,7 +18,7 @@ final class ConfigTests: XCTestCase {
     }
 
     func testEveryKeyResolvesIndependentlyAndReportsManagement() throws {
-        let file = try decode(#"{"version":1,"windowMover":{"enabled":false},"voice":{"locale":"fr-FR","inputDevicePriority":[],"fallbackToSystemDefault":false}}"#)
+        let file = try decode(#"{"version":1,"windowMover":{"enabled":false},"voice":{"locale":"fr-FR","pasteLatestTranscriptShortcut":{"key":"p","modifiers":["command"]},"inputDevicePriority":[],"fallbackToSystemDefault":false}}"#)
         var local = SettingsValues(); local.autoPaste = false; local.locale = "de-DE"; local.fallbackToSystemDefault = true
         let result = EffectiveSettings.resolve(config: file, local: local)
         XCTAssertEqual(result.windowMoverEnabled.source, .configFile)
@@ -26,6 +26,7 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(result.locale.value, "fr-FR"); XCTAssertEqual(result.locale.source, .configFile)
         XCTAssertEqual(result.autoPaste.value, false); XCTAssertEqual(result.autoPaste.source, .local); XCTAssertFalse(result.autoPaste.isManaged)
         XCTAssertEqual(result.voiceEnabled.source, .builtIn)
+        XCTAssertEqual(result.pasteLatestTranscriptShortcut.value, .key(key: "p", modifiers: ["command"])); XCTAssertTrue(result.pasteLatestTranscriptShortcut.isManaged)
         XCTAssertEqual(result.inputDevicePriority.value, []); XCTAssertTrue(result.inputDevicePriority.isManaged)
         XCTAssertFalse(result.fallbackToSystemDefault.value); XCTAssertTrue(result.fallbackToSystemDefault.isManaged)
     }
@@ -51,7 +52,9 @@ final class ConfigTests: XCTestCase {
             #"{"version":1,"voice":{"inputDevicePriority":[{"name":"Mic","uid":" "}]}}"#,
             #"{"version":1,"voice":{"inputDevicePriority":[{"name":"Mic","uid":" ABC "},{"name":"Other","uid":"abc"}]}}"#,
             #"{"version":1,"voice":{"inputDevicePriority":[{"name":" Mic "},{"name":"mic"}]}}"#,
-            #"{"version":1,"windowMover":{"shortcut":{"modifier":"fn"}}}"#
+            #"{"version":1,"windowMover":{"shortcut":{"modifier":"fn"}}}"#,
+            #"{"version":1,"voice":{"pasteLatestTranscriptShortcut":{"modifier":"fn"}}}"#,
+            #"{"version":1,"voice":{"pasteLatestTranscriptShortcut":{"key":"wat"}}}"#
         ] { XCTAssertThrowsError(try decode(body), body) }
     }
 
@@ -67,7 +70,7 @@ final class ConfigTests: XCTestCase {
         XCTAssertThrowsError(try ShortcutDTO.modifierHold("fn").keyboardShortcut())
         XCTAssertEqual(ShortcutDTO.fromKeyboardShortcut(converted), .key(key: "k", modifiers: ["command", "shift"]))
         XCTAssertThrowsError(try decode(#"{"version":1,"voice":{"shortcut":{"type":"modifierHold","modifier":"command"}}}"#))
-        XCTAssertNoThrow(try decode(#"{"version":1,"voice":{"shortcut":{"type":"modifierHold","modifier":"fn"}}}"#))
+        XCTAssertNoThrow(try decode(#"{"version":1,"voice":{"shortcut":{"type":"modifierHold","modifier":"fn"},"pasteLatestTranscriptShortcut":{"type":"key","key":"v","modifiers":["control","command"]}}}"#))
         for value in [ordinary, .modifierHold("fn")] {
             XCTAssertEqual(try JSONDecoder().decode(ShortcutDTO.self, from: JSONEncoder().encode(value)), value)
         }
@@ -128,6 +131,23 @@ final class ConfigTests: XCTestCase {
         XCTAssertFalse(result.effective.autoPaste.value)
         XCTAssertEqual(result.effective.windowMoverEnabled.source, .local)
         XCTAssertEqual(result.effective.autoPaste.source, .local)
+    }
+
+    func testPasteLatestShortcutPrecedenceAndRemoval() throws {
+        var local = SettingsValues()
+        local.pasteLatestTranscriptShortcut = .key(key: "l", modifiers: ["option"])
+        let builtIn = EffectiveSettings.resolve(config: nil)
+        XCTAssertEqual(builtIn.pasteLatestTranscriptShortcut.value, .key(key: "v", modifiers: ["control", "command"]))
+        let localResult = EffectiveSettings.resolve(config: nil, local: local)
+        XCTAssertEqual(localResult.pasteLatestTranscriptShortcut.value, .key(key: "l", modifiers: ["option"]))
+        XCTAssertEqual(localResult.pasteLatestTranscriptShortcut.source, .local)
+        let managed = EffectiveSettings.resolve(
+            config: try decode(#"{"version":1,"voice":{"pasteLatestTranscriptShortcut":{"key":"p","modifiers":["command","shift"]}}}"#),
+            local: local
+        )
+        XCTAssertEqual(managed.pasteLatestTranscriptShortcut.value, .key(key: "p", modifiers: ["command", "shift"]))
+        XCTAssertTrue(managed.pasteLatestTranscriptShortcut.isManaged)
+        XCTAssertEqual(localResult.changedKeys(from: managed), [.pasteLatestTranscriptShortcut])
     }
 
     func testChangedKeysIncludesSourceOnlyManagementChange() throws {

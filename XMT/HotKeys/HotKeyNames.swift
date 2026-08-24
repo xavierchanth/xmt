@@ -5,4 +5,9 @@ extension KeyboardShortcuts.Name {
         "moveToNextScreen",
         default: .init(.space, modifiers: [.option])
     )
+
+    static let pasteLatestTranscript = Self(
+        "pasteLatestTranscript",
+        default: .init(.v, modifiers: [.control, .command])
+    )
 }

@@ -14,6 +14,7 @@ struct SettingsValues: Equatable, Sendable {
     var windowMoverShortcut: ShortcutDTO? = nil
     var voiceEnabled: Bool? = nil
     var voiceShortcut: ShortcutDTO? = nil
+    var pasteLatestTranscriptShortcut: ShortcutDTO? = nil
     var autoPaste: Bool? = nil
     var keepLastTranscript: Bool? = nil
     var locale: String? = nil
@@ -29,6 +30,7 @@ struct BuiltInSettings: Equatable, Sendable {
     var windowMoverShortcut: ShortcutDTO = .key(key: "space", modifiers: ["option"])
     var voiceEnabled = true
     var voiceShortcut: ShortcutDTO = .modifierHold("fn")
+    var pasteLatestTranscriptShortcut: ShortcutDTO = .key(key: "v", modifiers: ["control", "command"])
     var autoPaste = true
     var keepLastTranscript = true
     var locale = "en-US"
@@ -45,6 +47,7 @@ struct EffectiveSettings: Equatable, Sendable {
     let windowMoverShortcut: ResolvedSetting<ShortcutDTO>
     let voiceEnabled: ResolvedSetting<Bool>
     let voiceShortcut: ResolvedSetting<ShortcutDTO>
+    let pasteLatestTranscriptShortcut: ResolvedSetting<ShortcutDTO>
     let autoPaste: ResolvedSetting<Bool>
     let keepLastTranscript: ResolvedSetting<Bool>
     let locale: ResolvedSetting<String>
@@ -54,7 +57,7 @@ struct EffectiveSettings: Equatable, Sendable {
     let fallbackToSystemDefault: ResolvedSetting<Bool>
 
     enum Key: String, CaseIterable, Sendable {
-        case windowMoverEnabled, windowMoverShortcut, voiceEnabled, voiceShortcut, autoPaste
+        case windowMoverEnabled, windowMoverShortcut, voiceEnabled, voiceShortcut, pasteLatestTranscriptShortcut, autoPaste
         case keepLastTranscript, locale, fnHoldThresholdMs, maxSessionSeconds
         case inputDevicePriority, fallbackToSystemDefault
     }
@@ -70,6 +73,7 @@ struct EffectiveSettings: Equatable, Sendable {
             windowMoverShortcut: pick(config?.windowMover.shortcut, local.windowMoverShortcut, builtIn.windowMoverShortcut),
             voiceEnabled: pick(config?.voice.enabled, local.voiceEnabled, builtIn.voiceEnabled),
             voiceShortcut: pick(config?.voice.shortcut, local.voiceShortcut, builtIn.voiceShortcut),
+            pasteLatestTranscriptShortcut: pick(config?.voice.pasteLatestTranscriptShortcut, local.pasteLatestTranscriptShortcut, builtIn.pasteLatestTranscriptShortcut),
             autoPaste: pick(config?.voice.autoPaste, local.autoPaste, builtIn.autoPaste),
             keepLastTranscript: pick(config?.voice.keepLastTranscript, local.keepLastTranscript, builtIn.keepLastTranscript),
             locale: pick(config?.voice.locale, local.locale, builtIn.locale),
@@ -86,6 +90,7 @@ struct EffectiveSettings: Equatable, Sendable {
         if windowMoverShortcut != old.windowMoverShortcut { result.insert(.windowMoverShortcut) }
         if voiceEnabled != old.voiceEnabled { result.insert(.voiceEnabled) }
         if voiceShortcut != old.voiceShortcut { result.insert(.voiceShortcut) }
+        if pasteLatestTranscriptShortcut != old.pasteLatestTranscriptShortcut { result.insert(.pasteLatestTranscriptShortcut) }
         if autoPaste != old.autoPaste { result.insert(.autoPaste) }
         if keepLastTranscript != old.keepLastTranscript { result.insert(.keepLastTranscript) }
         if locale != old.locale { result.insert(.locale) }

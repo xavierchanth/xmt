@@ -43,6 +43,15 @@ struct TranscriptCommitter {
 
     init(directory: URL? = nil) { self.init(directory: directory, dependencies: .live) }
 
+    static func loadRetainedTranscript(directory: URL? = nil) throws -> String? {
+        let base = directory ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("com.xavierchanth.xmt/VoiceTranscription", isDirectory: true)
+        let url = base.appendingPathComponent("last-transcript.txt")
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        guard let text = String(data: try Data(contentsOf: url), encoding: .utf8), !text.isEmpty else { return nil }
+        return text
+    }
+
     /// The deletion callback is the commit point: clipboard has succeeded and retention policy has
     /// been durably applied. Paste is intentionally subsequent and cannot invalidate that commit.
     func commit(_ transcript: String, settings: Settings, targetPID: pid_t?) async throws -> Result {

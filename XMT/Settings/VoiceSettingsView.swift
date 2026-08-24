@@ -1,3 +1,4 @@
+import KeyboardShortcuts
 import SwiftUI
 
 struct VoiceSettingsView: View {
@@ -13,13 +14,18 @@ struct VoiceSettingsView: View {
             Section("Permissions and speech assets") {
                 HStack { Text("Speech assets: \(module.assetStatus)"); Spacer(); Button("Check") { module.refreshAssets() }; Button("Download") { module.downloadAssets() } }
                 Button("Request Required Access") { module.requestPermissions() }
-                AccessibilityStatusView(consumerDescription: "Voice Transcription uses Accessibility only to paste completed text when Auto-paste is enabled.")
+                AccessibilityStatusView(consumerDescription: "Voice Transcription uses Accessibility to paste completed text and the latest retained transcript.")
             }
             Section("Output") {
                 Toggle("Paste completed transcript", isOn: $module.autoPaste).disabled(module.managedKeys.contains(.autoPaste))
                 Toggle("Keep last transcript", isOn: $module.keepLastTranscript).disabled(module.managedKeys.contains(.keepLastTranscript))
                 TextField("Locale", text: $module.localeIdentifier).disabled(module.managedKeys.contains(.locale))
                 Button("Copy Last Transcript") { module.copyLastTranscript() }.disabled(module.lastTranscript.isEmpty)
+                KeyboardShortcuts.Recorder(
+                    "Paste latest transcript:",
+                    name: .pasteLatestTranscript
+                )
+                .disabled(module.managedKeys.contains(.pasteLatestTranscriptShortcut))
             }
             Section("Input priority") {
                 DevicePriorityListView(module: module,

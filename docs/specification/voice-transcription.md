@@ -14,10 +14,10 @@ The target's deployment target is macOS 26.0, and the speech types are compiled 
 
 The module is a main-actor singleton owned by the app delegate. It is compiled in, not registered through a general module list.
 
-- At `applicationDidFinishLaunching`, XMT registers the module. Registration reconciles any recovery artifacts left by a previous run and then loads configuration; applying that configuration starts Fn observation when the module resolves to enabled. Registration acquires no microphone, speech, or analyzer resource, and it prompts for nothing.
+- At `applicationDidFinishLaunching`, XMT registers the module. Registration reconciles any recovery artifacts left by a previous run, installs the paste-latest shortcut handler, and then loads configuration; applying that configuration loads `last-transcript.txt` when retention resolves enabled and starts Voice triggers when the module resolves enabled. Registration acquires no microphone, speech, or analyzer resource, and it prompts for nothing.
 - When the app becomes active, XMT refreshes the input-device list and reloads configuration.
 - At `applicationWillTerminate`, the module stops: the event tap observation is cancelled, the maximum-duration timer is invalidated, capture is stopped, the arming and analysis tasks are cancelled, any live transcriber is cancelled and its asset reservation released, and the partial transcript is cleared. A stop while a recovery recording is pending preserves that pending state; otherwise the session reducer is reset and the status becomes disabled.
-- Enabling the module installs the Fn event tap; disabling it performs the same stop as termination. Neither requires restarting XMT.
+- Enabling the module installs the Fn event tap and enables the paste-latest shortcut; disabling it performs the same stop as termination and disables both triggers. Neither requires restarting XMT.
 
 The persisted enabled setting defaults to **enabled**, as do auto-paste, keep-last-transcript, and system-default fallback. The default locale is `en-US` and the default device-priority list is empty.
 
@@ -74,9 +74,9 @@ XMT requests nothing at launch. The declared usage descriptions are Accessibilit
 
 - **Input Monitoring** is required for the Fn tap. The module preflights access before creating the tap and, if access is absent or tap creation fails, reports the degraded message `Input Monitoring access is required` rather than prompting.
 - **Microphone** is required to arm a session. Arming checks the live `AVCaptureDevice` authorization for audio; if it is not authorized, the session is refused with `Microphone access is required` and no prompt is shown from the trigger path.
-- **Accessibility** is required only for auto-paste. Nothing else in the module uses it.
+- **Accessibility** is required for both synthetic paste actions: auto-paste and paste latest. Nothing else in the module uses it.
 
-`Request Required Access` in Voice settings is the contextual request path: it asks for microphone access, requests Input Monitoring, and — only when auto-paste is enabled — requests Accessibility trust. When a request grants access, the module clears its degraded state and starts observing.
+`Request Required Access` in Voice settings is the contextual request path: it asks for microphone access, Input Monitoring, and Accessibility trust. When a request grants access, the module clears its degraded state and starts observing.
 
 ## Speech analysis and assets
 
@@ -148,13 +148,19 @@ Commit is ordered so the transcript survives every later failure. It is covered 
 4. Recovery artifacts for the session are deleted. This deletion is the commit point.
 5. Only then, if **auto-paste** is enabled and a trustworthy target application was captured, a logical Command-V is posted.
 
-The module also keeps the transcript in memory as the last transcript, exposed as `Copy Last Transcript` in the menu and in settings. The clipboard is never restored or wiped afterwards, so a failed paste still leaves usable text.
+The module also keeps the transcript in memory as the last transcript, exposed as `Copy Last Transcript` in the menu and in settings. When keep-last-transcript resolves enabled, registration loads an existing nonempty UTF-8 `last-transcript.txt`, so that transcript is available after relaunch. With retention disabled, the file is not loaded; a transcript committed during the current run remains available in memory. The clipboard is never restored or wiped afterwards, so a failed paste still leaves usable text.
 
 ### Auto-paste
 
 Auto-paste posts a synthetic Command-V key-down and key-up to the process that was frontmost **when the session armed**, excluding XMT itself. It resolves the physical key that produces an unmodified `v` in the current keyboard layout rather than assuming a US layout. It never writes Accessibility values.
 
 When no target process was captured — including retries and sessions armed while XMT itself was frontmost — XMT skips auto-paste and leaves the transcript on the clipboard. When a target exists, paste can still fail without discarding anything if Accessibility trust is absent, the keyboard layout cannot be read, or the events cannot be created. A paste failure sets the paste-failed status with the error description for three seconds and then returns to idle.
+
+### Paste latest transcript
+
+The ordinary `KeyboardShortcuts` shortcut named `pasteLatestTranscript` defaults to Control-Command-V. On key-up it captures the application currently frontmost, excluding XMT, writes the completed last transcript to the clipboard, and asks the same keyboard-layout-aware paste service to post Command-V to that captured PID. This action is independent of auto-paste: it does not change that setting, enter the recording reducer, commit or retain text, delete recovery artifacts, or create a history entry. It remains safe during a recording because it uses only the previous completed transcript and publishes feedback separately from session status.
+
+With no transcript, it changes neither clipboard nor target and reports `No transcript to paste` for two seconds. With no trustworthy target, it still leaves the transcript on the clipboard and reports `No target app; transcript copied`. Clipboard and paste failures likewise receive concise two-second feedback, and a delivery failure never restores or clears the clipboard. Disabling Voice disables the shortcut while leaving its handler installed inertly.
 
 ### No speech and failures
 
@@ -168,18 +174,18 @@ At most one session exists at a time. The session reducer is pure and single-fli
 
 ## Menu and settings
 
-The menu bar menu shows Voice state only when there is something to say: recording with a stop action, finalizing, a recording that needs attention with retry and delete actions, or a degraded message. `Copy Last Transcript` appears whenever a last transcript exists.
+The menu bar menu shows Voice state only when there is something to say: recording with a stop action, finalizing, a recording that needs attention with retry and delete actions, a degraded message, or temporary paste-latest feedback. `Copy Last Transcript` appears whenever a last transcript exists.
 
 The `Voice` tab in Settings contains:
 
 - the enable toggle, with the gesture hint for hold-Fn and Fn-Space;
-- speech-asset status with check and download actions, the contextual access request, and the shared Accessibility status row naming auto-paste as the only consumer;
-- output settings — paste completed transcript, keep last transcript, locale, and copy last transcript;
+- speech-asset status with check and download actions, the contextual access request, and the shared Accessibility status row naming completed-transcript and paste-latest delivery as its consumers;
+- output settings — paste completed transcript, keep last transcript, locale, copy last transcript, and the paste-latest shortcut recorder;
 - the ordered input-device priority list with add, reorder, and remove actions, plus the separate system-default fallback toggle;
 - recovery actions, shown only while a recording is pending or failed;
 - a configuration reload button and the last configuration diagnostic.
 
-Controls whose value is supplied by the configuration file are disabled rather than silently overwritten; see [managed values](configuration.md#managed-values). The hold threshold and maximum session duration have no settings control.
+Controls whose value is supplied by the configuration file are disabled rather than silently overwritten; see [managed values](configuration.md#managed-values). A managed paste-latest binding preserves and later restores the user's prior recorder value. The hold threshold and maximum session duration have no settings control.
 
 ## Related documentation
 

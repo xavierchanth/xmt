@@ -40,6 +40,7 @@ struct ConfigFile: Codable, Equatable, Sendable {
     struct Voice: Codable, Equatable, Sendable {
         var enabled: Bool?
         var shortcut: ShortcutDTO?
+        var pasteLatestTranscriptShortcut: ShortcutDTO?
         var autoPaste: Bool?
         var keepLastTranscript: Bool?
         var locale: String?
@@ -84,6 +85,13 @@ struct ConfigFile: Codable, Equatable, Sendable {
                 throw ConfigDiagnostic.invalidValue(path: "voice.shortcut", reason: "Voice Transcription v1 requires an Fn modifier hold")
             }
             do { try shortcut.validate() } catch { throw ConfigDiagnostic.invalidValue(path: "voice.shortcut", reason: String(describing: error)) }
+        }
+        if let shortcut = voice.pasteLatestTranscriptShortcut {
+            guard case .key = shortcut else {
+                throw ConfigDiagnostic.invalidValue(path: "voice.pasteLatestTranscriptShortcut", reason: "must be a key shortcut")
+            }
+            do { try shortcut.validate() }
+            catch { throw ConfigDiagnostic.invalidValue(path: "voice.pasteLatestTranscriptShortcut", reason: String(describing: error)) }
         }
         if let locale = voice.locale, locale.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             throw ConfigDiagnostic.invalidValue(path: "voice.locale", reason: "must not be blank")

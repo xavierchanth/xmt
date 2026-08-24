@@ -16,6 +16,7 @@ struct MenuBarView: View {
         case .degraded(let reason): Text("Voice: \(reason)")
         default: EmptyView()
         }
+        if let feedback = voice.temporaryFeedback { Text("Voice: \(feedback)") }
         if !voice.lastTranscript.isEmpty { Button("Copy Last Transcript") { voice.copyLastTranscript() } }
         Divider()
         Button("Settings...") { SettingsWindowController.shared.show { openWindow(id: SettingsWindowController.windowID) } }

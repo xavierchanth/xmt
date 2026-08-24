@@ -1,6 +1,52 @@
 import XCTest
 
 @MainActor final class CommitSequenceTests: XCTestCase {
+    func testPasteLatestCapturesTargetThenCopiesAndPastesWithoutCommitEffects() async {
+        var events: [String] = []
+        let action = LatestTranscriptPaster(dependencies: .init(
+            frontmostPID: { events.append("target"); return 42 },
+            setClipboard: { text in events.append("clipboard:\(text)") },
+            paste: { text, target in events.append("paste:\(text):\(target ?? -1)") }
+        ))
+        let outcome = await action.pasteLatest("retained")
+        XCTAssertEqual(outcome, .pasted)
+        XCTAssertEqual(events, ["target", "clipboard:retained", "paste:retained:42"])
+    }
+
+    func testPasteLatestNoTranscriptAndNoTargetAreNoOpsWithSafeClipboardBehavior() async {
+        var clipboard = "original", pasted = false
+        var action = LatestTranscriptPaster(dependencies: .init(
+            frontmostPID: { 9 }, setClipboard: { clipboard = $0 }, paste: { _, _ in pasted = true }
+        ))
+        let emptyOutcome = await action.pasteLatest("")
+        XCTAssertEqual(emptyOutcome, .noTranscript)
+        XCTAssertEqual(clipboard, "original"); XCTAssertFalse(pasted)
+
+        action.dependencies.frontmostPID = { nil }
+        let noTargetOutcome = await action.pasteLatest("latest")
+        XCTAssertEqual(noTargetOutcome, .noTarget)
+        XCTAssertEqual(clipboard, "latest"); XCTAssertFalse(pasted)
+    }
+
+    func testPasteLatestFailureLeavesTranscriptOnClipboard() async {
+        enum Expected: Error { case paste }
+        var clipboard = "old"
+        let action = LatestTranscriptPaster(dependencies: .init(
+            frontmostPID: { 7 }, setClipboard: { clipboard = $0 }, paste: { _, _ in throw Expected.paste }
+        ))
+        let outcome = await action.pasteLatest("safe")
+        XCTAssertEqual(outcome, .pasteFailed)
+        XCTAssertEqual(clipboard, "safe")
+    }
+
+    func testRetainedTranscriptLoadsFromExistingFile() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data("survives relaunch".utf8).write(to: root.appendingPathComponent("last-transcript.txt"))
+        XCTAssertEqual(try TranscriptCommitter.loadRetainedTranscript(directory: root), "survives relaunch")
+    }
+
     func testCommitPointPrecedesPasteAndAtomicReplacement() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString); try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }

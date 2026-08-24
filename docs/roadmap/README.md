@@ -40,17 +40,23 @@ Unvalidated by manual exercise:
 - **Speech analysis and assets.** No asset status check, download, reservation, or transcription has been run. Whether the progressive-transcription preset, the format conversion, and the 5-second finalization bound behave as intended in practice is unknown, as is whether the queue depth and finalization bound are the right values.
 - **Fn gestures.** The event tap, the 150 ms hold threshold, Fn-Space consumption, the secure-input watchdog, and tap re-enable after a system disable have only been exercised as pure reducers in tests. Whether the default threshold feels right, and whether consuming Fn-Space breaks any expected macOS behavior, is unknown.
 - **Bluetooth and AirPods.** The fail-closed name matching has never been run against a real paired headset. Whether AirPods report a usable Core Audio name, whether the connected check is accurate at the moment of selection, and whether switching to a headset microphone degrades transcription are all open.
-- **Auto-paste.** The synthetic Command-V to the PID captured at arm time has not been tried against a real editor, and the assumption that the frontmost application at arm time is still the right target at commit time is unverified.
+- **Paste actions.** Synthetic Command-V has not been tried against a real editor, either for auto-paste to the PID captured at arm time or paste latest to the application focused at invocation time. The assumption that the frontmost application at arm time is still the right auto-paste target at commit time is unverified.
 - **Permission prompts.** The launch-silent, contextual request flow for Microphone, Input Monitoring, Accessibility, and any Speech framework authorization has not been walked through on a machine without the grants. The relevant usage-description strings are present, but whether SpeechAnalyzer presents a separate speech-recognition prompt remains unobserved.
 - **Recovery in anger.** Reconciliation is well covered by tests over a fake store, but no real interrupted session has been recovered, retried, or deleted.
 
 Known implementation gaps, independent of validation:
 
 - **No settings control for two values.** The Fn hold threshold and maximum session duration are file-only.
-- **Auto-paste requires a captured target.** Retries have no trustworthy target, and a live session armed while XMT is frontmost deliberately captures none. In either case the transcript is committed to the clipboard and optional cache without synthesizing a paste.
+- **Auto-paste requires a captured target.** Retries have no trustworthy target, and a live session armed while XMT is frontmost deliberately captures none. In either case the transcript is committed to the clipboard and optional cache without automatic paste; paste latest can subsequently target the application focused when that separate command is invoked.
 - **Coverage stops at the pure layers.** Trigger arbitration, the session reducer, device selection, the bounded queue, reconciliation, commit ordering, and configuration are unit-tested. Capture, the analyzer session, the event tap, the module coordinator, and every SwiftUI surface are not.
 
-Until at least a recording, a transcription, and a paste have been performed by hand, Voice Transcription should be described as implemented, not as shipping.
+Until at least a recording, a transcription, and a paste have been performed by hand, Voice Transcription should be described as implemented, not as shipping. The deferred exercise is recorded as a repeatable [Voice hardware QA checklist](../qa/voice-transcription.md).
+
+## Future Voice history and clients
+
+The first history increment retains and pastes only one latest transcript. A searchable, bounded transcript history with a native XMT panel is deferred; it must not be inferred from the one-slot `last-transcript.txt` cache.
+
+A Raycast client is also deferred. It must consume an app-owned, stable JSON boundary designed for external clients rather than reading XMT's cache or any future internal history store directly. Versioning, lifetime, privacy, and write ownership for that boundary must be settled before the client ships.
 
 ## Configuration gaps
 
