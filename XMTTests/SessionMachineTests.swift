@@ -58,6 +58,24 @@ final class SessionMachineTests: XCTestCase {
         XCTAssertEqual(second.handle(VoiceSessionMachine.maximumStopEvent(mode: .latched, session: latched)), .accepted([.stop(latched)]))
     }
 
+    func testDegradedResetAllowsNextTriggerToArm() {
+        let s = session(); var machine = VoiceSessionMachine()
+        _ = machine.handle(.degrade(.permissionDenied))
+        XCTAssertEqual(machine.handle(.pushToTalkBegan(s)), .dropped)
+        XCTAssertEqual(machine.handle(.resetDegraded), .accepted([]))
+        XCTAssertEqual(machine.handle(.pushToTalkBegan(s)), .accepted([.arm(.pushToTalk, s)]))
+    }
+
+    func testRepeatedArmingRefusalNeverWedgesReducer() {
+        let first = session(), second = session(); var machine = VoiceSessionMachine()
+        XCTAssertEqual(machine.handle(.armingRefused(.assetsMissing)), .refused(.assetsMissing))
+        XCTAssertEqual(machine.handle(.pushToTalkBegan(first)), .accepted([.arm(.pushToTalk, first)]))
+        // Refusing a later fresh idle attempt remains non-durable as well.
+        machine = VoiceSessionMachine()
+        XCTAssertEqual(machine.handle(.armingRefused(.noInputDevice)), .refused(.noInputDevice))
+        XCTAssertEqual(machine.handle(.toggle(second)), .accepted([.arm(.latched, second)]))
+    }
+
     func testArmingRefusalIsOutcomeNotState() {
         var m = VoiceSessionMachine()
         XCTAssertEqual(m.handle(.armingRefused(.noInputDevice)), .refused(.noInputDevice)); XCTAssertEqual(m.state, .idle)

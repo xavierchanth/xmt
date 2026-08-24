@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Foundation
 import Speech
 
@@ -6,7 +6,7 @@ import Speech
 /// calling `finish`; finalization is bounded and cancels analysis if that ordering is violated.
 @available(macOS 26.0, *)
 actor TranscriberSession {
-    enum SessionError: Error { case unsupportedLocale, noCompatibleAudioFormat, alreadyUsed, finalizationTimedOut }
+    enum SessionError: Error { case unsupportedLocale, noCompatibleAudioFormat, sourceFormatChanged, alreadyUsed, finalizationTimedOut }
     struct Update: Sendable, Equatable { let text: String; let isFinal: Bool }
     private enum State { case ready, running, finished }
 
@@ -35,26 +35,63 @@ actor TranscriberSession {
             let target = try await bestAvailableAudioFormat()
             try await analyzer.prepareToAnalyze(in: target)
             resultTask = consumeResults(update: update)
-            // Conversion runs in the analyzer-consumer task, never in the realtime audio tap.
-            let converted = buffers.map { try Self.convert($0, to: target) }
-            try await analyzer.start(inputSequence: converted.map { AnalyzerInput(buffer: $0) })
+            // A single converter owns stream state. This producer runs outside the realtime tap,
+            // preserves input ordering, and flushes converter delay before ending analyzer input.
+            let converted = AsyncThrowingStream<AnalyzerInput, Error> { continuation in
+                Task {
+                    do {
+                        var converter: StreamConverter?
+                        for try await buffer in buffers {
+                            if converter == nil { converter = try StreamConverter(source: buffer.format, target: target) }
+                            continuation.yield(AnalyzerInput(buffer: try converter!.convert(buffer)))
+                        }
+                        if let tail = try converter?.finish(), tail.frameLength > 0 {
+                            continuation.yield(AnalyzerInput(buffer: tail))
+                        }
+                        continuation.finish()
+                    } catch { continuation.finish(throwing: error) }
+                }
+            }
+            try await analyzer.start(inputSequence: converted)
         } catch { await cleanup(); throw error }
     }
 
-    static func convert(_ source: AVAudioPCMBuffer, to target: AVAudioFormat) throws -> AVAudioPCMBuffer {
-        if source.format == target { return source }
-        guard let converter = AVAudioConverter(from: source.format, to: target) else { throw SessionError.noCompatibleAudioFormat }
-        let ratio = target.sampleRate / source.format.sampleRate
-        let capacity = AVAudioFrameCount(ceil(Double(source.frameLength) * ratio)) + 1
-        guard let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { throw SessionError.noCompatibleAudioFormat }
-        var supplied = false, conversionError: NSError?
-        let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
-            if supplied { inputStatus.pointee = .noDataNow; return nil }
-            supplied = true; inputStatus.pointee = .haveData; return source
+    /// Session-owned and consumed serially by the conversion producer; never called by the tap.
+    private final class StreamConverter: @unchecked Sendable {
+        private let source: AVAudioFormat
+        private let target: AVAudioFormat
+        private let converter: AVAudioConverter?
+
+        init(source: AVAudioFormat, target: AVAudioFormat) throws {
+            self.source = source; self.target = target
+            converter = source == target ? nil : AVAudioConverter(from: source, to: target)
+            if source != target, converter == nil { throw SessionError.noCompatibleAudioFormat }
         }
-        if let conversionError { throw conversionError }
-        guard status != .error else { throw SessionError.noCompatibleAudioFormat }
-        return output
+
+        func convert(_ buffer: AVAudioPCMBuffer) throws -> AVAudioPCMBuffer {
+            guard buffer.format == source else { throw SessionError.sourceFormatChanged }
+            guard let converter else { return buffer }
+            return try produce(converter: converter, sourceBuffer: buffer, end: false)
+        }
+
+        func finish() throws -> AVAudioPCMBuffer? {
+            guard let converter else { return nil }
+            return try produce(converter: converter, sourceBuffer: nil, end: true)
+        }
+
+        private func produce(converter: AVAudioConverter, sourceBuffer: AVAudioPCMBuffer?, end: Bool) throws -> AVAudioPCMBuffer {
+            let frames = sourceBuffer.map { Double($0.frameLength) } ?? 256
+            let capacity = AVAudioFrameCount(ceil(frames * target.sampleRate / source.sampleRate)) + 16
+            guard let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { throw SessionError.noCompatibleAudioFormat }
+            var supplied = false, conversionError: NSError?
+            let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
+                if !supplied, let sourceBuffer { supplied = true; inputStatus.pointee = .haveData; return sourceBuffer }
+                inputStatus.pointee = end ? .endOfStream : .noDataNow; return nil
+            }
+            if let conversionError { throw conversionError }
+            guard status != .error else { throw SessionError.noCompatibleAudioFormat }
+            return output
+        }
     }
 
     /// Input must already have reached end-of-sequence. A non-finishing producer is treated as a

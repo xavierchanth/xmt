@@ -101,6 +101,10 @@ public final class AudioCaptureService: @unchecked Sendable {
                     self.requestFailure((error as? AudioCaptureError) ?? .handoffOverflow(recoveryURL: recoveryURL), token: token)
                 }
             }
+            // The drain task is the explicit lifetime token: it retains the service until every
+            // accepted buffer is written and output termination is published. `workerFinished`
+            // then clears `worker`, breaking the temporary cycle. Callers must still call stop;
+            // coordinator ownership is the primary lifetime guarantee.
             worker = Task { [self, handoff, output] in
                 var failure: AudioCaptureError?
                 do {

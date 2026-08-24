@@ -35,6 +35,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     private var transcriber: TranscriberSession?
     private var analysisTask: Task<Error?, Never>?
     private var armTask: Task<Void, Never>?
+    private var armGeneration: UInt64 = 0
     private var maxTimer: Timer?
     private var targetPID: pid_t?
     private let store = PendingRecordingStore()
@@ -59,6 +60,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     func stop() {
+        armGeneration &+= 1
         observation?.cancel(); observation = nil; observer = nil; observerThresholdMs = nil
         maxTimer?.invalidate(); maxTimer = nil
         capture?.stop(); capture = nil
@@ -66,12 +68,14 @@ final class VoiceTranscriptionModule: ObservableObject {
         analysisTask?.cancel(); analysisTask = nil
         if let transcriber { Task { await transcriber.cancel(); await assets.releaseReservation() } }
         transcriber = nil; partialTranscript = ""
-        if status != .pending { status = .disabled }
+        if status != .pending { machine = VoiceSessionMachine(); status = .disabled }
     }
 
     func requestPermissions() {
-        AVCaptureDevice.requestAccess(for: .audio) { _ in }
-        _ = CGRequestListenEventAccess()
+        AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+            Task { @MainActor in if granted { self?.recoverDegradedAndObserve() } }
+        }
+        if CGRequestListenEventAccess() { recoverDegradedAndObserve() }
         if autoPaste { AccessibilityService.shared.requestIfNeeded() }
     }
 
@@ -98,8 +102,8 @@ final class VoiceTranscriptionModule: ObservableObject {
                     Task { @MainActor in self?.partialTranscript = update.text }
                 }
                 _ = machine.handle(.finalized(session))
-                try await commit(text, target: nil)
-            } catch { captureFailed(error) }
+                try await commit(text, target: nil, recovery: .pending)
+            } catch { await captureFailed(error) }
         }
     }
 
@@ -141,7 +145,7 @@ final class VoiceTranscriptionModule: ObservableObject {
         isEnabled = value.voiceEnabled.value; autoPaste = value.autoPaste.value; keepLastTranscript = value.keepLastTranscript.value
         localeIdentifier = value.locale.value; devicePriority = value.inputDevicePriority.value; fallbackToSystemDefault = value.fallbackToSystemDefault.value
         applying = false
-        if isEnabled { reconcileObservation() } else { stop() }
+        if isEnabled { recoverDegradedAndObserve() } else { stop() }
         WindowMoverModule.shared.applyManaged(enabled: value.windowMoverEnabled, shortcut: value.windowMoverShortcut)
     }
 
@@ -165,6 +169,8 @@ final class VoiceTranscriptionModule: ObservableObject {
 
     private func handle(_ event: TriggerEvent) {
         guard isEnabled else { return }
+        if case .degraded = machine.state { _ = machine.handle(.resetDegraded) }
+        if case .degraded = status { status = .idle }
         switch event {
         case .pushToTalkBegan: begin(mode: .pushToTalk)
         case .pushToTalkEnded: interpret(machine.handle(.pushToTalkEnded))
@@ -190,7 +196,7 @@ final class VoiceTranscriptionModule: ObservableObject {
         guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
             _ = machine.handle(.armingRefused(.permissionDenied)); status = .degraded("Microphone access is required"); return
         }
-        status = .arming
+        status = .arming; armGeneration &+= 1; let generation = armGeneration
         armTask = Task { [weak self] in
             guard let self else { return }
             do {
@@ -198,9 +204,12 @@ final class VoiceTranscriptionModule: ObservableObject {
                     priorities: devicePriority.map { AudioDevicePreference(uid: $0.uid, exactName: $0.name) }, allowSystemDefaultFallback: fallbackToSystemDefault)
                 let locale = Locale(identifier: session.localeIdentifier)
                 guard try await assets.reserve(locale: locale) else { throw VoiceSessionMachine.DegradedReason.assetsMissing }
-                try Task.checkCancellation()
+                try Task.checkCancellation(); guard generation == armGeneration, isEnabled else { throw CancellationError() }
                 let transcriber = try await TranscriberSession(locale: locale)
-                try Task.checkCancellation()
+                do {
+                    try Task.checkCancellation()
+                    guard generation == armGeneration, isEnabled else { throw CancellationError() }
+                } catch { await transcriber.cancel(); throw error }
                 let url = try store.prepareActive(.init(sessionID: session.id, timestamp: session.startedAt, localeIdentifier: session.localeIdentifier, failureReason: "active"))
                 let capture = AudioCaptureService(); let stream = try capture.start(device: device, recoveryURL: url)
                 self.capture = capture; self.transcriber = transcriber; targetPID = PasteService.frontmostPID(); partialTranscript = ""
@@ -213,7 +222,10 @@ final class VoiceTranscriptionModule: ObservableObject {
                     Task { @MainActor in self?.stopForMaximumDuration() }
                 }
             } catch {
-                armTask = nil; status = .degraded(Self.degradedMessage(error)); await assets.releaseReservation()
+                await assets.releaseReservation()
+                guard generation == armGeneration, isEnabled, !(error is CancellationError) else { return }
+                armTask = nil; _ = machine.handle(.armingRefused(Self.degradedReason(error)))
+                status = .degraded(Self.degradedMessage(error))
             }
         }
     }
@@ -224,18 +236,24 @@ final class VoiceTranscriptionModule: ObservableObject {
         let drainingCapture = capture
         drainingCapture?.stop()
         Task {
-            if let error = await analysisTask?.value { captureFailed(error); return }
+            if let error = await analysisTask?.value { await captureFailed(error); return }
             capture = nil; analysisTask = nil
-            do { let text = try await transcriber?.finish() ?? ""; _ = machine.handle(.finalized(session)); try await commit(text, target: targetPID) }
-            catch { captureFailed(error) }
+            do { let text = try await transcriber?.finish() ?? ""; _ = machine.handle(.finalized(session)); try await commit(text, target: targetPID, recovery: .active) }
+            catch { await captureFailed(error) }
             _ = drainingCapture
         }
     }
 
-    private func commit(_ text: String, target: pid_t?) async throws {
+    private enum RecoverySource { case active, pending }
+
+    private func commit(_ text: String, target: pid_t?, recovery: RecoverySource) async throws {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else {
-            try store.clearActive(); partialTranscript = ""; _ = machine.handle(.committed); status = .noSpeech
+            switch recovery {
+            case .active: try store.clearActive()
+            case .pending: try store.deletePending(); try store.clearActive()
+            }
+            partialTranscript = ""; _ = machine.handle(.committed); status = .noSpeech
             Task { try? await Task.sleep(for: .seconds(2)); if status == .noSpeech { status = .idle } }
             reconcileObservation()
             return
@@ -249,8 +267,13 @@ final class VoiceTranscriptionModule: ObservableObject {
         transcriber = nil; await assets.releaseReservation(); reconcileObservation()
     }
 
-    private func captureFailed(_ error: Error) {
-        capture?.stop(); capture = nil; transcriber = nil; maxTimer?.invalidate(); maxTimer = nil
+    private func captureFailed(_ error: Error) async {
+        capture?.stop()
+        _ = await analysisTask?.value
+        capture = nil; analysisTask = nil
+        await transcriber?.cancel(); transcriber = nil
+        await assets.releaseReservation()
+        maxTimer?.invalidate(); maxTimer = nil
         let pending = ((try? store.loadPending()) ?? nil) ?? (try? store.promoteActive(failureReason: String(describing: error)))
         if let pending {
             _ = machine.handle(.failed(.init(id: pending.metadata.sessionID, audioURL: pending.audioURL))); status = .pending
@@ -273,6 +296,19 @@ final class VoiceTranscriptionModule: ObservableObject {
         SettingsValues(windowMoverEnabled: WindowMoverModule.shared.persistedEnabled, voiceEnabled: isEnabled,
                        autoPaste: autoPaste, keepLastTranscript: keepLastTranscript, locale: localeIdentifier,
                        inputDevicePriority: devicePriority, fallbackToSystemDefault: fallbackToSystemDefault)
+    }
+
+    private func recoverDegradedAndObserve() {
+        if case .degraded = machine.state { _ = machine.handle(.resetDegraded) }
+        if case .degraded = status { status = .idle }
+        reconcileObservation()
+    }
+
+    private static func degradedReason(_ error: Error) -> VoiceSessionMachine.DegradedReason {
+        if let reason = error as? VoiceSessionMachine.DegradedReason { return reason }
+        if error is DeviceSelectionError { return .noInputDevice }
+        if error is TranscriberSession.SessionError { return .unsupportedLocale }
+        return .noInputDevice
     }
 
     private static func degradedMessage(_ error: Error) -> String {
