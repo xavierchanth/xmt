@@ -79,6 +79,9 @@
 		EE00001 /* KeyboardDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE10001 /* KeyboardDomain.swift */; };
 		EE00002 /* KeyboardConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE10002 /* KeyboardConfiguration.swift */; };
 		EE00003 /* TapHoldResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE10003 /* TapHoldResolver.swift */; };
+		FF00001 /* DeviceIdentityMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF10001 /* DeviceIdentityMatcher.swift */; };
+		FF00002 /* DeviceIdentityMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF10001 /* DeviceIdentityMatcher.swift */; };
+		FF00003 /* DeviceIdentityMatcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF10002 /* DeviceIdentityMatcherTests.swift */; };
 		EE00011 /* KeyboardDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE10001 /* KeyboardDomain.swift */; };
 		EE00012 /* KeyboardConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE10002 /* KeyboardConfiguration.swift */; };
 		EE00013 /* TapHoldResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE10003 /* TapHoldResolver.swift */; };
@@ -148,6 +151,8 @@
 		EE10001 /* KeyboardDomain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardDomain.swift; sourceTree = "<group>"; };
 		EE10002 /* KeyboardConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardConfiguration.swift; sourceTree = "<group>"; };
 		EE10003 /* TapHoldResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TapHoldResolver.swift; sourceTree = "<group>"; };
+		FF10001 /* DeviceIdentityMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentityMatcher.swift; sourceTree = "<group>"; };
+		FF10002 /* DeviceIdentityMatcherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentityMatcherTests.swift; sourceTree = "<group>"; };
 		EE10021 /* TapHoldResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TapHoldResolverTests.swift; sourceTree = "<group>"; };
 		EE10022 /* TapHoldResolverPropertyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TapHoldResolverPropertyTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -284,6 +289,7 @@
 				B100028 /* CommitSequenceTests.swift */,
 				EE10021 /* TapHoldResolverTests.swift */,
 				EE10022 /* TapHoldResolverPropertyTests.swift */,
+				FF10002 /* DeviceIdentityMatcherTests.swift */,
 				C100002 /* KeyboardSafetyLifecycleTests.swift */,
 			);
 			path = XMTTests;
@@ -378,6 +384,7 @@
 				EE10001 /* KeyboardDomain.swift */,
 				EE10002 /* KeyboardConfiguration.swift */,
 				EE10003 /* TapHoldResolver.swift */,
+				FF10001 /* DeviceIdentityMatcher.swift */,
 			);
 			path = KeyboardCustomization;
 			sourceTree = "<group>";
@@ -563,6 +570,7 @@
 				EE00001 /* KeyboardDomain.swift in Sources */,
 				EE00002 /* KeyboardConfiguration.swift in Sources */,
 				EE00003 /* TapHoldResolver.swift in Sources */,
+				FF00001 /* DeviceIdentityMatcher.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -599,6 +607,8 @@
 				EE00013 /* TapHoldResolver.swift in Sources */,
 				EE00021 /* TapHoldResolverTests.swift in Sources */,
 				EE00022 /* TapHoldResolverPropertyTests.swift in Sources */,
+				FF00002 /* DeviceIdentityMatcher.swift in Sources */,
+				FF00003 /* DeviceIdentityMatcherTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
