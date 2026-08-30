@@ -1,6 +1,6 @@
 # XMT — Xavier's macOS Tweaks
 
-XMT is a personal macOS menu bar app that collects chosen macOS behavior changes into one process, so there is one background app to install, permission, configure, and remember instead of one per tweak. This README covers what ships today and how to build, run, and test it; [the documentation tree](docs/README.md) covers product intent, architecture, and roadmap.
+XMT is a personal macOS menu bar app that collects chosen macOS behavior changes into one user-visible app and UI, so there is one product to install, permission, configure, and remember instead of one per tweak. Safety-critical keyboard customization may eventually use isolated built-in helper and system-extension components; it is not a plugin model. This README covers what ships today and how to build, run, and test it; [the documentation tree](docs/README.md) covers product intent, architecture, and roadmap.
 
 ## What ships today
 
@@ -18,7 +18,7 @@ Supporting behavior:
 - An optional declarative config file at `~/.config/xmt/config.json`, specified in [the configuration specification](docs/specification/configuration.md).
 - Launch at Login through `SMAppService`.
 
-Keyboard Customization and Menu Bar Management are **planned, not implemented**. See [the module inventory](docs/architecture/modules.md#module-inventory).
+Keyboard Customization is **not implemented**; its approved direction is at a gated feasibility spike. Cross-app Menu Bar Management is a public-API no-go. See [the roadmap](docs/roadmap/README.md) and [module inventory](docs/architecture/modules.md#module-inventory).
 
 ## Status
 

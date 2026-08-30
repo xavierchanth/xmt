@@ -14,7 +14,7 @@ Shared machinery — coordinate conversion, Accessibility element wrappers, shor
 
 ## Compile-time modularity, not plugins
 
-Modules are compiled into the app. XMT does not load code at runtime, does not define a plugin ABI, and does not support third-party extensions. Modularity here is a source and ownership discipline: clear boundaries, one-directional dependencies on the shell, and the ability to delete a module by removing its directory and its registration entry.
+Modules are built into the product. XMT does not load code at runtime, does not define a plugin ABI, and does not support third-party extensions. Ordinarily module logic is compiled into the app process. Keyboard Customization has one explicit safety exception: its built-in module coordinates isolated task-scoped and system-extension components required for protected keyboard IO. Those components are not plugins and do not create another app or user-visible module. Modularity remains a source and ownership discipline: clear boundaries, one-directional dependencies on the shell, and the ability to delete a module and its registered helper components without disturbing the others.
 
 This is deliberate. A dynamic plugin system would add a loading mechanism, a stability contract, and a trust boundary to solve a problem a single-user app does not have. The benefit sought from modularity — being able to reason about, disable, or remove one behavior without disturbing the others — is fully available at compile time.
 
@@ -45,8 +45,8 @@ The intended modules, their scope, and their permission boundary. This table sta
 |---|---|---|
 | Window Mover | Move the focused window to the next display | Accessibility |
 | Voice Transcription | Dictate text, retain the last transcript, and optionally paste it into the focused input | Microphone; Input Monitoring for Fn gestures; Accessibility when auto-paste is enabled |
-| Keyboard Customization | Remap keys and provide a Hyper-key layer | Input Monitoring, Accessibility |
-| Menu Bar Management | Hide and reveal menu bar items | Accessibility |
+| Keyboard Customization | Hyper Caps and home-row modifiers, independently enabled and explicitly scoped by device | Input Monitoring and approval/activation required by macOS for its isolated HID components |
+| Menu Bar Management | Control XMT's own menu bar item only; cross-app management is a public-API no-go | None beyond shell needs |
 
 ### Window Mover
 
@@ -74,20 +74,16 @@ Boundary: this module owns device selection, capture, recognition, recovery reco
 
 ### Keyboard Customization
 
-Intended design: key remapping and a Hyper-key layer. Remapping through a supported macOS mechanism is preferred to an always-on event tap; an event tap, if used, is a started/stopped resource under the shell's lifecycle rules and is the module's own failure domain.
+Keyboard Customization is one user-visible module whose Hyper Caps and home-row modifier capabilities can be enabled independently. Its protected-input work is the sole exception to the normal in-app process shape. See the [Keyboard Customization architecture](keyboard-customization.md) for device scoping, timing resolution, key mappings, Caps Lock recovery, and the isolated seizure-owner/virtual-keyboard safety design.
 
-Home-row modifier behavior is a distinct increment with its own design problem — tap-versus-hold timing — and is kept separate from plain remapping so that the two can be reasoned about, enabled, and disabled independently.
-
-Boundary: this module transforms key events. It does not interpret application context or provide text expansion.
+Boundary: this module transforms key events from explicitly included keyboards. It does not interpret application context, provide text expansion, or alter excluded firmware-managed keyboards.
 
 ### Menu Bar Management
 
-Intended design: hide, reveal, and reorder menu bar items in place of a separate utility.
-
-The design constraint worth recording here is that macOS exposes no adequate public API for controlling other applications' menu bar items. Any implementation therefore depends on Accessibility manipulation and layout techniques that are not contracts and can change across macOS releases, which means this module's boundary must keep that fragility entirely inside itself: no other module may depend on it, and its failure must not affect the rest of the app. Whether it is attempted at all, and when, is stated in [the roadmap](../roadmap/README.md#sequencing-and-risk).
+Cross-application Menu Bar Management is a no-go: macOS has no adequate public API for hiding, revealing, or reordering other applications' items, and XMT will not build the feature from unsupported Accessibility/layout manipulation. Behavior of XMT's own icon remains app-shell territory rather than a module.
 
 ## Related documentation
 
-- [App shell](app-shell.md) — the host that modules plug into.
+- [App shell](app-shell.md) — the host that coordinates built-in modules.
 - [Specification](../specification/README.md) — normative behavior of implemented modules.
 - [Roadmap](../roadmap/README.md) — delivery state, gaps, and ordering.

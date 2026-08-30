@@ -29,6 +29,7 @@ Nothing in `architecture/` should be read as a claim that a module exists. Nothi
 
 ## Related documentation
 
+- [Keyboard Customization architecture](architecture/keyboard-customization.md) — the approved future design and protected-input safety boundary.
 - [Voice hardware QA checklist](qa/voice-transcription.md) — the deferred manual procedure for microphone, Speech, trigger, recovery, and paste validation.
 - [Repository README](../README.md) — build, run, and test instructions.
 - [Agent and contributor guidance](../AGENTS.md) — working conventions, including documentation rules.

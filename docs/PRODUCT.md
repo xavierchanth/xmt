@@ -1,6 +1,6 @@
 # XMT product
 
-XMT — Xavier's macOS Tweaks is a personal macOS utility that collects chosen macOS behavior changes into one menu bar app. This page owns the product promise, the users, the goals and non-goals, and the reasoning behind the single-process shape. It does not describe implementation; see [architecture](architecture/README.md) for intended structure and [the roadmap](roadmap/README.md) for what exists today.
+XMT — Xavier's macOS Tweaks is a personal macOS utility that collects chosen macOS behavior changes into one menu bar app. This page owns the product promise, the users, the goals and non-goals, and the reasoning behind the single-app shape. It does not describe implementation; see [architecture](architecture/README.md) for intended structure and [the roadmap](roadmap/README.md) for what exists today.
 
 ## Name and terminology
 
@@ -14,7 +14,7 @@ XMT is built for its author's own machine. There is no support commitment, no di
 
 ## Goals
 
-- **Fewer separate background apps.** One resident process instead of one per tweak.
+- **Fewer separate background apps.** One user-visible app and UI instead of one utility per tweak; safety-critical keyboard IO may use isolated built-in helper and system-extension processes.
 - **Less app exploration and management.** Fewer utilities to discover, evaluate, update, re-grant permissions to, and remember the shortcuts of.
 - **One coherent place for chosen macOS behavior.** Shared settings surface, shared permission handling, shared shortcut vocabulary.
 - **Lightweight passive resource use.** While idle, XMT should sit in the menu bar doing effectively nothing until a shortcut fires.
@@ -30,7 +30,7 @@ XMT is built for its author's own machine. There is no support commitment, no di
 
 Each additional menu bar utility carries fixed costs that have nothing to do with the feature it provides: a separate resident process, a separate Accessibility or Input Monitoring grant to maintain, a separate settings window, a separate update path, and one more icon competing for menu bar space. Consolidating the tweaks the author actually uses removes those repeated costs even when the underlying feature work is unchanged.
 
-Consolidation also has a cost, and XMT accepts it deliberately: a single process is a single failure domain. The architecture answers that with per-module isolation rather than by splitting processes; see [the app shell](architecture/app-shell.md#failure-domain-and-isolation).
+Consolidation also has a cost, and XMT accepts it deliberately: ordinary modules share the app process and its failure domain. The architecture answers that with per-module containment, plus one explicit process/system-extension safety exception for Keyboard Customization's protected keyboard IO; see [the app shell](architecture/app-shell.md#failure-domain-and-isolation). This remains one product and UI, not a plugin model.
 
 ### Rough resource observations
 

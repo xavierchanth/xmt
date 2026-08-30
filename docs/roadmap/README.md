@@ -13,8 +13,8 @@ There are no formal initiative records and no tracker in this repository. This p
 | [Configuration](../specification/configuration.md) | Implemented for both modules, with explicit reloads only. File watching remains unimplemented; see [configuration gaps](#configuration-gaps). |
 | [App shell](../architecture/app-shell.md) | Partial. Menu bar presence, lazy settings, shared Accessibility presentation, single-flight actions, shared configuration resolution, and two compiled-in module lifecycles exist; there is no general registration list or per-module permission declaration API. |
 | [Module model](../architecture/modules.md) | Partial. Both modules have their own compiled-in lifecycle manager and settings boundary; no general module abstraction exists. |
-| Keyboard Customization | Not started. |
-| Menu Bar Management | Not started, and not certain to be feasible. |
+| [Keyboard Customization](../architecture/keyboard-customization.md) | **T-1 feasibility spike ready.** Design direction is approved; no implementation or live device test has begun. Build-only validation must precede separately authorized external-keyboard and built-in-keyboard tests. See [feasibility gates](#keyboard-customization-feasibility). |
+| Menu Bar Management | Cross-app management is closed as a public-API no-go. XMT-own-icon behavior remains app-shell territory. |
 
 "Implemented" here means the code exists, compiles into the shipping target, and is reachable from the app. It does not mean the behavior has been observed working.
 
@@ -63,6 +63,22 @@ A Raycast client is also deferred. It must consume an app-owned, stable JSON bou
 - **Reload is explicit, not observed.** [Declarative configuration](../architecture/configuration.md#loading-and-reloads) intends file-system observation with coalescing. The implementation reloads at launch, whenever the app becomes active, and on a Settings button. Nothing watches the file, which is the intended design's remaining delta and not a defect in the current behavior.
 - **Diagnostics surface only in Voice settings.** A malformed file that also governs Window Mover reports its diagnostic on the Voice tab.
 
+## Keyboard Customization feasibility
+
+The approved T-1 spike is ready to test whether the protected-input architecture in [Keyboard Customization](../architecture/keyboard-customization.md) is feasible. “Approved” selects a direction; it does not assert system-extension entitlement approval, successful installation, seizure release behavior, or working hardware interception.
+
+The gates are sequential and separately authorized:
+
+1. **Build-only / no-live-device stage.** Create only enough spike scaffolding to prove the app, task-scoped seizure owner, HIDDriverKit virtual keyboard, XPC lease, and independent watchdog can compile, sign in the available development environment, and package coherently. Do not open or seize any keyboard and do not activate the design against live input.
+2. **External-keyboard test.** Proceed only after explicit authorization following review of build-only results and a recovery procedure. Test one expendable external keyboard first, with all other devices excluded.
+3. **Built-in-keyboard test.** Proceed only under a second explicit authorization after external-device results and recovery behavior have been reviewed. Direct dext ownership remains out of scope, as do login-window and FileVault interception.
+
+Each stage records observations rather than guarantees. Process termination is expected to release task-scoped seizure, but no release guarantee or time bound may be inferred. No stage may claim that Apple will grant an entitlement or approve distribution.
+
+## Other potential directions
+
+Independent mouse/trackpad scrolling direction is a potential future capability, not planned work. It has no approved design, sequence, or delivery commitment.
+
 ## Window Mover gaps
 
 - **Full frame versus visible frame.** Geometry uses the full `NSScreen.frame`, so moved and filled windows extend under the menu bar and behind the Dock. Whether that is the desired behavior is an open question; the current behavior is specified in [screen frames used for geometry](../specification/window-mover.md#screen-frames-used-for-geometry). Changing it is a behavior change, not a documentation fix.
@@ -76,10 +92,10 @@ A Raycast client is also deferred. It must consume an app-owned, stable JSON bou
 The intended order, easiest and most valuable first:
 
 1. **Voice Transcription.** Implemented and integrated; its behavior is specified in [the Voice Transcription specification](../specification/voice-transcription.md). The remaining work is not more code but hardware validation, listed in [validation gaps](#voice-transcription-validation-gaps) above. Nothing else should start before a real recording has been made, transcribed, and pasted, because that exercise is the only thing that can tell whether the threshold, queue depth, timeouts, and device rules were chosen sensibly — and because the module holds a microphone and an event tap, which is exactly the kind of thing that should not sit unverified in a resident menu bar app.
-2. **Keyboard Customization.** Start with remapping and a Hyper-key layer. Home-row modifiers come later and separately: tap-versus-hold timing is where such tools become unreliable, and it must not gate the simpler work.
-3. **Menu Bar Management.** Last, and the highest risk in the project. macOS offers no adequate public API for controlling other applications' menu bar items, so any implementation depends on fragile Accessibility manipulation that can break across macOS releases. Abandoning this module is an accepted outcome; the fallback is to keep using a dedicated utility for it.
+2. **Keyboard Customization.** Run the T-1 feasibility gates above: build-only and no-live-device first, then separately authorized external-keyboard and built-in-keyboard tests. The two user-visible capabilities belong to one module but remain independently enabled. Safety evidence, not feature ordering, controls progression.
+3. **Menu Bar Management.** Cross-app control is closed as a public-API no-go; unsupported Accessibility/layout manipulation will not be pursued. XMT's own icon behavior remains ordinary shell work if a need arises.
 
-The single-process shape means a badly behaved module can take down the whole app, which is the main reason the riskiest module is last. See [failure domain and isolation](../architecture/app-shell.md#failure-domain-and-isolation).
+Ordinary modules share the app-process failure domain. Keyboard Customization is the explicit isolated-process/system-extension safety exception; that isolation carries its own feasibility and recovery risks. See [failure domain and isolation](../architecture/app-shell.md#failure-domain-and-isolation).
 
 ## Related documentation
 

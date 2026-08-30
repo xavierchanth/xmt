@@ -10,9 +10,10 @@ Where architecture and released behavior differ, the source under `XMT/` is corr
 
 ## Pages
 
-- [App shell](app-shell.md) — the single-process host: lifecycle, permission gating, settings surface, failure isolation, and resource posture that all modules share.
+- [App shell](app-shell.md) — the single user-visible host: lifecycle, permission gating, settings surface, failure isolation, and the explicit keyboard-safety process exception.
 - [Module model](modules.md) — what a module is, the compile-time modularity rule, the module contract, and the planned module inventory.
 - [Declarative configuration](configuration.md) — versioning, precedence, validation, and atomic load/reload semantics.
+- [Keyboard Customization](keyboard-customization.md) — device-scoped Hyper Caps and home-row resolution plus the protected-input safety architecture.
 
 ## Related documentation
 

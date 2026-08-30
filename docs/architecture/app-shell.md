@@ -1,10 +1,10 @@
 # App shell
 
-The app shell is the single process that hosts every XMT module: the menu bar presence, the settings window, permission handling, module lifecycle, and the resource posture the product promises. This page states the intended design and the boundaries it sets. It is not a description of shipped code, and it does not say which parts of the shell exist — [the roadmap](../roadmap/README.md) owns that.
+The app shell is the single user-visible app and UI that coordinates every XMT module: the menu bar presence, the settings window, permission handling, module lifecycle, and the resource posture the product promises. This page states the intended design and the boundaries it sets. It is not a description of shipped code, and it does not say which parts of the shell exist — [the roadmap](../roadmap/README.md) owns that.
 
 ## Shape
 
-XMT is one `LSUIElement` SwiftUI application. It has no Dock icon, one menu bar item, and one settings window that is created lazily. All modules run inside this process and share its main actor.
+XMT is one `LSUIElement` SwiftUI application. It has no Dock icon, one menu bar item, and one settings window that is created lazily. Ordinary modules run inside this process and share its main actor. Keyboard Customization is the explicit safety exception: the app coordinates its isolated seizure owner, HIDDriverKit system extension, XPC lease, and independent watchdog. They are built-in implementation components, not plugins or additional apps; their target design is in [Keyboard Customization architecture](keyboard-customization.md#protected-input-architecture).
 
 The shell owns exactly four things:
 
@@ -46,7 +46,7 @@ Disabling a module in Settings performs a real stop, not a flag check inside a s
 
 ## Failure domain and isolation
 
-One process means one crash takes everything down. XMT accepts that trade (see [why one app](../PRODUCT.md#why-one-app-instead-of-several)) and mitigates it inside the process rather than by splitting it:
+For ordinary modules, one app process means one crash takes everything in that process down. XMT accepts that trade (see [why one app](../PRODUCT.md#why-one-app-instead-of-several)) and mitigates it in process. Keyboard Customization alone adds process/system-extension isolation because seizure recovery is safety-critical:
 
 - A module's trigger handler contains its own failures. A module that cannot complete an action returns without action; it does not terminate the app, and it does not leave the shell in a state that blocks other modules.
 - Actions are single-flight per module: a trigger that fires while that module's action is in flight is dropped rather than queued, so a stuck action cannot accumulate work.
@@ -54,7 +54,7 @@ One process means one crash takes everything down. XMT accepts that trade (see [
 - The shell survives a module that fails to start. A failed start leaves that module registered and inert.
 - OS-boundary calls — Accessibility, event taps, speech — are treated as failure-prone by default. Absent results are handled as ordinary outcomes, not as programmer errors that trap.
 
-One risk remains unmitigated by design: an unrecoverable fault in any module ends the process for all of them. Isolation reduces the chance of reaching that state; it cannot remove it. Which modules carry that risk, and in what order they are attempted, is [the roadmap](../roadmap/README.md#sequencing-and-risk)'s to state.
+One risk remains for ordinary in-process modules: an unrecoverable fault ends the app process for all of them. Keyboard Customization's isolated components reduce coupling but do not justify any guarantee about seizure release or recovery time. Which modules carry that risk, and in what order they are attempted, is [the roadmap](../roadmap/README.md#sequencing-and-risk)'s to state.
 
 ## Resource posture
 
