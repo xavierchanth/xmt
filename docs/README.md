@@ -32,5 +32,6 @@ Nothing in `architecture/` should be read as a claim that a module exists. Nothi
 - [Keyboard Customization architecture](architecture/keyboard-customization.md) — the approved future design and protected-input safety boundary.
 - [Voice hardware QA checklist](qa/voice-transcription.md) — the deferred manual procedure for microphone, Speech, trigger, recovery, and paste validation.
 - [Keyboard DriverKit build-only evidence](qa/keyboard-driverkit-feasibility.md) — what the no-live-device feasibility run actually observed about the SDK, entitlements, and signing.
+- [Keyboard destructive Stage 2 protocol](qa/keyboard-stage-2-protocol.md) — future external-device safety procedure; not authorization or evidence it ran.
 - [Repository README](../README.md) — build, run, and test instructions.
 - [Agent and contributor guidance](../AGENTS.md) — working conventions, including documentation rules.
