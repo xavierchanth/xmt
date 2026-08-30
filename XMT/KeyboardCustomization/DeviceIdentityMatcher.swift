@@ -23,12 +23,15 @@ struct KeyboardDeviceIdentity: Hashable, Sendable {
         builtIn = descriptor.builtIn
         vendorID = descriptor.vendorID
         productID = descriptor.productID
-        serialNumber = descriptor.serialNumber?.nilIfEmpty
+        serialNumber = descriptor.serialNumber.normalizedIdentityField
         locationID = descriptor.locationID
-        transport = descriptor.transport?.nilIfEmpty?.lowercased()
+        transport = descriptor.transport.normalizedTransport
     }
 }
 
+/// Rule input is normalized at construction, before it can reach either policy list.
+/// A blank optional field becomes an omitted constraint; for an exclusion this
+/// deliberately broadens the match rather than allowing a malformed exclude to fail open.
 struct KeyboardDeviceRule: Hashable, Sendable {
     let builtIn: Bool
     let vendorID: UInt16
@@ -37,12 +40,22 @@ struct KeyboardDeviceRule: Hashable, Sendable {
     let locationID: UInt32?
     let transport: String?
 
+    init(builtIn: Bool, vendorID: UInt16, productID: UInt16, serialNumber: String?,
+         locationID: UInt32?, transport: String?) {
+        self.builtIn = builtIn
+        self.vendorID = vendorID
+        self.productID = productID
+        self.serialNumber = serialNumber.normalizedIdentityField
+        self.locationID = locationID
+        self.transport = transport.normalizedTransport
+    }
+
     func matches(_ identity: KeyboardDeviceIdentity) -> Bool {
         guard builtIn == identity.builtIn, vendorID == identity.vendorID,
               productID == identity.productID else { return false }
         if let serialNumber, serialNumber != identity.serialNumber { return false }
         if let locationID, locationID != identity.locationID { return false }
-        if let transport, transport.lowercased() != identity.transport { return false }
+        if let transport, transport != identity.transport { return false }
         return true
     }
 }
@@ -55,15 +68,21 @@ struct KeyboardDevicePolicy: Sendable {
 
     func evaluate(_ descriptor: KeyboardDeviceDescriptor) -> KeyboardDeviceMatch {
         let identity = KeyboardDeviceIdentity(descriptor)
+        // Exclusions are fail-closed: one or multiple matching rules always exclude.
         if exclude.contains(where: { $0.matches(identity) }) { return .excluded }
         let matches = allow.filter { $0.matches(identity) }
         guard !matches.isEmpty else { return .unmatched }
-        // More than one policy rule claiming a device is a configuration error,
-        // even if the rules happen to be identical.
         return matches.count == 1 ? .allowed : .ambiguous
     }
 }
 
-private extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
+private extension Optional where Wrapped == String {
+    var normalizedIdentityField: String? {
+        guard let value = self?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return nil
+        }
+        return value
+    }
+
+    var normalizedTransport: String? { normalizedIdentityField?.lowercased() }
 }

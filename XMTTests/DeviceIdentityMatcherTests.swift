@@ -27,9 +27,24 @@ final class DeviceIdentityMatcherTests: XCTestCase {
         XCTAssertEqual(KeyboardDevicePolicy(allow: [broad, rule()], exclude: []).evaluate(external), .ambiguous)
     }
 
-    func testTransportIsCaseInsensitiveButSerialIsNot() {
-        XCTAssertEqual(policy(rule(transport: "usb")).evaluate(external), .allowed)
+    func testAllowRuleAndIdentityNormalizeWhitespaceAndTransportCase() {
+        let padded = KeyboardDeviceDescriptor(builtIn: false, vendorID: 0x1234, productID: 0x5678,
+                                              serialNumber: "  unit-a\n", locationID: 7,
+                                              transport: " Usb ")
+        XCTAssertEqual(policy(rule(serial: " unit-a ", transport: "  uSb\t")).evaluate(padded), .allowed)
         XCTAssertEqual(policy(rule(serial: "UNIT-A")).evaluate(external), .unmatched)
+    }
+
+    func testBlankExcludeFieldsNormalizeToWildcardsAndCannotFailOpen() {
+        let malformed = KeyboardDeviceRule(builtIn: false, vendorID: 0x1234, productID: 0x5678,
+                                           serialNumber: " \n", locationID: nil, transport: "\t")
+        XCTAssertEqual(KeyboardDevicePolicy(allow: [rule()], exclude: [malformed]).evaluate(external), .excluded)
+    }
+
+    func testMultipleNormalizedExcludesRemainFailClosed() {
+        let first = rule(transport: " USB ")
+        let second = rule(transport: "usb")
+        XCTAssertEqual(KeyboardDevicePolicy(allow: [rule()], exclude: [first, second]).evaluate(external), .excluded)
     }
 
     private func rule(serial: String = "unit-a", transport: String = "USB") -> KeyboardDeviceRule {

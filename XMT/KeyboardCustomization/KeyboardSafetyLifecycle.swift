@@ -1,3 +1,13 @@
+/// A validated positive acquisition-failure threshold.
+struct KeyboardSafetyFailureThreshold: Equatable, Sendable {
+    let value: Int
+
+    init?(_ value: Int) {
+        guard value > 0 else { return nil }
+        self.value = value
+    }
+}
+
 /// A pure reducer for the protected-input safety boundary. It performs no I/O;
 /// commands are obligations for a future effectful owner.
 struct KeyboardSafetyLifecycle: Equatable {
@@ -10,10 +20,13 @@ struct KeyboardSafetyLifecycle: Equatable {
         case intentEnabled, intentDisabled
         case watchdogHealthy, watchdogLost
         case acquireSucceeded, acquireFailed
+        case runtimeFailed
         case backoffElapsed
+        case recoveryReset
     }
     enum Command: Equatable { case acquire, release }
 
+    let failureThreshold: KeyboardSafetyFailureThreshold
     private(set) var lifecycle: Lifecycle = .stopped
     private(set) var outputIsReady = false
     private(set) var hasLease = false
@@ -22,22 +35,26 @@ struct KeyboardSafetyLifecycle: Equatable {
     private(set) var ownership: Ownership = .none
     private(set) var consecutiveFailures = 0
     private(set) var breakerIsOpen = false
+    private(set) var backoffIsActive = false
 
-    /// Useful both as executable documentation and as an exhaustive-test oracle.
+    init(failureThreshold: KeyboardSafetyFailureThreshold) {
+        self.failureThreshold = failureThreshold
+    }
+
     var invariantsHold: Bool {
         let prerequisites = lifecycle == .running && outputIsReady && hasLease
-            && hasSeizureIntent && watchdogIsHealthy && !breakerIsOpen
+            && hasSeizureIntent && watchdogIsHealthy && !breakerIsOpen && !backoffIsActive
         let ownershipSafe = ownership == .none || prerequisites
         let stoppedIsEmpty = lifecycle == .running ||
             (!hasLease && !hasSeizureIntent && !watchdogIsHealthy && ownership == .none)
-        return ownershipSafe && stoppedIsEmpty && consecutiveFailures >= 0
+        let breakerConsistent = !breakerIsOpen || consecutiveFailures >= failureThreshold.value
+        return ownershipSafe && stoppedIsEmpty && consecutiveFailures >= 0 && breakerConsistent
     }
 
     mutating func handle(_ event: Event) -> [Command] {
         var commands: [Command] = []
         switch event {
-        case .start:
-            lifecycle = .running
+        case .start: lifecycle = .running
         case .stop:
             if ownership != .none { commands.append(.release) }
             lifecycle = .stopped
@@ -45,42 +62,50 @@ struct KeyboardSafetyLifecycle: Equatable {
             hasSeizureIntent = false
             watchdogIsHealthy = false
             ownership = .none
-            breakerIsOpen = false
-            consecutiveFailures = 0
+            backoffIsActive = false
         case .outputReady: outputIsReady = true
-        case .outputLost:
-            outputIsReady = false
-            releaseIfNeeded(into: &commands)
+        case .outputLost: outputIsReady = false; releaseIfNeeded(into: &commands)
         case .leaseGranted where lifecycle == .running: hasLease = true
         case .leaseGranted: break
-        case .leaseLost:
-            hasLease = false
-            releaseIfNeeded(into: &commands)
+        case .leaseLost: hasLease = false; releaseIfNeeded(into: &commands)
         case .intentEnabled where lifecycle == .running: hasSeizureIntent = true
         case .intentEnabled: break
-        case .intentDisabled:
-            hasSeizureIntent = false
-            releaseIfNeeded(into: &commands)
+        case .intentDisabled: hasSeizureIntent = false; releaseIfNeeded(into: &commands)
         case .watchdogHealthy where lifecycle == .running: watchdogIsHealthy = true
         case .watchdogHealthy: break
-        case .watchdogLost:
-            watchdogIsHealthy = false
-            releaseIfNeeded(into: &commands)
+        case .watchdogLost: watchdogIsHealthy = false; releaseIfNeeded(into: &commands)
         case .acquireSucceeded where ownership == .requested:
             ownership = .owned
-            consecutiveFailures = 0
-        case .acquireSucceeded: break // stale acknowledgement
+            backoffIsActive = false
+        case .acquireSucceeded: break
         case .acquireFailed where ownership == .requested:
             ownership = .none
-            consecutiveFailures += 1
-            breakerIsOpen = true
-        case .acquireFailed: break // stale acknowledgement
-        case .backoffElapsed:
+            recordFailure()
+        case .acquireFailed: break
+        case .runtimeFailed where ownership == .owned:
+            commands.append(.release)
+            ownership = .none
+            recordFailure()
+        case .runtimeFailed: break
+        case .backoffElapsed: backoffIsActive = false
+        case .recoveryReset:
             breakerIsOpen = false
+            backoffIsActive = false
+            consecutiveFailures = 0
         }
         requestIfSafe(into: &commands)
         assert(invariantsHold)
         return commands
+    }
+
+    private mutating func recordFailure() {
+        consecutiveFailures += 1
+        if consecutiveFailures >= failureThreshold.value {
+            breakerIsOpen = true
+            backoffIsActive = false
+        } else {
+            backoffIsActive = true
+        }
     }
 
     private mutating func releaseIfNeeded(into commands: inout [Command]) {
@@ -90,7 +115,7 @@ struct KeyboardSafetyLifecycle: Equatable {
 
     private mutating func requestIfSafe(into commands: inout [Command]) {
         guard lifecycle == .running, outputIsReady, hasLease, hasSeizureIntent,
-              watchdogIsHealthy, !breakerIsOpen, ownership == .none else { return }
+              watchdogIsHealthy, !breakerIsOpen, !backoffIsActive, ownership == .none else { return }
         ownership = .requested
         commands.append(.acquire)
     }

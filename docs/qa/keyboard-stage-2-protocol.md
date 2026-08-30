@@ -27,7 +27,7 @@ For each row, begin stopped, verify the disposable device works physically, star
 7. Sleep/wake and logout (not login/FileVault input).
 8. Update replacement and rollback, with ownership released before replacement.
 9. Uninstall, with ownership released before removal.
-10. Repeated faults through the configured breaker threshold; confirm backoff blocks automatic reseizure and only explicit recovery resets it.
+10. Repeated acquisition or runtime-owner failures through the configured positive threshold. Below threshold, each failure starts backoff and backoff expiry may request acquisition again if every prerequisite remains true. At threshold the breaker opens: backoff expiry and prerequisite loss/restoration must not request acquisition. Stop/start also leaves a tripped breaker open. Confirm only the explicit operator recovery/reset event closes it, clears the consecutive count, and permits a request when all prerequisites are true.
 
 A row fails if seizure is requested before output plus lease, physical input does not resume, another device is affected, automatic reseizure occurs after breaker trip, recovery cannot be observed, or logs contain secrets. On any failure stop the run; do not tune around it or proceed to built-in testing.
 

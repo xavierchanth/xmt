@@ -104,7 +104,6 @@ final class TapHoldResolverTests: XCTestCase {
     }
 
     func testReleaseAfterThresholdWithoutTimerStillResolvesAsHold() {
-        var harness = ResolverHarness(configuration: makeConfiguration(hold: 200))
         var resolver = TapHoldResolver(configuration: makeConfiguration(hold: 200))
         _ = resolver.receive(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: false),
                              at: KeyboardInstant(milliseconds: 0))
@@ -112,7 +111,6 @@ final class TapHoldResolverTests: XCTestCase {
         let resolution = resolver.receive(.keyUp(device: TestDevice.included, key: TestKey.a),
                                           at: KeyboardInstant(milliseconds: 500))
         XCTAssertEqual(resolution.outputs, [.modifierDown(.control), .modifierUp(.control)])
-        harness.send(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: false), at: 0)
     }
 
     func testPerKeyTimingOverrideBeatsDevicePolicy() {

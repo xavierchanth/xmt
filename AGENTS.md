@@ -8,7 +8,7 @@ A single macOS app: XMT — Xavier's macOS Tweaks, a menu bar utility hosting tw
 
 Swift 5, SwiftUI plus AppKit, macOS 26 minimum (`MACOSX_DEPLOYMENT_TARGET = 26.0`), one Swift package dependency (`KeyboardShortcuts`). Voice Transcription additionally uses `Speech`, `AVFoundation`, `CoreAudio`, and `IOBluetooth` from the SDK, and the macOS 26 speech types are used without an availability fallback. The app is not sandboxed. The Xcode project is the build system; there is no `Package.swift`.
 
-Source layout by area: `XMT/App`, `XMT/WindowManagement`, `XMT/VoiceTranscription` (with `Audio`, `Session`, `Output`), `XMT/Triggers`, `XMT/Configuration`, `XMT/HotKeys`, `XMT/Services`, `XMT/Settings`, `XMT/MenuBar`, `XMT/Resources`, and `XMTTests`.
+Source layout by area: `XMT/App`, `XMT/WindowManagement`, `XMT/VoiceTranscription` (with `Audio`, `Session`, `Output`), `XMT/KeyboardCustomization`, `XMT/Triggers`, `XMT/Configuration`, `XMT/HotKeys`, `XMT/Services`, `XMT/Settings`, `XMT/MenuBar`, `XMT/Resources`, and `XMTTests`. Keyboard Customization currently contains only compiled pure resolver, safety-lifecycle, and synthetic identity-matcher models; none is connected to live HID. `XMTVirtualKeyboard` is a separate inert, unsigned-build-only dext skeleton outside the app scheme and bundle.
 
 ## Building and testing
 
