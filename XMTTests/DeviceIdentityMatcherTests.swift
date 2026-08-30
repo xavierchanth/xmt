@@ -1,5 +1,4 @@
 import XCTest
-@testable import XMT
 
 final class DeviceIdentityMatcherTests: XCTestCase {
     private let external = KeyboardDeviceDescriptor(builtIn: false, vendorID: 0x1234, productID: 0x5678, serialNumber: "unit-a", locationID: 7, transport: "USB")
