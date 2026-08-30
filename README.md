@@ -28,7 +28,7 @@ Maintained for personal use. There are no plans to publish it and no support com
 
 - macOS 26 or later
 - Xcode 26 or later
-- Accessibility permission for Window Mover, and for Voice Transcription's optional auto-paste
+- Accessibility permission for Window Mover, Voice Transcription's optional auto-paste, and Paste Latest
 - Microphone and Input Monitoring permission for Voice Transcription
 - Speech assets for the configured locale, downloadable from the Voice settings tab
 
