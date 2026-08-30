@@ -71,6 +71,9 @@
 		B000041 /* Reconciliation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100015 /* Reconciliation.swift */; };
 		B000042 /* TranscriptCommitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100018 /* TranscriptCommitter.swift */; };
 		B000043 /* PasteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100019 /* PasteService.swift */; };
+		C000001 /* KeyboardSafetyLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C100001 /* KeyboardSafetyLifecycle.swift */; };
+		C000002 /* KeyboardSafetyLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C100001 /* KeyboardSafetyLifecycle.swift */; };
+		C000003 /* KeyboardSafetyLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C100002 /* KeyboardSafetyLifecycleTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -125,6 +128,8 @@
 		B100026 /* SessionMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMachineTests.swift; sourceTree = "<group>"; };
 		B100027 /* ReconciliationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconciliationTests.swift; sourceTree = "<group>"; };
 		B100028 /* CommitSequenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommitSequenceTests.swift; sourceTree = "<group>"; };
+		C100001 /* KeyboardSafetyLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardSafetyLifecycle.swift; sourceTree = "<group>"; };
+		C100002 /* KeyboardSafetyLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardSafetyLifecycleTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -170,6 +175,7 @@
 				B400001 /* Triggers */,
 				B400002 /* Configuration */,
 				B400003 /* VoiceTranscription */,
+				C400001 /* KeyboardCustomization */,
 			);
 			path = XMT;
 			sourceTree = "<group>";
@@ -255,6 +261,7 @@
 				B100026 /* SessionMachineTests.swift */,
 				B100027 /* ReconciliationTests.swift */,
 				B100028 /* CommitSequenceTests.swift */,
+				C100002 /* KeyboardSafetyLifecycleTests.swift */,
 			);
 			path = XMTTests;
 			sourceTree = "<group>";
@@ -338,6 +345,14 @@
 				B100019 /* PasteService.swift */,
 			);
 			path = Output;
+			sourceTree = "<group>";
+		};
+		C400001 /* KeyboardCustomization */ = {
+			isa = PBXGroup;
+			children = (
+				C100001 /* KeyboardSafetyLifecycle.swift */,
+			);
+			path = KeyboardCustomization;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -483,6 +498,7 @@
 				B000018 /* TranscriptCommitter.swift in Sources */,
 				B000019 /* PasteService.swift in Sources */,
 				B000020 /* VoiceTranscriptionModule.swift in Sources */,
+				C000001 /* KeyboardSafetyLifecycle.swift in Sources */,
 				B000021 /* VoiceSettingsView.swift in Sources */,
 				B000022 /* DevicePriorityListView.swift in Sources */,
 			);
@@ -508,6 +524,8 @@
 				B000041 /* Reconciliation.swift in Sources */,
 				B000042 /* TranscriptCommitter.swift in Sources */,
 				B000043 /* PasteService.swift in Sources */,
+				C000002 /* KeyboardSafetyLifecycle.swift in Sources */,
+				C000003 /* KeyboardSafetyLifecycleTests.swift in Sources */,
 				B000023 /* TriggerArbitratorTests.swift in Sources */,
 				B000024 /* ConfigTests.swift in Sources */,
 				B000025 /* DeviceSelectorTests.swift in Sources */,
