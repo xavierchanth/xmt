@@ -1,0 +1,31 @@
+/*
+ * XMTVirtualKeyboardDevice
+ *
+ * Build-only feasibility skeleton for the Keyboard Customization T-1 spike.
+ * This class is deliberately inert: the extension bundle declares no
+ * IOKitPersonalities, so nothing can ever match it and it cannot be loaded,
+ * activated, or attached to any hardware. It exists to answer one question —
+ * whether a HIDDriverKit virtual keyboard compiles in this environment.
+ */
+
+#ifndef XMTVirtualKeyboardDevice_h
+#define XMTVirtualKeyboardDevice_h
+
+#include <Availability.h>
+#include <DriverKit/IOService.iig>
+#include <HIDDriverKit/IOUserHIDDevice.iig>
+
+class XMTVirtualKeyboardDevice: public IOUserHIDDevice
+{
+public:
+    virtual bool init() override;
+    virtual void free() override;
+
+    virtual kern_return_t Start(IOService * provider) override;
+    virtual kern_return_t Stop(IOService * provider) override;
+
+    virtual OSDictionary * newDeviceDescription() override;
+    virtual OSData * newReportDescriptor() override;
+};
+
+#endif /* XMTVirtualKeyboardDevice_h */

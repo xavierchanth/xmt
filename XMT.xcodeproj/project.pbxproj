@@ -74,6 +74,16 @@
 		C000001 /* KeyboardSafetyLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C100001 /* KeyboardSafetyLifecycle.swift */; };
 		C000002 /* KeyboardSafetyLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C100001 /* KeyboardSafetyLifecycle.swift */; };
 		C000003 /* KeyboardSafetyLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C100002 /* KeyboardSafetyLifecycleTests.swift */; };
+		D000001 /* XMTVirtualKeyboardDevice.iig in Sources */ = {isa = PBXBuildFile; fileRef = D100001 /* XMTVirtualKeyboardDevice.iig */; };
+		D000002 /* XMTVirtualKeyboardDevice.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D100002 /* XMTVirtualKeyboardDevice.cpp */; };
+		D000001 /* KeyboardDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100001 /* KeyboardDomain.swift */; };
+		D000002 /* KeyboardConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100002 /* KeyboardConfiguration.swift */; };
+		D000003 /* TapHoldResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100003 /* TapHoldResolver.swift */; };
+		D000011 /* KeyboardDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100001 /* KeyboardDomain.swift */; };
+		D000012 /* KeyboardConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100002 /* KeyboardConfiguration.swift */; };
+		D000013 /* TapHoldResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100003 /* TapHoldResolver.swift */; };
+		D000021 /* TapHoldResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100021 /* TapHoldResolverTests.swift */; };
+		D000022 /* TapHoldResolverPropertyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100022 /* TapHoldResolverPropertyTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -130,6 +140,16 @@
 		B100028 /* CommitSequenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommitSequenceTests.swift; sourceTree = "<group>"; };
 		C100001 /* KeyboardSafetyLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardSafetyLifecycle.swift; sourceTree = "<group>"; };
 		C100002 /* KeyboardSafetyLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardSafetyLifecycleTests.swift; sourceTree = "<group>"; };
+		D100001 /* XMTVirtualKeyboardDevice.iig */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.iig; path = XMTVirtualKeyboardDevice.iig; sourceTree = "<group>"; };
+		D100002 /* XMTVirtualKeyboardDevice.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = XMTVirtualKeyboardDevice.cpp; sourceTree = "<group>"; };
+		D100003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D100004 /* XMTVirtualKeyboard.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = XMTVirtualKeyboard.entitlements; sourceTree = "<group>"; };
+		D100099 /* XMTVirtualKeyboard.dext */ = {isa = PBXFileReference; explicitFileType = wrapper.driver-extension; includeInIndex = 0; path = XMTVirtualKeyboard.dext; sourceTree = BUILT_PRODUCTS_DIR; };
+		D100001 /* KeyboardDomain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardDomain.swift; sourceTree = "<group>"; };
+		D100002 /* KeyboardConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardConfiguration.swift; sourceTree = "<group>"; };
+		D100003 /* TapHoldResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TapHoldResolver.swift; sourceTree = "<group>"; };
+		D100021 /* TapHoldResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TapHoldResolverTests.swift; sourceTree = "<group>"; };
+		D100022 /* TapHoldResolverPropertyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TapHoldResolverPropertyTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -157,6 +177,7 @@
 			children = (
 				AA400001 /* XMT */,
 				AA400080 /* XMTTests */,
+				D400001 /* XMTVirtualKeyboard */,
 				AA400099 /* Products */,
 				AA400100 /* Frameworks */,
 			);
@@ -261,6 +282,8 @@
 				B100026 /* SessionMachineTests.swift */,
 				B100027 /* ReconciliationTests.swift */,
 				B100028 /* CommitSequenceTests.swift */,
+				D100021 /* TapHoldResolverTests.swift */,
+				D100022 /* TapHoldResolverPropertyTests.swift */,
 				C100002 /* KeyboardSafetyLifecycleTests.swift */,
 			);
 			path = XMTTests;
@@ -271,6 +294,7 @@
 			children = (
 				AA100099 /* XMT.app */,
 				AA100020 /* XMTTests.xctest */,
+				D100099 /* XMTVirtualKeyboard.dext */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -351,8 +375,22 @@
 			isa = PBXGroup;
 			children = (
 				C100001 /* KeyboardSafetyLifecycle.swift */,
+				D100001 /* KeyboardDomain.swift */,
+				D100002 /* KeyboardConfiguration.swift */,
+				D100003 /* TapHoldResolver.swift */,
 			);
 			path = KeyboardCustomization;
+			sourceTree = "<group>";
+		};
+		D400001 /* XMTVirtualKeyboard */ = {
+			isa = PBXGroup;
+			children = (
+				D100001 /* XMTVirtualKeyboardDevice.iig */,
+				D100002 /* XMTVirtualKeyboardDevice.cpp */,
+				D100003 /* Info.plist */,
+				D100004 /* XMTVirtualKeyboard.entitlements */,
+			);
+			path = XMTVirtualKeyboard;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -398,6 +436,23 @@
 			productReference = AA100020 /* XMTTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		D500001 /* XMTVirtualKeyboard */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D700001 /* Build configuration list for PBXNativeTarget "XMTVirtualKeyboard" */;
+			buildPhases = (
+				D300000 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = XMTVirtualKeyboard;
+			packageProductDependencies = (
+			);
+			productName = XMTVirtualKeyboard;
+			productReference = D100099 /* XMTVirtualKeyboard.dext */;
+			productType = "com.apple.product-type.driver-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -413,6 +468,9 @@
 					};
 					AA500002 = {
 						CreatedOnToolsVersion = 15.3;
+					};
+					D500001 = {
+						CreatedOnToolsVersion = 26.6;
 					};
 				};
 			};
@@ -434,6 +492,7 @@
 			targets = (
 				AA500001 /* XMT */,
 				AA500002 /* XMTTests */,
+				D500001 /* XMTVirtualKeyboard */,
 			);
 		};
 /* End PBXProject section */
@@ -501,6 +560,9 @@
 				C000001 /* KeyboardSafetyLifecycle.swift in Sources */,
 				B000021 /* VoiceSettingsView.swift in Sources */,
 				B000022 /* DevicePriorityListView.swift in Sources */,
+				D000001 /* KeyboardDomain.swift in Sources */,
+				D000002 /* KeyboardConfiguration.swift in Sources */,
+				D000003 /* TapHoldResolver.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -532,6 +594,20 @@
 				B000026 /* SessionMachineTests.swift in Sources */,
 				B000027 /* ReconciliationTests.swift in Sources */,
 				B000028 /* CommitSequenceTests.swift in Sources */,
+				D000011 /* KeyboardDomain.swift in Sources */,
+				D000012 /* KeyboardConfiguration.swift in Sources */,
+				D000013 /* TapHoldResolver.swift in Sources */,
+				D000021 /* TapHoldResolverTests.swift in Sources */,
+				D000022 /* TapHoldResolverPropertyTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D300000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D000001 /* XMTVirtualKeyboardDevice.iig in Sources */,
+				D000002 /* XMTVirtualKeyboardDevice.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -727,6 +803,58 @@
 			};
 			name = Release;
 		};
+		D800001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_ENTITLEMENTS = XMTVirtualKeyboard/XMTVirtualKeyboard.entitlements;
+				CODE_SIGN_IDENTITY = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DRIVERKIT_DEPLOYMENT_TARGET = 25.5;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = XMTVirtualKeyboard/Info.plist;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					DriverKit,
+					"-framework",
+					HIDDriverKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.xavierchanth.xmt.virtualkeyboard;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = driverkit;
+				SUPPORTED_PLATFORMS = driverkit;
+			};
+			name = Debug;
+		};
+		D800002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_ENTITLEMENTS = XMTVirtualKeyboard/XMTVirtualKeyboard.entitlements;
+				CODE_SIGN_IDENTITY = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DRIVERKIT_DEPLOYMENT_TARGET = 25.5;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = XMTVirtualKeyboard/Info.plist;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					DriverKit,
+					"-framework",
+					HIDDriverKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.xavierchanth.xmt.virtualkeyboard;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = driverkit;
+				SUPPORTED_PLATFORMS = driverkit;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -753,6 +881,15 @@
 			buildConfigurations = (
 				AA800005 /* Debug */,
 				AA800006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D700001 /* Build configuration list for PBXNativeTarget "XMTVirtualKeyboard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D800001 /* Debug */,
+				D800002 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

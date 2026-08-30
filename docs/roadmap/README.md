@@ -13,7 +13,7 @@ There are no formal initiative records and no tracker in this repository. This p
 | [Configuration](../specification/configuration.md) | Implemented for both modules, with explicit reloads only. File watching remains unimplemented; see [configuration gaps](#configuration-gaps). |
 | [App shell](../architecture/app-shell.md) | Partial. Menu bar presence, lazy settings, shared Accessibility presentation, single-flight actions, shared configuration resolution, and two compiled-in module lifecycles exist; there is no general registration list or per-module permission declaration API. |
 | [Module model](../architecture/modules.md) | Partial. Both modules have their own compiled-in lifecycle manager and settings boundary; no general module abstraction exists. |
-| [Keyboard Customization](../architecture/keyboard-customization.md) | **T-1 feasibility spike ready.** Design direction is approved; no implementation or live device test has begun. Build-only validation must precede separately authorized external-keyboard and built-in-keyboard tests. See [feasibility gates](#keyboard-customization-feasibility). |
+| [Keyboard Customization](../architecture/keyboard-customization.md) | **T-1 build-only stage partially run.** Design direction is approved; no live device test has begun. An inert virtual-keyboard DriverKit target compiles unsigned; signing is blocked on entitlements Apple has not been asked for. See [feasibility gates](#keyboard-customization-feasibility). |
 | Menu Bar Management | Cross-app management is closed as a public-API no-go. XMT-own-icon behavior remains app-shell territory. |
 
 "Implemented" here means the code exists, compiles into the shipping target, and is reachable from the app. It does not mean the behavior has been observed working.
@@ -70,6 +70,8 @@ The approved T-1 spike is ready to test whether the protected-input architecture
 The gates are sequential and separately authorized:
 
 1. **Build-only / no-live-device stage.** Create only enough spike scaffolding to prove the app, task-scoped seizure owner, HIDDriverKit virtual keyboard, XPC lease, and independent watchdog can compile, sign in the available development environment, and package coherently. Do not open or seize any keyboard and do not activate the design against live input.
+
+   Partially run. Only the HIDDriverKit virtual keyboard was attempted: an inert `XMTVirtualKeyboard` DriverKit target compiles and packages unsigned, declares no `IOKitPersonalities`, and is not embedded in `XMT.app`. Signing is blocked — the four DriverKit entitlements the design needs are restricted, none has been requested from or granted by Apple, no provisioning profile carrying them exists, and there is no Developer ID identity on the machine. The seizure owner, XPC lease, and watchdog are unbuilt and unproven. Observations are in [Keyboard DriverKit build-only evidence](../qa/keyboard-driverkit-feasibility.md).
 2. **External-keyboard test.** Proceed only after explicit authorization following review of build-only results and a recovery procedure. Test one expendable external keyboard first, with all other devices excluded.
 3. **Built-in-keyboard test.** Proceed only under a second explicit authorization after external-device results and recovery behavior have been reviewed. Direct dext ownership remains out of scope, as do login-window and FileVault interception.
 

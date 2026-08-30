@@ -30,6 +30,17 @@ install: build
 run: build
     open "{{app}}"
 
+# Build the inert DriverKit virtual-keyboard spike target, unsigned. Not part of `check`.
+build-dext:
+    xcodebuild build \
+        -project "{{project}}" \
+        -target XMTVirtualKeyboard \
+        -configuration Release \
+        CONFIGURATION_BUILD_DIR="$PWD/{{build_dir}}/dext/Products" \
+        OBJROOT="$PWD/{{build_dir}}/dext/obj" \
+        SYMROOT="$PWD/{{build_dir}}/dext/sym" \
+        SHARED_PRECOMPS_DIR="$PWD/{{build_dir}}/dext/pch"
+
 # Validate the documentation tree: headings, links, fragments, and index reachability.
 docs-check:
     node assets/check-docs.mjs
