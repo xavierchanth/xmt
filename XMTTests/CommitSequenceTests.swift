@@ -39,26 +39,15 @@ import XCTest
         XCTAssertEqual(clipboard, "safe")
     }
 
-    func testRetainedTranscriptLoadsFromExistingFile() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        try Data("survives relaunch".utf8).write(to: root.appendingPathComponent("last-transcript.txt"))
-        XCTAssertEqual(try TranscriptCommitter.loadRetainedTranscript(directory: root), "survives relaunch")
-    }
-
     func testCommitPointPrecedesPasteAndAtomicReplacement() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString); try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let final = root.appendingPathComponent("last-transcript.txt"); try Data("old".utf8).write(to: final)
         var events: [String] = []
-        let fm = FileManager.default
         let deps = TranscriptCommitter.Dependencies(
-            setClipboard: { _ in events.append("clipboard") }, write: { try $0.write(to: $1); events.append("temp") },
-            move: { try fm.moveItem(at: $0, to: $1) }, replace: { source, destination in _ = try fm.replaceItemAt(destination, withItemAt: source); events.append("replace") },
-            remove: { if fm.fileExists(atPath: $0.path) { try fm.removeItem(at: $0) } }, exists: { fm.fileExists(atPath: $0.path) },
+            setClipboard: { _ in events.append("clipboard") },
             paste: { _, _ in events.append("paste") }, deleteRecovery: { events.append("delete-audio") })
-        let result = try await TranscriptCommitter(directory: root, dependencies: deps).commit("new", settings: .init(keepLastTranscript: true, autoPaste: true), targetPID: 1)
+        let result = try await TranscriptCommitter(dependencies: deps).commit("new", settings: .init(autoPaste: true), targetPID: 1)
         XCTAssertNil(result.pasteError); XCTAssertEqual(String(data: try Data(contentsOf: final), encoding: .utf8), "old")
         XCTAssertEqual(events, ["clipboard", "delete-audio", "paste"])
     }
@@ -69,9 +58,9 @@ import XCTest
         defer { try? FileManager.default.removeItem(at: root) }
         let final = root.appendingPathComponent("last-transcript.txt"); try Data("stale".utf8).write(to: final)
         var deleted = false; let fm = FileManager.default
-        let deps = TranscriptCommitter.Dependencies(setClipboard: { _ in }, write: { _, _ in }, move: { _, _ in }, replace: { _, _ in },
-            remove: { try fm.removeItem(at: $0) }, exists: { fm.fileExists(atPath: $0.path) }, paste: { _, _ in throw Expected.paste }, deleteRecovery: { deleted = true })
-        let result = try await TranscriptCommitter(directory: root, dependencies: deps).commit("safe", settings: .init(keepLastTranscript: false, autoPaste: true), targetPID: 1)
+        let deps = TranscriptCommitter.Dependencies(setClipboard: { _ in },
+            paste: { _, _ in throw Expected.paste }, deleteRecovery: { deleted = true })
+        let result = try await TranscriptCommitter(dependencies: deps).commit("safe", settings: .init(autoPaste: true), targetPID: 1)
         XCTAssertNotNil(result.pasteError); XCTAssertTrue(deleted); XCTAssertTrue(fm.fileExists(atPath: final.path))
     }
 
@@ -82,7 +71,7 @@ import XCTest
         let audio = try store.prepareActive(metadata); try Data("uncommitted".utf8).write(to: audio)
         var deps = TranscriptCommitter.Dependencies.live
         deps.deleteRecovery = { _ = try Reconciliation.run(store: store, transcriptWasCommitted: true) }
-        _ = try await TranscriptCommitter(directory: root, dependencies: deps).commit("safe", settings: .init(keepLastTranscript: false, autoPaste: false), targetPID: nil)
+        _ = try await TranscriptCommitter(dependencies: deps).commit("safe", settings: .init(autoPaste: false), targetPID: nil)
         XCTAssertEqual(try Reconciliation.run(store: store), .clean)
     }
 
@@ -91,7 +80,7 @@ import XCTest
         var deps = TranscriptCommitter.Dependencies.live
         deps.setClipboard = { _ in events.append("clipboard") }; deps.deleteRecovery = { events.append("cleanup"); throw Expected.cleanup }
         deps.paste = { _, _ in events.append("paste") }
-        do { _ = try await TranscriptCommitter(directory: FileManager.default.temporaryDirectory, dependencies: deps).commit("safe", settings: .init(keepLastTranscript: false, autoPaste: true), targetPID: 1); XCTFail() }
+        do { _ = try await TranscriptCommitter(dependencies: deps).commit("safe", settings: .init(autoPaste: true), targetPID: 1); XCTFail() }
         catch { guard case TranscriptCommitter.CommitError.recoveryCleanupFailed = error else { return XCTFail("wrong error") } }
         XCTAssertEqual(events, ["clipboard", "cleanup"])
     }
@@ -99,7 +88,7 @@ import XCTest
     func testClipboardFailureDoesNotReachRecoveryDeletion() async {
         enum Expected: Error { case clipboard }; var deleted = false
         var deps = TranscriptCommitter.Dependencies.live; deps.setClipboard = { _ in throw Expected.clipboard }; deps.deleteRecovery = { deleted = true }
-        do { _ = try await TranscriptCommitter(directory: FileManager.default.temporaryDirectory, dependencies: deps).commit("x", settings: .init(keepLastTranscript: false, autoPaste: false), targetPID: nil); XCTFail() } catch {}
+        do { _ = try await TranscriptCommitter(dependencies: deps).commit("x", settings: .init(autoPaste: false), targetPID: nil); XCTFail() } catch {}
         XCTAssertFalse(deleted)
     }
 }

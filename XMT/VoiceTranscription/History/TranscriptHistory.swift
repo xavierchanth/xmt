@@ -14,9 +14,9 @@ struct TranscriptHistorySnapshot: Equatable, Sendable {
 
     init(_ entries: [TranscriptHistoryEntry] = []) {
         var seen = Set<UUID>()
-        self.entries = entries
-            .filter { !$0.text.isEmpty && seen.insert($0.id).inserted }
-            .sorted { ($0.recordedAt, $0.id.uuidString) > ($1.recordedAt, $1.id.uuidString) }
+        // Repositories already provide their durable sequence order. A stable filter preserves it,
+        // including timestamp ties, rather than inventing an unrelated UUID tie-break.
+        self.entries = entries.filter { !$0.text.isEmpty && seen.insert($0.id).inserted }
     }
 
     var isEmpty: Bool { entries.isEmpty }

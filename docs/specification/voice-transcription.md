@@ -14,7 +14,7 @@ The target's deployment target is macOS 26.0, and the speech types are compiled 
 
 The module is a main-actor singleton owned by the app delegate. It is compiled in, not registered through a general module list.
 
-- At `applicationDidFinishLaunching`, XMT registers the module. Registration reconciles recovery artifacts, installs the paste-latest shortcut handler, migrates the former keep-last preference, loads configuration, imports the legacy one-slot transcript when present, and loads the newest history row as Paste Latest. Registration acquires no microphone, speech, or analyzer resource, and it prompts for nothing.
+- At `applicationDidFinishLaunching`, XMT registers the module. Registration reconciles recovery artifacts, installs the paste-latest shortcut handler, migrates the former keep-last preference, then resolves and applies initial configuration in one authoritative task before any history operation. Only when effective history is enabled does it open history, import the legacy one-slot transcript, and load the newest row as Paste Latest. When effectively disabled it removes stale legacy plaintext without opening or creating SQLite and never removes recovery audio. Registration acquires no microphone, speech, or analyzer resource, and it prompts for nothing.
 - When the app becomes active, XMT refreshes the input-device list and reloads configuration.
 - At `applicationWillTerminate`, the module stops: the event tap observation is cancelled, the maximum-duration timer is invalidated, capture is stopped, the arming and analysis tasks are cancelled, any live transcriber is cancelled and its asset reservation released, and the partial transcript is cleared. A stop while a recovery recording is pending preserves that pending state; otherwise the session reducer is reset and the status becomes disabled.
 - Enabling the module installs the Fn event tap and enables the paste-latest shortcut; disabling it performs the same stop as termination and disables both triggers. Neither requires restarting XMT.
@@ -152,15 +152,15 @@ The module also keeps the transcript in memory as the last transcript. When hist
 
 ### Durable history storage
 
-Retained transcripts are stored in one SQLite database, `transcript-history.sqlite3`, in the same Voice Transcription cache directory. The behavior below is covered by `XMTTests/TranscriptHistoryStoreTests.swift`.
+Retained transcripts are stored in `history.sqlite3` under `~/Library/Application Support/com.xavierchanth.xmt/VoiceTranscription/`. Unlike the former cache file, Application Support is durable application state and may be included in system or user backups; transcript text and its metadata therefore have the corresponding at-rest and backup privacy exposure. The behavior below is covered by `XMTTests/TranscriptHistoryStoreTests.swift`.
 
 Access is serialized: the store is an actor owning a single connection opened in SQLite's serialized threading mode, and it is the only writer. The schema is declared `STRICT`, carries the schema version in both `PRAGMA user_version` and a `schema_metadata` table, and is created idempotently on every open; a database whose version is newer than the running build is rejected rather than reinterpreted.
 
-An entry holds five values and no others: identity, recorded instant in milliseconds, insertion sequence, text, and locale. No application identity, process identifier, audio path, or partial transcript is stored, because no column exists to hold one. Entries are listed newest first, ties on the recorded instant broken by insertion sequence, so commit order is total.
+An entry holds exactly six values: identity, recorded instant in milliseconds, insertion sequence, transcript text, locale, and source state (`live`, `recovery`, or `legacy`). Source reveals how the transcript reached durable state but stores no application or recording identity. No target application identity, process identifier, audio path, or partial transcript is stored, because no column exists to hold one. Entries are listed newest first, ties on the recorded instant broken by insertion sequence, so commit order is total and presentation preserves that order.
 
 Each append runs in one immediate transaction that inserts and then prunes, so history is never observed above its bounds. The insert is idempotent on the entry identity, which is the committing session's identity: a commit replayed after an interrupted run restores the same row rather than a second one. Retention prunes by maximum entries and, when retention days are set, by age; the newest retained entry is never pruned by an append.
 
-The former one-slot `last-transcript.txt` cache is imported at registration when history is enabled. Its deterministic identity and transactional completion marker make retries idempotent. The legacy file is deleted only after that transaction commits; unreadable data remains untouched and yields a content-free diagnostic.
+The former one-slot `last-transcript.txt` cache is imported at registration when effective history is enabled. Its deterministic identity and transactional completion marker make retries idempotent. The legacy file is deleted only after that transaction commits; a readable empty file is simply deleted, while unreadable data remains untouched and yields a content-free diagnostic. With effective history disabled, registration deletes the legacy plaintext directly without opening the database and leaves all recovery audio untouched.
 
 ### Auto-paste
 
@@ -208,7 +208,7 @@ The panel is a lazily created floating utility panel. Nothing is built, read, or
 
 Paste from a history surface uses the application that was frontmost immediately before the surface took key focus, captured as a PID with its bundle identifier. Before any event is posted, that capture is re-verified: a target that is XMT itself, older than five minutes, no longer running, or whose PID now belongs to a different bundle identifier is refused. In every refusal — and in every posting failure — the transcript has already been written to the clipboard and is never removed from it, so the user can always paste manually. A blank transcript is neither copied nor pasted, and overlapping paste requests are dropped rather than queued.
 
-Reading, deleting, and clearing go through a repository over the durable history store. A storage failure leaves the surfaces populated and shows a diagnostic instead of pretending the action succeeded.
+Reading, deleting, and clearing go through a repository over the durable history store. A storage failure leaves the surfaces populated and shows a diagnostic instead of pretending the action succeeded. A failure opening the process-wide store is cached for the remainder of that process; explicit UI reload does not retry it, avoiding repeated disk work, and relaunch is the retry boundary.
 
 ## Related documentation
 

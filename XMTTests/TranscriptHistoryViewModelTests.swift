@@ -15,7 +15,12 @@ final class TranscriptHistoryViewModelTests: XCTestCase {
         var deleted: [UUID] = []
         var clears = 0
 
-        init(_ stored: [TranscriptHistoryEntry]) { self.stored = stored }
+        init(_ stored: [TranscriptHistoryEntry]) {
+            self.stored = stored.enumerated().sorted {
+                $0.element.recordedAt == $1.element.recordedAt
+                    ? $0.offset < $1.offset : $0.element.recordedAt > $1.element.recordedAt
+            }.map(\.element)
+        }
 
         func entries(limit: Int?) async throws -> [TranscriptHistoryEntry] {
             reads += 1

@@ -90,7 +90,12 @@ final class SQLiteConnection {
             try? execute("ROLLBACK;")
             throw error
         }
-        try execute("COMMIT;")
+        do { try execute("COMMIT;") } catch {
+            // A failed COMMIT can leave SQLite inside the transaction. Roll it back before the
+            // connection is reused; otherwise every later BEGIN fails and poisons the actor.
+            try? execute("ROLLBACK;")
+            throw error
+        }
     }
 }
 

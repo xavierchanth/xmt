@@ -37,7 +37,12 @@ actor InMemoryTranscriptHistoryRepository: TranscriptHistoryRepository {
     private var storage: [TranscriptHistoryEntry]
 
     init(_ entries: [TranscriptHistoryEntry] = []) {
-        storage = entries.sorted { ($0.recordedAt, $0.id.uuidString) > ($1.recordedAt, $1.id.uuidString) }
+        storage = entries.enumerated().sorted {
+            if $0.element.recordedAt != $1.element.recordedAt {
+                return $0.element.recordedAt > $1.element.recordedAt
+            }
+            return $0.offset < $1.offset
+        }.map(\.element)
     }
 
     func entries(limit: Int?) async throws -> [TranscriptHistoryEntry] {
@@ -46,8 +51,8 @@ actor InMemoryTranscriptHistoryRepository: TranscriptHistoryRepository {
     }
 
     func append(_ entry: TranscriptHistoryEntry) {
-        storage.insert(entry, at: 0)
-        storage.sort { ($0.recordedAt, $0.id.uuidString) > ($1.recordedAt, $1.id.uuidString) }
+        let index = storage.firstIndex { $0.recordedAt <= entry.recordedAt } ?? storage.endIndex
+        storage.insert(entry, at: index)
     }
 
     func delete(id: UUID) async throws { storage.removeAll { $0.id == id } }

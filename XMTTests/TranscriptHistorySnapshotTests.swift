@@ -7,14 +7,18 @@ final class TranscriptHistorySnapshotTests: XCTestCase {
         TranscriptHistoryEntry(id: id, recordedAt: base.addingTimeInterval(offset), text: text, localeIdentifier: "en-US")
     }
 
-    func testSnapshotOrdersNewestFirstRegardlessOfInputOrder() {
-        let snapshot = TranscriptHistorySnapshot([entry("old", offset: 0), entry("newest", offset: 20), entry("middle", offset: 10)])
-        XCTAssertEqual(snapshot.entries.map(\.text), ["newest", "middle", "old"])
+    func testSnapshotPreservesRepositorySequenceIncludingTimestampTies() {
+        let snapshot = TranscriptHistorySnapshot([
+            entry("newest", offset: 20, id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!),
+            entry("tie-second", offset: 20, id: UUID(uuidString: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")!),
+            entry("old", offset: 0)
+        ])
+        XCTAssertEqual(snapshot.entries.map(\.text), ["newest", "tie-second", "old"])
         XCTAssertEqual(snapshot.latest?.text, "newest")
     }
 
     func testRecentIsBoundedToFiveNewestForTheMenu() {
-        let snapshot = TranscriptHistorySnapshot((0..<9).map { entry("t\($0)", offset: TimeInterval($0)) })
+        let snapshot = TranscriptHistorySnapshot((0..<9).reversed().map { entry("t\($0)", offset: TimeInterval($0)) })
         XCTAssertEqual(TranscriptHistorySnapshot.menuPreviewCount, 5)
         XCTAssertEqual(snapshot.recent().map(\.text), ["t8", "t7", "t6", "t5", "t4"])
         XCTAssertEqual(snapshot.recent(0).count, 0)
@@ -31,7 +35,7 @@ final class TranscriptHistorySnapshotTests: XCTestCase {
 
     func testSearchIsNewestFirstCaseAndDiacriticInsensitive() {
         let snapshot = TranscriptHistorySnapshot([
-            entry("Café review", offset: 1), entry("unrelated", offset: 2), entry("later cafe visit", offset: 3)
+            entry("later cafe visit", offset: 3), entry("unrelated", offset: 2), entry("Café review", offset: 1)
         ])
         XCTAssertEqual(snapshot.search("cafe").map(\.text), ["later cafe visit", "Café review"])
         XCTAssertEqual(snapshot.search("   ").map(\.text), snapshot.entries.map(\.text))

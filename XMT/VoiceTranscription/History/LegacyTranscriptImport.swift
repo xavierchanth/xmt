@@ -14,6 +14,21 @@ import Foundation
 /// The legacy file is deleted only after the row and marker transaction commits. If deletion is
 /// interrupted, deterministic identity makes the next launch harmlessly repeat the cleanup.
 enum LegacyTranscriptImport {
+    /// Launch boundary used after effective configuration has been applied. The disabled branch is
+    /// intentionally resolved before `openStore`, making managed disable testably unable to touch DB.
+    static func reconcileAfterConfiguration(
+        enabled: Bool, directory: URL, localeIdentifier: String,
+        openStore: () throws -> TranscriptHistoryStore
+    ) async throws -> TranscriptHistoryEntry? {
+        guard enabled else {
+            try removeWhenHistoryDisabled(directory: directory)
+            return nil
+        }
+        let store = try openStore()
+        _ = try await run(store: store, directory: directory, localeIdentifier: localeIdentifier)
+        return try await store.entries(limit: 1).first
+    }
+
     enum ImportError: Error { case unreadableLegacyTranscript }
     static let markerKey = "legacy_last_transcript_import"
     static let fileName = "last-transcript.txt"
@@ -62,8 +77,13 @@ enum LegacyTranscriptImport {
         }
         guard let candidate = candidate(directory: directory, localeIdentifier: localeIdentifier,
                                         fileManager: fileManager) else {
-            // Do not advance the marker or alter unreadable/invalid legacy data. The caller emits a
-            // content-free diagnostic by error type only.
+            // A readable empty file carries no private value and should converge rather than emit a
+            // diagnostic forever. Invalid UTF-8 remains untouched for diagnosis/recovery.
+            if let data = try? Data(contentsOf: url), String(data: data, encoding: .utf8) != nil {
+                if existingMarker == nil { try await store.setMetadata(markerKey, "empty") }
+                try fileManager.removeItem(at: url)
+                return .nothingToImport
+            }
             throw ImportError.unreadableLegacyTranscript
         }
         let didInsert: Bool
@@ -75,6 +95,13 @@ enum LegacyTranscriptImport {
         }
         try fileManager.removeItem(at: url)
         return didInsert ? .imported(candidate.entry) : .alreadyImported
+    }
+
+    /// Disabled retention cleanup. This deliberately has no store parameter: it cannot open or
+    /// create SQLite and it only removes the obsolete plaintext, never recovery audio.
+    static func removeWhenHistoryDisabled(directory: URL, fileManager: FileManager = .default) throws {
+        let url = directory.appendingPathComponent(fileName)
+        if fileManager.fileExists(atPath: url.path) { try fileManager.removeItem(at: url) }
     }
 
     /// Hex SHA-256 of the transcript text. Content-addressed so the same cache never imports twice,

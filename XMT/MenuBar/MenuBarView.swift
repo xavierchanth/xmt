@@ -7,6 +7,7 @@ struct MenuBarView: View {
     @ObservedObject private var history = TranscriptHistoryViewModel.shared
 
     var body: some View {
+        Group {
         switch voice.status {
         case .recording: Text("Voice: Recording…"); Button("Stop Recording") { voice.stopRecording() }
         case .finalizing: Text("Voice: Finalizing…")
@@ -19,8 +20,9 @@ struct MenuBarView: View {
         }
         if let feedback = voice.temporaryFeedback { Text("Voice: \(feedback)") }
         if !voice.lastTranscript.isEmpty { Button("Copy Last Transcript") { voice.copyLastTranscript() } }
-        // History is read when the menu opens, never on a timer.
-        Divider().task { await history.reload() }
+        // History is read when the menu root appears, never on a timer. The menu only requests the
+        // five rows it can render; the panel independently requests its full snapshot.
+        Divider()
         if history.hasEntries {
             Text("Recent Transcripts")
             ForEach(history.recentPreviews) { preview in
@@ -42,5 +44,7 @@ struct MenuBarView: View {
             .keyboardShortcut(",", modifiers: .command)
         Divider()
         Button("Quit XMT") { NSApplication.shared.terminate(nil) }.keyboardShortcut("q", modifiers: .command)
+        }
+        .onAppear { Task { await history.reload(limit: TranscriptHistorySnapshot.menuPreviewCount) } }
     }
 }

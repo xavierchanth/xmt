@@ -83,9 +83,9 @@ final class TranscriptHistoryViewModel: ObservableObject {
         await reload()
     }
 
-    func reload() async {
+    func reload(limit: Int? = nil) async {
         do {
-            snapshot = TranscriptHistorySnapshot(try await dependencies.repository.entries(limit: nil))
+            snapshot = TranscriptHistorySnapshot(try await dependencies.repository.entries(limit: limit))
             diagnostic = dependencies.openDiagnostic
         } catch {
             diagnostic = "History could not be read"

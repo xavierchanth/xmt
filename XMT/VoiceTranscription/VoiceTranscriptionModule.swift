@@ -91,22 +91,27 @@ final class VoiceTranscriptionModule: ObservableObject {
                 Task { @MainActor in self?.lastTranscript = note.object as? String ?? "" }
             }
         }
-        Task { await configureAndReload() }
-        Task { await importLegacyTranscriptIfNeeded() }
+        // One authoritative launch task: effective managed configuration must be applied before
+        // history is allowed to touch durable storage.
+        Task {
+            await configureAndReload()
+            await reconcileLegacyTranscriptForEffectiveHistory()
+        }
     }
 
-    /// Carries the pre-history one-slot cache into the durable store, at most once. The import is
-    /// idempotent and its failure is not fatal: history is an accessory, never a launch dependency.
-    private func importLegacyTranscriptIfNeeded() async {
-        guard historyEnabled else { return }
-        let directory = store.root, locale = localeIdentifier
+    /// Applies legacy retention only after effective configuration has resolved. Enabled history is
+    /// part of durable commit semantics; disabled history performs plaintext cleanup without ever
+    /// resolving the lazy SQLite provider and never touches recovery audio.
+    private func reconcileLegacyTranscriptForEffectiveHistory() async {
+        let directory = store.root
         do {
-            let history = try SharedTranscriptHistoryStore.shared(retention: historyRetentionPolicy)
-            _ = try await LegacyTranscriptImport.run(
-                store: history, directory: directory, localeIdentifier: locale)
-            if let newest = try await history.entries(limit: 1).first { lastTranscript = newest.text }
+            let newest = try await LegacyTranscriptImport.reconcileAfterConfiguration(
+                enabled: historyEnabled, directory: directory, localeIdentifier: localeIdentifier,
+                openStore: { try SharedTranscriptHistoryStore.shared(retention: historyRetentionPolicy) })
+            lastTranscript = newest?.text ?? ""
         } catch {
-            configDiagnostic = configDiagnostic ?? "Transcript history is unavailable"
+            configDiagnostic = configDiagnostic ?? (historyEnabled
+                ? "Transcript history is unavailable" : "Legacy transcript cleanup failed")
         }
     }
 
@@ -225,12 +230,6 @@ final class VoiceTranscriptionModule: ObservableObject {
         localeIdentifier = value.locale.value; devicePriority = value.inputDevicePriority.value; fallbackToSystemDefault = value.fallbackToSystemDefault.value
         applying = false
         applyPasteLatestShortcut(value.pasteLatestTranscriptShortcut)
-        if historyEnabled, lastTranscript.isEmpty {
-            Task { [weak self] in
-                guard let self, let newest = try? await SharedTranscriptHistoryStore.shared().entries(limit: 1).first else { return }
-                self.lastTranscript = newest.text
-            }
-        }
         if isEnabled { recoverDegradedAndObserve() } else { stop() }
         WindowMoverModule.shared.applyManaged(enabled: value.windowMoverEnabled, shortcut: value.windowMoverShortcut)
     }
@@ -355,7 +354,7 @@ final class VoiceTranscriptionModule: ObservableObject {
         }
         let result = try await TranscriptCommitter().commit(
             clean,
-            settings: .init(keepLastTranscript: historyEnabled, autoPaste: autoPaste && target != nil,
+            settings: .init(autoPaste: autoPaste && target != nil,
                             recordHistory: historyEnabled, sessionID: sessionID,
                             localeIdentifier: localeIdentifier,
                             historySource: { if case .pending = recovery { return .recovery }; return .live }(),

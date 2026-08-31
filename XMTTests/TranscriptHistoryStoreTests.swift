@@ -15,6 +15,19 @@ final class TranscriptHistoryStoreTests: XCTestCase {
 
     private var databaseURL: URL { root.appendingPathComponent("history.sqlite3") }
 
+    func testCommitFailureRollsBackAndConnectionRemainsUsable() throws {
+        let connection = try SQLiteConnection(path: root.appendingPathComponent("commit-failure.sqlite3").path)
+        try connection.execute("PRAGMA foreign_keys = ON;")
+        try connection.execute("CREATE TABLE parent(id INTEGER PRIMARY KEY);")
+        try connection.execute("CREATE TABLE child(parent_id INTEGER REFERENCES parent(id) DEFERRABLE INITIALLY DEFERRED);")
+        XCTAssertThrowsError(try connection.transaction {
+            try connection.execute("INSERT INTO child(parent_id) VALUES (99);")
+        })
+        XCTAssertEqual(try connection.scalar("SELECT COUNT(*) FROM child;"), 0)
+        try connection.transaction { try connection.execute("INSERT INTO parent(id) VALUES (1);") }
+        XCTAssertEqual(try connection.scalar("SELECT COUNT(*) FROM parent;"), 1)
+    }
+
     private func makeStore(_ retention: TranscriptRetentionPolicy = .default) throws -> TranscriptHistoryStore {
         try TranscriptHistoryStore(url: databaseURL, retention: retention)
     }
@@ -293,11 +306,43 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         XCTAssertEqual(count, 0)
 
         try writeLegacy("   \n\t ")
-        do {
-            _ = try await LegacyTranscriptImport.run(store: store, directory: root, localeIdentifier: "en-US")
-            XCTFail("unusable legacy data must remain for diagnosis")
-        } catch LegacyTranscriptImport.ImportError.unreadableLegacyTranscript {}
-        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(LegacyTranscriptImport.fileName).path))
+        let empty = try await LegacyTranscriptImport.run(store: store, directory: root, localeIdentifier: "en-US")
+        XCTAssertEqual(empty, .nothingToImport)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent(LegacyTranscriptImport.fileName).path))
+    }
+
+    func testManagedDisableLaunchOrdersConfigurationBeforeStorageAndCleansOnlyPlaintext() async throws {
+        try writeLegacy("private stale text")
+        let recovery = root.appendingPathComponent("pending-recording.caf")
+        try Data("audio".utf8).write(to: recovery)
+        let database = root.appendingPathComponent("history.sqlite3")
+        var opened = false
+
+        let newest = try await LegacyTranscriptImport.reconcileAfterConfiguration(
+            enabled: false, directory: root, localeIdentifier: "en-US",
+            openStore: {
+                opened = true
+                return try TranscriptHistoryStore(url: database)
+            })
+
+        XCTAssertNil(newest)
+        XCTAssertFalse(opened, "managed disable must branch before resolving the store")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: database.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent(LegacyTranscriptImport.fileName).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: recovery.path))
+    }
+
+    func testDisabledHistoryDeletesOnlyLegacyPlaintextWithoutCreatingDatabase() throws {
+        try writeLegacy("private stale text")
+        let recovery = root.appendingPathComponent("pending-recording.caf")
+        try Data("audio".utf8).write(to: recovery)
+        let unopenedDatabase = root.appendingPathComponent("disabled-history.sqlite3")
+
+        try LegacyTranscriptImport.removeWhenHistoryDisabled(directory: root)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent(LegacyTranscriptImport.fileName).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: recovery.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: unopenedDatabase.path))
     }
 
     func testLegacyImportOfRewrittenCacheAddsExactlyOneMoreEntry() async throws {
