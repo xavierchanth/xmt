@@ -125,9 +125,9 @@ final class TranscriptHistoryViewModel: ObservableObject {
     func delete(_ entry: TranscriptHistoryEntry) async {
         do {
             try await dependencies.repository.delete(id: entry.id)
-            var updated = snapshot
-            updated.remove(id: entry.id)
-            snapshot = updated
+            // Re-read rather than deriving from the panel's load-once snapshot: a transcript may
+            // have committed while the panel was open, and Paste Latest must follow the store.
+            snapshot = TranscriptHistorySnapshot(try await dependencies.repository.entries(limit: nil))
             diagnostic = dependencies.openDiagnostic
             NotificationCenter.default.post(name: .transcriptHistoryLatestChanged,
                                             object: snapshot.entries.first?.text ?? "")
