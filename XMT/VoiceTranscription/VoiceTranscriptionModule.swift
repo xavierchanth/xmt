@@ -358,6 +358,7 @@ final class VoiceTranscriptionModule: ObservableObject {
             settings: .init(keepLastTranscript: historyEnabled, autoPaste: autoPaste && target != nil,
                             recordHistory: historyEnabled, sessionID: sessionID,
                             localeIdentifier: localeIdentifier,
+                            historySource: { if case .pending = recovery { return .recovery }; return .live }(),
                             historyRetention: historyRetentionPolicy),
             targetPID: target
         )

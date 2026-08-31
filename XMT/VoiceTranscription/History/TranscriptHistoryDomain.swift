@@ -2,6 +2,8 @@ import Foundation
 
 /// One durable transcript history row. This type is the whole persistence surface: the repository
 /// writes exactly these fields and nothing else, so anything absent here can never reach disk.
+enum TranscriptSource: String, Equatable, Sendable { case live, recovery, legacy }
+
 struct TranscriptHistoryEntry: Equatable, Sendable {
     /// Stable identity of the entry. Derived from the committing session, never random at write
     /// time, so replaying an interrupted commit inserts the same row rather than a duplicate.
@@ -9,6 +11,7 @@ struct TranscriptHistoryEntry: Equatable, Sendable {
     let recordedAt: Date
     let text: String
     let localeIdentifier: String
+    var source: TranscriptSource = .live
 
     var characterCount: Int { text.count }
 }
@@ -40,6 +43,7 @@ struct TranscriptCommitContext: Sendable {
     var recordedAt: Date
     var text: String
     var localeIdentifier: String
+    var source: TranscriptSource = .live
     var isFinal: Bool = true
     var historyEnabled: Bool = true
     var secureInputActive: Bool = false
@@ -79,7 +83,8 @@ enum TranscriptHistoryPolicy {
             id: identity(for: context.sessionID),
             recordedAt: context.recordedAt,
             text: text,
-            localeIdentifier: context.localeIdentifier))
+            localeIdentifier: context.localeIdentifier,
+            source: context.source))
     }
 
     /// Pure retention arithmetic over rows already ordered newest first. Returns the identifiers a

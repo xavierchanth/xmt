@@ -44,7 +44,8 @@ enum LegacyTranscriptImport {
             id: identifier(fingerprint: fingerprint),
             recordedAt: recordedAt,
             text: text,
-            localeIdentifier: localeIdentifier)
+            localeIdentifier: localeIdentifier,
+            source: .legacy)
         return (entry, fingerprint)
     }
 

@@ -12,6 +12,7 @@ struct TranscriptCommitter {
         /// after an interrupted run re-inserts the same row instead of a duplicate.
         var sessionID: UUID = UUID()
         var localeIdentifier: String = ""
+        var historySource: TranscriptSource = .live
         var secureInputActive: Bool = false
         var historyRetention: TranscriptRetentionPolicy = .default
     }
@@ -89,6 +90,7 @@ struct TranscriptCommitter {
             recordedAt: Date(),
             text: transcript,
             localeIdentifier: settings.localeIdentifier,
+            source: settings.historySource,
             historyEnabled: settings.recordHistory,
             secureInputActive: settings.secureInputActive,
             targetApplicationPID: targetPID)).entry

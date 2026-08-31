@@ -163,7 +163,7 @@ final class TranscriptHistoryStoreTests: XCTestCase {
     func testOnlyPermittedColumnsExistAndNoExcludedValueReachesTheFile() async throws {
         let store = try makeStore()
         let columns = try await store.columnNames()
-        XCTAssertEqual(columns, ["id", "recorded_at_ms", "sequence", "text", "locale"])
+        XCTAssertEqual(columns, ["id", "recorded_at_ms", "sequence", "text", "locale", "source"])
 
         let context = TranscriptCommitContext(
             sessionID: UUID(), recordedAt: Date(timeIntervalSince1970: 7), text: "  spoken words  ",

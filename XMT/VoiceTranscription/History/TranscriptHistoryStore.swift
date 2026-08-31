@@ -142,9 +142,9 @@ actor TranscriptHistoryStore {
 
     /// Default location of the shipping store, beside the other Voice Transcription artifacts.
     static func defaultURL(directory: URL? = nil) -> URL {
-        let base = directory ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        let base = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("com.xavierchanth.xmt/VoiceTranscription", isDirectory: true)
-        return base.appendingPathComponent("transcript-history.sqlite3")
+        return base.appendingPathComponent("history.sqlite3")
     }
 
     func close() { db.close() }
@@ -172,7 +172,8 @@ actor TranscriptHistoryStore {
                     recorded_at_ms INTEGER NOT NULL,
                     sequence INTEGER NOT NULL,
                     text TEXT NOT NULL,
-                    locale TEXT NOT NULL
+                    locale TEXT NOT NULL,
+                    source TEXT NOT NULL CHECK(source IN ('live','recovery','legacy'))
                 ) STRICT;
                 """)
             try db.execute("""
@@ -242,15 +243,16 @@ actor TranscriptHistoryStore {
         try db.transaction {
             let before = db.totalChanges
             try db.execute("""
-                INSERT INTO \(Self.entriesTable) (id, recorded_at_ms, sequence, text, locale)
-                SELECT ?, ?, COALESCE(MAX(sequence), 0) + 1, ?, ? FROM \(Self.entriesTable)
+                INSERT INTO \(Self.entriesTable) (id, recorded_at_ms, sequence, text, locale, source)
+                SELECT ?, ?, COALESCE(MAX(sequence), 0) + 1, ?, ?, ? FROM \(Self.entriesTable)
                 WHERE true -- required: it separates the SELECT from the upsert clause
                 ON CONFLICT(id) DO NOTHING;
                 """, binding: [
                     .text(entry.id.uuidString),
                     .integer(Self.milliseconds(entry.recordedAt)),
                     .text(entry.text),
-                    .text(entry.localeIdentifier)])
+                    .text(entry.localeIdentifier),
+                    .text(entry.source.rawValue)])
             let inserted = db.totalChanges > before
             if let marker { try upsertMetadata(marker.key, marker.value) }
             guard inserted else { return }
@@ -327,7 +329,7 @@ actor TranscriptHistoryStore {
         var entries: [TranscriptHistoryEntry] = []
         let clause = limit.map { " LIMIT \(max($0, 0))" } ?? ""
         try db.query("""
-            SELECT id, recorded_at_ms, text, locale FROM \(Self.entriesTable)
+            SELECT id, recorded_at_ms, text, locale, source FROM \(Self.entriesTable)
             ORDER BY recorded_at_ms DESC, sequence DESC\(clause);
             """) { statement in
             guard let id = UUID(uuidString: String(cString: sqlite3_column_text(statement, 0))) else { return }
@@ -335,7 +337,8 @@ actor TranscriptHistoryStore {
                 id: id,
                 recordedAt: Self.date(sqlite3_column_int64(statement, 1)),
                 text: String(cString: sqlite3_column_text(statement, 2)),
-                localeIdentifier: String(cString: sqlite3_column_text(statement, 3))))
+                localeIdentifier: String(cString: sqlite3_column_text(statement, 3)),
+                source: TranscriptSource(rawValue: String(cString: sqlite3_column_text(statement, 4))) ?? .live))
         }
         return entries
     }
