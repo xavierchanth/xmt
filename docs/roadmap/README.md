@@ -54,7 +54,7 @@ Until at least a recording, a transcription, and a paste have been performed by 
 
 ## Future Voice history and clients
 
-The first history increment retains and pastes only one latest transcript. Canonical enabled/retention/maximum configuration and managed settings controls now exist as groundwork, but a searchable, bounded transcript history with a native XMT panel remains deferred; it must not be inferred from either those settings or the one-slot `last-transcript.txt` cache.
+The menu's five recent previews, `Copy Latest`, `Show All`, and confirmed clear, and the lazily created searchable panel with per-entry copy, paste, delete, and clear, are implemented over the bounded history store and specified in [transcript history surfaces](../specification/voice-transcription.md#transcript-history-surfaces). Paste from those surfaces verifies the captured target before posting and always leaves the transcript on the clipboard when it refuses or fails. None of it has been exercised on hardware: no panel has been opened, no history paste has been observed reaching another application, and the target-verification refusals are covered only by injected unit tests. The one-slot `last-transcript.txt` cache and its `Copy Last Transcript` action still exist alongside history and have not been retired.
 
 A Raycast client is also deferred. It must consume an app-owned, stable JSON boundary designed for external clients rather than reading XMT's cache or any future internal history store directly. Versioning, lifetime, privacy, and write ownership for that boundary must be settled before the client ships.
 

@@ -87,6 +87,29 @@
 		EE00013 /* TapHoldResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE10003 /* TapHoldResolver.swift */; };
 		EE00021 /* TapHoldResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE10021 /* TapHoldResolverTests.swift */; };
 		EE00022 /* TapHoldResolverPropertyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE10022 /* TapHoldResolverPropertyTests.swift */; };
+		H100002 /* TranscriptHistoryDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100001 /* TranscriptHistoryDomain.swift */; };
+		H100003 /* TranscriptHistoryDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100001 /* TranscriptHistoryDomain.swift */; };
+		H100005 /* TranscriptHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100004 /* TranscriptHistoryStore.swift */; };
+		H100006 /* TranscriptHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100004 /* TranscriptHistoryStore.swift */; };
+		H100008 /* LegacyTranscriptImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100007 /* LegacyTranscriptImport.swift */; };
+		H100009 /* LegacyTranscriptImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100007 /* LegacyTranscriptImport.swift */; };
+		H100011 /* TranscriptHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100010 /* TranscriptHistory.swift */; };
+		H100012 /* TranscriptHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100010 /* TranscriptHistory.swift */; };
+		H100014 /* TranscriptHistoryRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100013 /* TranscriptHistoryRepository.swift */; };
+		H100015 /* TranscriptHistoryRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100013 /* TranscriptHistoryRepository.swift */; };
+		H100017 /* CapturedPasteTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100016 /* CapturedPasteTarget.swift */; };
+		H100018 /* CapturedPasteTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100016 /* CapturedPasteTarget.swift */; };
+		H100020 /* TranscriptHistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100019 /* TranscriptHistoryViewModel.swift */; };
+		H100021 /* TranscriptHistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100019 /* TranscriptHistoryViewModel.swift */; };
+		H100023 /* TranscriptHistoryPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100022 /* TranscriptHistoryPanelController.swift */; };
+		H100025 /* TranscriptHistoryPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100024 /* TranscriptHistoryPanelView.swift */; };
+		H100027 /* TranscriptHistorySnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100026 /* TranscriptHistorySnapshotTests.swift */; };
+		H100029 /* CapturedPasteTargetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100028 /* CapturedPasteTargetTests.swift */; };
+		H100031 /* TranscriptHistoryViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100030 /* TranscriptHistoryViewModelTests.swift */; };
+		H190002 /* TranscriptHistoryStoreProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = H190001 /* TranscriptHistoryStoreProvider.swift */; };
+		H190003 /* TranscriptHistoryStoreProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = H190001 /* TranscriptHistoryStoreProvider.swift */; };
+		H290011 /* TranscriptHistoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H290001 /* TranscriptHistoryStoreTests.swift */; };
+		H290012 /* TranscriptHistoryCommitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H290002 /* TranscriptHistoryCommitTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -155,6 +178,21 @@
 		FF10002 /* DeviceIdentityMatcherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentityMatcherTests.swift; sourceTree = "<group>"; };
 		EE10021 /* TapHoldResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TapHoldResolverTests.swift; sourceTree = "<group>"; };
 		EE10022 /* TapHoldResolverPropertyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TapHoldResolverPropertyTests.swift; sourceTree = "<group>"; };
+		H100001 /* TranscriptHistoryDomain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptHistoryDomain.swift; sourceTree = "<group>"; };
+		H100004 /* TranscriptHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptHistoryStore.swift; sourceTree = "<group>"; };
+		H100007 /* LegacyTranscriptImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyTranscriptImport.swift; sourceTree = "<group>"; };
+		H100010 /* TranscriptHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptHistory.swift; sourceTree = "<group>"; };
+		H100013 /* TranscriptHistoryRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptHistoryRepository.swift; sourceTree = "<group>"; };
+		H100016 /* CapturedPasteTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturedPasteTarget.swift; sourceTree = "<group>"; };
+		H100019 /* TranscriptHistoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptHistoryViewModel.swift; sourceTree = "<group>"; };
+		H100022 /* TranscriptHistoryPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptHistoryPanelController.swift; sourceTree = "<group>"; };
+		H100024 /* TranscriptHistoryPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptHistoryPanelView.swift; sourceTree = "<group>"; };
+		H100026 /* TranscriptHistorySnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptHistorySnapshotTests.swift; sourceTree = "<group>"; };
+		H100028 /* CapturedPasteTargetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturedPasteTargetTests.swift; sourceTree = "<group>"; };
+		H100030 /* TranscriptHistoryViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptHistoryViewModelTests.swift; sourceTree = "<group>"; };
+		H190001 /* TranscriptHistoryStoreProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptHistoryStoreProvider.swift; sourceTree = "<group>"; };
+		H290001 /* TranscriptHistoryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptHistoryStoreTests.swift; sourceTree = "<group>"; };
+		H290002 /* TranscriptHistoryCommitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptHistoryCommitTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -280,6 +318,9 @@
 		AA400080 /* XMTTests */ = {
 			isa = PBXGroup;
 			children = (
+				H100026 /* TranscriptHistorySnapshotTests.swift */,
+				H100028 /* CapturedPasteTargetTests.swift */,
+				H100030 /* TranscriptHistoryViewModelTests.swift */,
 				AA100021 /* WindowGeometryTests.swift */,
 				B100023 /* TriggerArbitratorTests.swift */,
 				B100024 /* ConfigTests.swift */,
@@ -287,6 +328,8 @@
 				B100026 /* SessionMachineTests.swift */,
 				B100027 /* ReconciliationTests.swift */,
 				B100028 /* CommitSequenceTests.swift */,
+				H290001 /* TranscriptHistoryStoreTests.swift */,
+				H290002 /* TranscriptHistoryCommitTests.swift */,
 				EE10021 /* TapHoldResolverTests.swift */,
 				EE10022 /* TapHoldResolverPropertyTests.swift */,
 				FF10002 /* DeviceIdentityMatcherTests.swift */,
@@ -333,9 +376,27 @@
 			path = Configuration;
 			sourceTree = "<group>";
 		};
+		H400001 /* History */ = {
+			isa = PBXGroup;
+			children = (
+				H190001 /* TranscriptHistoryStoreProvider.swift */,
+				H100001 /* TranscriptHistoryDomain.swift */,
+				H100004 /* TranscriptHistoryStore.swift */,
+				H100007 /* LegacyTranscriptImport.swift */,
+				H100010 /* TranscriptHistory.swift */,
+				H100013 /* TranscriptHistoryRepository.swift */,
+				H100016 /* CapturedPasteTarget.swift */,
+				H100019 /* TranscriptHistoryViewModel.swift */,
+				H100022 /* TranscriptHistoryPanelController.swift */,
+				H100024 /* TranscriptHistoryPanelView.swift */,
+			);
+			path = History;
+			sourceTree = "<group>";
+		};
 		B400003 /* VoiceTranscription */ = {
 			isa = PBXGroup;
 			children = (
+				H400001 /* History */,
 				B400004 /* Audio */,
 				B400005 /* Session */,
 				B400006 /* Output */,
@@ -527,6 +588,16 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				H190002 /* TranscriptHistoryStoreProvider.swift in Sources */,
+				H100002 /* TranscriptHistoryDomain.swift in Sources */,
+				H100005 /* TranscriptHistoryStore.swift in Sources */,
+				H100008 /* LegacyTranscriptImport.swift in Sources */,
+				H100011 /* TranscriptHistory.swift in Sources */,
+				H100014 /* TranscriptHistoryRepository.swift in Sources */,
+				H100017 /* CapturedPasteTarget.swift in Sources */,
+				H100020 /* TranscriptHistoryViewModel.swift in Sources */,
+				H100023 /* TranscriptHistoryPanelController.swift in Sources */,
+				H100025 /* TranscriptHistoryPanelView.swift in Sources */,
 				AA000001 /* XMTApp.swift in Sources */,
 				AA000002 /* AppDelegate.swift in Sources */,
 				AA000003 /* HotKeyNames.swift in Sources */,
@@ -578,6 +649,17 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				H190003 /* TranscriptHistoryStoreProvider.swift in Sources */,
+				H100003 /* TranscriptHistoryDomain.swift in Sources */,
+				H100006 /* TranscriptHistoryStore.swift in Sources */,
+				H100009 /* LegacyTranscriptImport.swift in Sources */,
+				H100012 /* TranscriptHistory.swift in Sources */,
+				H100015 /* TranscriptHistoryRepository.swift in Sources */,
+				H100018 /* CapturedPasteTarget.swift in Sources */,
+				H100021 /* TranscriptHistoryViewModel.swift in Sources */,
+				H100027 /* TranscriptHistorySnapshotTests.swift in Sources */,
+				H100029 /* CapturedPasteTargetTests.swift in Sources */,
+				H100031 /* TranscriptHistoryViewModelTests.swift in Sources */,
 				AA000019 /* WindowGeometry.swift in Sources */,
 				AA000021 /* WindowGeometryTests.swift in Sources */,
 				B000029 /* FnEventObserver.swift in Sources */,
@@ -602,6 +684,8 @@
 				B000026 /* SessionMachineTests.swift in Sources */,
 				B000027 /* ReconciliationTests.swift in Sources */,
 				B000028 /* CommitSequenceTests.swift in Sources */,
+				H290011 /* TranscriptHistoryStoreTests.swift in Sources */,
+				H290012 /* TranscriptHistoryCommitTests.swift in Sources */,
 				EE00011 /* KeyboardDomain.swift in Sources */,
 				EE00012 /* KeyboardConfiguration.swift in Sources */,
 				EE00013 /* TapHoldResolver.swift in Sources */,

@@ -188,6 +188,16 @@ The `Voice` tab in Settings contains:
 
 Controls whose value is supplied by the configuration file are disabled rather than silently overwritten; see [managed values](configuration.md#managed-values). A managed paste-latest binding preserves and later restores the user's prior recorder value. The hold threshold and maximum session duration have no settings control.
 
+## Transcript history surfaces
+
+The menu reads history when it opens and never on a timer. It lists the five newest retained transcripts as single-line previews collapsed to one line and truncated at 60 characters; choosing one copies that transcript. Below them are `Copy Latest Transcript`, which copies the newest retained transcript, and `Show All Transcripts...`, which opens the history panel. `Clear History...` is offered only when history is non-empty, and it never clears on the first press: it arms a confirmation, and the menu then offers `Confirm Clear History` and `Cancel Clearing History`. When history is empty the menu says so instead of listing previews.
+
+The panel is a lazily created floating utility panel. Nothing is built, read, or observed until `Show All Transcripts...` is chosen, and closing it releases the panel, its captured paste target, and its search text. It lists entries newest first, filtered by a case- and diacritic-insensitive substring search whose blank query lists everything, and offers copy, paste, and delete per entry plus the same two-step clear.
+
+Paste from a history surface uses the application that was frontmost immediately before the surface took key focus, captured as a PID with its bundle identifier. Before any event is posted, that capture is re-verified: a target that is XMT itself, older than five minutes, no longer running, or whose PID now belongs to a different bundle identifier is refused. In every refusal — and in every posting failure — the transcript has already been written to the clipboard and is never removed from it, so the user can always paste manually. A blank transcript is neither copied nor pasted, and overlapping paste requests are dropped rather than queued.
+
+Reading, deleting, and clearing go through a repository over the durable history store. A storage failure leaves the surfaces populated and shows a diagnostic instead of pretending the action succeeded.
+
 ## Related documentation
 
 - [Configuration](configuration.md) — the file that governs these settings, its schema, precedence, and reload.
