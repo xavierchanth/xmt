@@ -163,7 +163,7 @@ actor TranscriptHistoryStore {
     }
 
     /// Narrows the database and its side files to owner-only, and the containing directory with it.
-    static func restrictPermissions(of url: URL, fileManager: FileManager = .default) {
+    private static func restrictPermissions(of url: URL, fileManager: FileManager = .default) {
         let directory = url.deletingLastPathComponent()
         try? fileManager.setAttributes(
             [.posixPermissions: NSNumber(value: directoryPermissions)], ofItemAtPath: directory.path)
@@ -349,14 +349,8 @@ actor TranscriptHistoryStore {
     @discardableResult
     func setRetention(_ policy: TranscriptRetentionPolicy, now: Date = Date()) throws -> [UUID] {
         retention = policy
-        return try prune(retention: policy, now: now)
-    }
-
-    /// Applies retention outside an append. Returns the identifiers removed.
-    @discardableResult
-    func prune(retention: TranscriptRetentionPolicy? = nil, now: Date = Date()) throws -> [UUID] {
         var removed: [UUID] = []
-        try db.transaction { removed = try pruneRows(retention: retention ?? self.retention, now: now) }
+        try db.transaction { removed = try pruneRows(retention: policy, now: now) }
         return removed
     }
 
@@ -397,20 +391,53 @@ actor TranscriptHistoryStore {
             """, binding: [.text(key), .text(value)])
     }
 
+    /// Applies retention in bounded work: two single-row lookups on the ordering index and one
+    /// delete. Retained rows are never read — only the newest row, the last row the count bound
+    /// keeps, and the identifiers actually removed cross the SQLite boundary — so a prune costs the
+    /// same whether history holds ten entries or ten thousand.
+    ///
+    /// The invariants are exactly those of the row-at-a-time version it replaces: rows ordered after
+    /// the count cutoff go, rows recorded before the age cutoff go, and the newest row never goes.
+    /// Removed identifiers are returned in delete order; callers treat them as a set.
     private func pruneRows(retention: TranscriptRetentionPolicy, now: Date) throws -> [UUID] {
-        var rows: [(id: UUID, recordedAt: Date)] = []
+        var newestID: String?
         try db.query("""
-            SELECT id, recorded_at_ms FROM \(Self.entriesTable)
-            ORDER BY recorded_at_ms DESC, sequence DESC;
-            """) { statement in
-            guard let id = UUID(uuidString: String(cString: sqlite3_column_text(statement, 0))) else { return }
-            rows.append((id, Self.date(sqlite3_column_int64(statement, 1))))
+            SELECT id FROM \(Self.entriesTable) ORDER BY recorded_at_ms DESC, sequence DESC LIMIT 1;
+            """) { statement in newestID = String(cString: sqlite3_column_text(statement, 0)) }
+        guard let newestID else { return [] }
+
+        var conditions: [String] = []
+        var bindings: [SQLiteConnection.Value] = [.text(newestID)]
+        // The last row the count bound retains. Anything ordered after it — an older instant, or the
+        // same instant with a lower sequence — is beyond the bound. Absent when history is shorter
+        // than the bound, in which case the count criterion prunes nothing.
+        var cutoff: (milliseconds: Int64, sequence: Int64)?
+        try db.query("""
+            SELECT recorded_at_ms, sequence FROM \(Self.entriesTable)
+            ORDER BY recorded_at_ms DESC, sequence DESC LIMIT 1 OFFSET ?;
+            """, binding: [.integer(Int64(retention.maximumEntries - 1))]) { statement in
+            cutoff = (sqlite3_column_int64(statement, 0), sqlite3_column_int64(statement, 1))
         }
-        let doomed = TranscriptHistoryPolicy.identifiersToPrune(newestFirst: rows, policy: retention, now: now)
-        for id in doomed {
-            try db.execute("DELETE FROM \(Self.entriesTable) WHERE id = ?;", binding: [.text(id.uuidString)])
+        if let cutoff {
+            conditions.append("(recorded_at_ms, sequence) < (?, ?)")
+            bindings.append(.integer(cutoff.milliseconds))
+            bindings.append(.integer(cutoff.sequence))
         }
-        return doomed
+        if let earliest = retention.earliestRetained(now: now) {
+            conditions.append("recorded_at_ms < ?")
+            bindings.append(.integer(Self.milliseconds(earliest)))
+        }
+        guard !conditions.isEmpty else { return [] }
+
+        var removed: [UUID] = []
+        try db.query("""
+            DELETE FROM \(Self.entriesTable)
+            WHERE id <> ? AND (\(conditions.joined(separator: " OR ")))
+            RETURNING id;
+            """, binding: bindings) { statement in
+            if let id = UUID(uuidString: String(cString: sqlite3_column_text(statement, 0))) { removed.append(id) }
+        }
+        return removed
     }
 
     // MARK: - Reads

@@ -35,12 +35,4 @@ enum SharedTranscriptHistoryStore {
         defer { lock.unlock() }
         return cached
     }
-
-    /// Test seam: replaces the shared instance and clears any remembered failure.
-    static func override(_ store: TranscriptHistoryStore?) {
-        lock.lock()
-        defer { lock.unlock() }
-        cached = store
-        openFailure = nil
-    }
 }

@@ -10,17 +10,6 @@ protocol TranscriptHistoryRepository: Sendable {
     func deleteAll() async throws
 }
 
-/// Adapter over the durable SQLite store. Actor isolation is preserved: each call awaits the store.
-struct TranscriptHistoryStoreRepository: TranscriptHistoryRepository {
-    let store: TranscriptHistoryStore
-
-    init(store: TranscriptHistoryStore) { self.store = store }
-
-    func entries(limit: Int?) async throws -> [TranscriptHistoryEntry] { try await store.entries(limit: limit) }
-    func delete(id: UUID) async throws { _ = try await store.delete(id: id) }
-    func deleteAll() async throws { try await store.deleteAll() }
-}
-
 /// The shipping repository. It resolves the one process-wide store on first use, so opening the
 /// database stays lazy: no history surface touches disk until the user opens one.
 struct SharedTranscriptHistoryRepository: TranscriptHistoryRepository {
@@ -48,11 +37,6 @@ actor InMemoryTranscriptHistoryRepository: TranscriptHistoryRepository {
     func entries(limit: Int?) async throws -> [TranscriptHistoryEntry] {
         guard let limit else { return storage }
         return Array(storage.prefix(max(0, limit)))
-    }
-
-    func append(_ entry: TranscriptHistoryEntry) {
-        let index = storage.firstIndex { $0.recordedAt <= entry.recordedAt } ?? storage.endIndex
-        storage.insert(entry, at: index)
     }
 
     func delete(id: UUID) async throws { storage.removeAll { $0.id == id } }

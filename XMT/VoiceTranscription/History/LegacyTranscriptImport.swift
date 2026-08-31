@@ -14,19 +14,40 @@ import Foundation
 /// The legacy file is deleted only after the row and marker transaction commits. If deletion is
 /// interrupted, deterministic identity makes the next launch harmlessly repeat the cleanup.
 enum LegacyTranscriptImport {
+    /// Result of the launch boundary. Migration trouble and repository availability are separate
+    /// facts: `migrationDiagnostic` describes only the one-slot cache, never the durable store, and
+    /// `newest` is loaded whether or not the migration had anything it could read.
+    struct Reconciliation: Equatable, Sendable {
+        var newest: TranscriptHistoryEntry?
+        /// Content-free by construction: it names the failure and never any transcript text.
+        var migrationDiagnostic: String?
+    }
+
+    /// Shown when the legacy cache cannot be decoded. It carries no transcript content, and the file
+    /// it refers to is left in place for diagnosis.
+    static let unreadableDiagnostic = "Previous transcript file could not be read"
+
     /// Launch boundary used after effective configuration has been applied. The disabled branch is
     /// intentionally resolved before `openStore`, making managed disable testably unable to touch DB.
+    ///
+    /// An unreadable legacy file is a migration failure, not a storage failure: it is reported as a
+    /// content-free diagnostic while the newest durable row still loads and the store stays usable.
     static func reconcileAfterConfiguration(
         enabled: Bool, directory: URL, localeIdentifier: String,
         openStore: () throws -> TranscriptHistoryStore
-    ) async throws -> TranscriptHistoryEntry? {
+    ) async throws -> Reconciliation {
         guard enabled else {
             try removeWhenHistoryDisabled(directory: directory)
-            return nil
+            return Reconciliation()
         }
         let store = try openStore()
-        _ = try await run(store: store, directory: directory, localeIdentifier: localeIdentifier)
-        return try await store.entries(limit: 1).first
+        var diagnostic: String?
+        do {
+            _ = try await run(store: store, directory: directory, localeIdentifier: localeIdentifier)
+        } catch ImportError.unreadableLegacyTranscript {
+            diagnostic = unreadableDiagnostic
+        }
+        return Reconciliation(newest: try await store.entries(limit: 1).first, migrationDiagnostic: diagnostic)
     }
 
     enum ImportError: Error { case unreadableLegacyTranscript }

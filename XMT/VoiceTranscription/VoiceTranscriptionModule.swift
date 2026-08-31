@@ -117,10 +117,15 @@ final class VoiceTranscriptionModule: ObservableObject {
     private func reconcileLegacyTranscriptForEffectiveHistory() async {
         let directory = store.root
         do {
-            let newest = try await LegacyTranscriptImport.reconcileAfterConfiguration(
+            let reconciliation = try await LegacyTranscriptImport.reconcileAfterConfiguration(
                 enabled: historyEnabled, directory: directory, localeIdentifier: localeIdentifier,
                 openStore: { try SharedTranscriptHistoryStore.shared(retention: historyRetentionPolicy) })
-            lastTranscript = newest?.text ?? ""
+            lastTranscript = reconciliation.newest?.text ?? ""
+            // A migration that could not read the old cache is reported as such. History itself
+            // opened and loaded, so it must not be described as unavailable.
+            if let migration = reconciliation.migrationDiagnostic {
+                configDiagnostic = configDiagnostic ?? migration
+            }
         } catch {
             configDiagnostic = configDiagnostic ?? (historyEnabled
                 ? "Transcript history is unavailable" : "Legacy transcript cleanup failed")

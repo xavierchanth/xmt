@@ -320,25 +320,99 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         XCTAssertEqual(TranscriptHistoryPolicy.decide(context).exclusion, .emptyTranscript)
     }
 
-    func testRetentionPolicyClampsAndPruneMathIsPure() {
+    func testRetentionPolicyClampsItsBounds() {
         XCTAssertEqual(TranscriptRetentionPolicy(maximumEntries: 0).maximumEntries, 1)
         XCTAssertEqual(TranscriptRetentionPolicy(maximumEntries: 99_999).maximumEntries, 10_000)
         XCTAssertEqual(TranscriptRetentionPolicy(maximumEntries: 5, maximumAge: -9).maximumAge, 0)
+    }
 
-        let now = Date(timeIntervalSince1970: 1_000)
-        let rows = (0..<5).map { (id: UUID(), recordedAt: now.addingTimeInterval(Double(-$0) * 100)) }
-        let byCount = TranscriptHistoryPolicy.identifiersToPrune(
-            newestFirst: rows, policy: TranscriptRetentionPolicy(maximumEntries: 2), now: now)
-        XCTAssertEqual(byCount, rows.dropFirst(2).map(\.id))
+    // MARK: - Prune boundaries
 
-        let byAge = TranscriptHistoryPolicy.identifiersToPrune(
-            newestFirst: rows, policy: TranscriptRetentionPolicy(maximumEntries: 100, maximumAge: 150), now: now)
-        XCTAssertEqual(byAge, rows.dropFirst(2).map(\.id))
+    /// The count bound is exact: history exactly at the bound loses nothing, and one row past it
+    /// loses exactly the oldest — reported by identity, not merely by count.
+    func testCountBoundPrunesExactlyTheRowsPastTheBound() async throws {
+        let store = try makeStore(TranscriptRetentionPolicy(maximumEntries: 3))
+        let rows = (1...3).map { entry("t\($0)", at: Double($0)) }
+        for row in rows { try await store.append(row) }
+        let atBound = try await store.setRetention(TranscriptRetentionPolicy(maximumEntries: 3))
+        XCTAssertTrue(atBound.isEmpty, "history exactly at the bound is untouched")
 
-        let everythingExpired = TranscriptHistoryPolicy.identifiersToPrune(
-            newestFirst: rows, policy: TranscriptRetentionPolicy(maximumEntries: 100, maximumAge: 0), now: now)
-        XCTAssertFalse(everythingExpired.contains(rows[0].id), "the newest entry is never pruned")
-        XCTAssertEqual(everythingExpired.count, rows.count - 1)
+        let fourth = entry("t4", at: 4)
+        let outcome = try await store.append(fourth)
+        XCTAssertEqual(outcome.pruned, [rows[0].id], "only the row past the bound goes")
+        let texts = try await store.entries().map(\.text)
+        XCTAssertEqual(texts, ["t4", "t3", "t2"])
+    }
+
+    /// Ties on the recorded instant are broken by insertion sequence on both sides of the bound, so
+    /// the count cutoff never evicts a row it shares a timestamp with arbitrarily.
+    func testCountBoundBreaksTimestampTiesBySequence() async throws {
+        let store = try makeStore(TranscriptRetentionPolicy(maximumEntries: 2))
+        for index in 1...4 { try await store.append(entry("tie\(index)", at: 500)) }
+        let texts = try await store.entries().map(\.text)
+        XCTAssertEqual(texts, ["tie4", "tie3"])
+    }
+
+    /// The age bound is exact and half-open: a row recorded at the earliest retained instant stays,
+    /// and one millisecond older goes.
+    func testAgeBoundKeepsTheEarliestRetainedInstantAndPrunesOneMillisecondOlder() async throws {
+        let policy = TranscriptRetentionPolicy(maximumEntries: 100, maximumAge: 60)
+        let store = try makeStore(policy)
+        let onBoundary = entry("exactly at the bound", at: 9_940)
+        let justOlder = entry("one millisecond older", at: 9_939.999)
+        // Both rows are written while they are still within the age bound.
+        let written = Date(timeIntervalSince1970: 9_950)
+        try await store.append(justOlder, now: written)
+        try await store.append(onBoundary, now: written)
+        try await store.append(entry("newest", at: 9_990), now: written)
+
+        // Time advances until the earliest retained instant lands exactly on `onBoundary`.
+        let removed = try await store.setRetention(policy, now: Date(timeIntervalSince1970: 10_000))
+        XCTAssertEqual(removed, [justOlder.id])
+        let kept = try await store.entries().map(\.text)
+        XCTAssertEqual(kept, ["newest", "exactly at the bound"])
+    }
+
+    /// Both criteria apply in one prune, and the newest row survives either of them.
+    func testPruneAppliesBothBoundsAndNeverRemovesTheNewestRow() async throws {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let store = try makeStore(TranscriptRetentionPolicy(maximumEntries: 100))
+        let rows = (0..<5).map { entry("t\($0)", at: 10_000 - Double($0) * 100) }
+        for row in rows.reversed() { try await store.append(row, now: now) }
+
+        // Age alone: 150 seconds retains the newest two.
+        let byAge = try await store.setRetention(
+            TranscriptRetentionPolicy(maximumEntries: 100, maximumAge: 150), now: now)
+        XCTAssertEqual(Set(byAge), Set(rows.dropFirst(2).map(\.id)))
+
+        // Everything expired: the newest row is still never pruned.
+        let everythingExpired = try await store.setRetention(
+            TranscriptRetentionPolicy(maximumEntries: 100, maximumAge: 0), now: now)
+        XCTAssertEqual(everythingExpired, [rows[1].id])
+        let survivors = try await store.entries().map(\.id)
+        XCTAssertEqual(survivors, [rows[0].id], "the newest row survives an entirely expired history")
+    }
+
+    /// A prune of a large history removes exactly the rows past the bound and reports every one of
+    /// them, without the retained remainder ever being read back.
+    func testPruningALargeHistoryRemovesExactlyTheRowsPastTheBound() async throws {
+        let store = try makeStore(TranscriptRetentionPolicy(maximumEntries: 10_000))
+        let connection = try SQLiteConnection(path: databaseURL.path)
+        try connection.transaction {
+            for index in 1...2_000 {
+                try connection.execute("""
+                    INSERT INTO \(TranscriptHistoryStore.entriesTable)
+                        (id, recorded_at_ms, sequence, text, locale, source)
+                    VALUES (?, ?, ?, 'bulk', 'en-US', 'live');
+                    """, binding: [.text(UUID().uuidString), .integer(Int64(index) * 1_000), .integer(Int64(index))])
+            }
+        }
+        connection.close()
+
+        let removed = try await store.setRetention(TranscriptRetentionPolicy(maximumEntries: 5))
+        XCTAssertEqual(removed.count, 1_995)
+        let count = try await store.count()
+        XCTAssertEqual(count, 5)
     }
 
     // MARK: - Legacy import
@@ -421,18 +495,67 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         let database = root.appendingPathComponent("history.sqlite3")
         var opened = false
 
-        let newest = try await LegacyTranscriptImport.reconcileAfterConfiguration(
+        let reconciliation = try await LegacyTranscriptImport.reconcileAfterConfiguration(
             enabled: false, directory: root, localeIdentifier: "en-US",
             openStore: {
                 opened = true
                 return try TranscriptHistoryStore(url: database)
             })
 
-        XCTAssertNil(newest)
+        XCTAssertNil(reconciliation.newest)
+        XCTAssertNil(reconciliation.migrationDiagnostic)
         XCTAssertFalse(opened, "managed disable must branch before resolving the store")
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent(LegacyTranscriptImport.fileName).path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: recovery.path))
+    }
+
+    /// A legacy cache that cannot be decoded is a migration problem, not a storage problem: the file
+    /// stays for diagnosis, the diagnostic carries no content, and durable history still loads and
+    /// still answers reads and deletes.
+    func testUnreadableLegacyCacheDiagnosesMigrationWithoutWithholdingHistory() async throws {
+        let store = try makeStore()
+        let stored = entry("already durable", at: 42)
+        try await store.append(stored)
+        let legacy = root.appendingPathComponent(LegacyTranscriptImport.fileName)
+        try Data([0xFF, 0xFE, 0x00, 0xC3, 0x28]).write(to: legacy)
+
+        let reconciliation = try await LegacyTranscriptImport.reconcileAfterConfiguration(
+            enabled: true, directory: root, localeIdentifier: "en-US", openStore: { store })
+
+        XCTAssertEqual(reconciliation.newest?.id, stored.id, "the newest durable row still loads")
+        XCTAssertEqual(reconciliation.migrationDiagnostic, LegacyTranscriptImport.unreadableDiagnostic)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: legacy.path),
+                      "unreadable legacy data is kept for diagnosis rather than destroyed")
+
+        // The store is untouched by the failed migration and remains fully usable.
+        let marker = try await store.metadataValue(LegacyTranscriptImport.markerKey)
+        XCTAssertNil(marker, "a migration that read nothing must not claim completion")
+        let count = try await store.count()
+        XCTAssertEqual(count, 1)
+        let appended = try await store.append(entry("written after the failure", at: 43))
+        XCTAssertTrue(appended.didInsert)
+        let deleted = try await store.delete(id: stored.id)
+        XCTAssertTrue(deleted)
+    }
+
+    /// The diagnostic is content-free: it names the file's fate, never anything the file contained.
+    func testUnreadableLegacyDiagnosticCarriesNoTranscriptContent() async throws {
+        let store = try makeStore()
+        let legacy = root.appendingPathComponent(LegacyTranscriptImport.fileName)
+        var bytes = Array("private words".utf8)
+        bytes.append(contentsOf: [0xFF, 0xFE])
+        try Data(bytes).write(to: legacy)
+
+        let reconciliation = try await LegacyTranscriptImport.reconcileAfterConfiguration(
+            enabled: true, directory: root, localeIdentifier: "en-US", openStore: { store })
+
+        let diagnostic = try XCTUnwrap(reconciliation.migrationDiagnostic)
+        XCTAssertFalse(diagnostic.contains("private"))
+        XCTAssertFalse(diagnostic.contains(root.path), "no path is disclosed either")
+        XCTAssertNil(reconciliation.newest, "an unreadable cache adds nothing to history")
+        let count = try await store.count()
+        XCTAssertEqual(count, 0)
     }
 
     func testDisabledHistoryDeletesOnlyLegacyPlaintextWithoutCreatingDatabase() throws {

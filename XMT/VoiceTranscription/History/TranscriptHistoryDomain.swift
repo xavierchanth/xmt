@@ -12,8 +12,6 @@ struct TranscriptHistoryEntry: Equatable, Sendable {
     let text: String
     let localeIdentifier: String
     var source: TranscriptSource = .live
-
-    var characterCount: Int { text.count }
 }
 
 /// Bounded-history retention. Both bounds are total: a policy always resolves to usable limits.
@@ -85,23 +83,5 @@ enum TranscriptHistoryPolicy {
             text: text,
             localeIdentifier: context.localeIdentifier,
             source: context.source))
-    }
-
-    /// Pure retention arithmetic over rows already ordered newest first. Returns the identifiers a
-    /// prune must remove, so ordering and bound behavior are testable without touching SQLite.
-    static func identifiersToPrune(
-        newestFirst rows: [(id: UUID, recordedAt: Date)],
-        policy: TranscriptRetentionPolicy,
-        now: Date
-    ) -> [UUID] {
-        var doomed = Array(rows.dropFirst(policy.maximumEntries)).map(\.id)
-        if let earliest = policy.earliestRetained(now: now) {
-            let expired = rows.prefix(policy.maximumEntries).filter { $0.recordedAt < earliest }.map(\.id)
-            doomed.append(contentsOf: expired)
-        }
-        // The newest row always survives, so a commit can never prune what it just wrote.
-        if let newest = rows.first?.id { doomed.removeAll { $0 == newest } }
-        var seen = Set<UUID>()
-        return doomed.filter { seen.insert($0).inserted }
     }
 }
