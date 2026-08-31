@@ -11,9 +11,10 @@ import Foundation
 ///    single transaction, so the marker exists only if the entry does. Losing the marker costs a
 ///    harmless re-read; it can never produce a second row.
 ///
-/// The legacy file is never modified or deleted: it remains the one-slot cache the existing
-/// paste-latest path reads, and leaving it means a partial import has nothing to lose.
+/// The legacy file is deleted only after the row and marker transaction commits. If deletion is
+/// interrupted, deterministic identity makes the next launch harmlessly repeat the cleanup.
 enum LegacyTranscriptImport {
+    enum ImportError: Error { case unreadableLegacyTranscript }
     static let markerKey = "legacy_last_transcript_import"
     static let fileName = "last-transcript.txt"
 
@@ -53,15 +54,26 @@ enum LegacyTranscriptImport {
     static func run(store: TranscriptHistoryStore, directory: URL, localeIdentifier: String,
                     fileManager: FileManager = .default) async throws -> Outcome {
         let existingMarker = try await store.metadataValue(markerKey)
-        guard let candidate = candidate(directory: directory, localeIdentifier: localeIdentifier,
-                                        fileManager: fileManager) else {
-            if existingMarker == nil { try await store.setMetadata(markerKey, "empty") }
+        let url = directory.appendingPathComponent(fileName)
+        guard fileManager.fileExists(atPath: url.path) else {
+            if existingMarker == nil { try await store.setMetadata(markerKey, "absent") }
             return .nothingToImport
         }
-        if existingMarker == candidate.fingerprint { return .alreadyImported }
-        let outcome = try await store.appendMarking(
-            candidate.entry, marker: (markerKey, candidate.fingerprint))
-        return outcome.didInsert ? .imported(candidate.entry) : .alreadyImported
+        guard let candidate = candidate(directory: directory, localeIdentifier: localeIdentifier,
+                                        fileManager: fileManager) else {
+            // Do not advance the marker or alter unreadable/invalid legacy data. The caller emits a
+            // content-free diagnostic by error type only.
+            throw ImportError.unreadableLegacyTranscript
+        }
+        let didInsert: Bool
+        if existingMarker == candidate.fingerprint {
+            didInsert = false
+        } else {
+            didInsert = try await store.appendMarking(
+                candidate.entry, marker: (markerKey, candidate.fingerprint)).didInsert
+        }
+        try fileManager.removeItem(at: url)
+        return didInsert ? .imported(candidate.entry) : .alreadyImported
     }
 
     /// Hex SHA-256 of the transcript text. Content-addressed so the same cache never imports twice,

@@ -49,17 +49,22 @@ import XCTest
         XCTAssertEqual(result.historyEntry?.text, "ordered")
     }
 
-    func testHistoryFailureDoesNotWithdrawTheCommitOrBlockPaste() async throws {
+    func testHistoryFailurePreservesRecoveryAndBlocksPaste() async throws {
         enum Expected: Error { case history }
         var events: [String] = []
         let deps = recordingDependencies(into: { events.append($0) }, appendHistory: { _, _ in throw Expected.history })
-        let result = try await TranscriptCommitter(directory: root, dependencies: deps)
-            .commit("resilient", settings: settings(sessionID: UUID()), targetPID: 12)
-
-        XCTAssertEqual(events, ["clipboard", "temp", "move", "history:resilient", "delete-audio", "paste"])
-        XCTAssertNotNil(result.historyError)
-        XCTAssertNil(result.historyEntry, "a failed append is never reported as recorded")
-        XCTAssertNil(result.pasteError)
+        do {
+            _ = try await TranscriptCommitter(directory: root, dependencies: deps)
+                .commit("resilient", settings: settings(sessionID: UUID()), targetPID: 12)
+            XCTFail("enabled history failure must abort before the commit point")
+        } catch {
+            guard case TranscriptCommitter.CommitError.historyStorageFailed = error else {
+                return XCTFail("wrong error: \(error)")
+            }
+        }
+        XCTAssertEqual(events, ["clipboard", "temp", "move", "history:resilient"])
+        XCTAssertFalse(events.contains("delete-audio"))
+        XCTAssertFalse(events.contains("paste"))
     }
 
     func testClipboardFailureNeverReachesHistory() async {

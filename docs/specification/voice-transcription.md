@@ -14,7 +14,7 @@ The target's deployment target is macOS 26.0, and the speech types are compiled 
 
 The module is a main-actor singleton owned by the app delegate. It is compiled in, not registered through a general module list.
 
-- At `applicationDidFinishLaunching`, XMT registers the module. Registration reconciles any recovery artifacts left by a previous run, installs the paste-latest shortcut handler, migrates the former keep-last preference to the canonical history-enabled preference, and then loads configuration; applying that configuration loads `last-transcript.txt` when history resolves enabled and starts Voice triggers when the module resolves enabled. Registration acquires no microphone, speech, or analyzer resource, and it prompts for nothing.
+- At `applicationDidFinishLaunching`, XMT registers the module. Registration reconciles recovery artifacts, installs the paste-latest shortcut handler, migrates the former keep-last preference, loads configuration, imports the legacy one-slot transcript when present, and loads the newest history row as Paste Latest. Registration acquires no microphone, speech, or analyzer resource, and it prompts for nothing.
 - When the app becomes active, XMT refreshes the input-device list and reloads configuration.
 - At `applicationWillTerminate`, the module stops: the event tap observation is cancelled, the maximum-duration timer is invalidated, capture is stopped, the arming and analysis tasks are cancelled, any live transcriber is cancelled and its asset reservation released, and the partial transcript is cleared. A stop while a recovery recording is pending preserves that pending state; otherwise the session reducer is reset and the status becomes disabled.
 - Enabling the module installs the Fn event tap and enables the paste-latest shortcut; disabling it performs the same stop as termination and disables both triggers. Neither requires restarting XMT.
@@ -144,12 +144,11 @@ Commit is ordered so the transcript survives every later failure. It is covered 
 
 1. The recognized text is trimmed of surrounding whitespace and newlines.
 2. The clipboard is cleared and set to the transcript. A clipboard failure aborts the commit before anything else happens.
-3. If **transcript history** is enabled, the text is written atomically to `last-transcript.txt` in the same cache directory, replacing any previous file. If it is disabled, an existing file is removed.
-4. If **transcript history** is enabled, the transcript is appended to the durable history store described below and retention is applied in the same transaction. An append failure is reported on the commit result and never withdraws anything already done.
-5. Recovery artifacts for the session are deleted. This deletion is the commit point.
-6. Only then, if **auto-paste** is enabled and a trustworthy target application was captured, a logical Command-V is posted.
+3. If **transcript history** is enabled, the transcript is appended to the durable history store and retention is applied in the same transaction. Failure aborts before recovery deletion and paste.
+4. Recovery artifacts for the session are deleted. This deletion is the commit point.
+5. Only then, if **auto-paste** is enabled and a trustworthy target application was captured, a logical Command-V is posted.
 
-The module also keeps the transcript in memory as the last transcript, exposed as `Copy Last Transcript` in the menu and in settings. When transcript history resolves enabled, registration loads an existing nonempty UTF-8 `last-transcript.txt`, so that transcript is available after relaunch. With history disabled, the file is not loaded; a transcript committed during the current run remains available in memory. The clipboard is never restored or wiped afterwards, so a failed paste still leaves usable text.
+The module also keeps the transcript in memory as the last transcript. When history resolves enabled, registration loads the newest retained database row, so Paste Latest works across relaunch. With history disabled, a transcript committed during the current run remains available only in memory. The clipboard is never restored or wiped afterwards.
 
 ### Durable history storage
 
@@ -161,7 +160,7 @@ An entry holds five values and no others: identity, recorded instant in millisec
 
 Each append runs in one immediate transaction that inserts and then prunes, so history is never observed above its bounds. The insert is idempotent on the entry identity, which is the committing session's identity: a commit replayed after an interrupted run restores the same row rather than a second one. Retention prunes by maximum entries and, when retention days are set, by age; the newest retained entry is never pruned by an append.
 
-The former one-slot `last-transcript.txt` cache is imported into the store at most once, at registration, when history is enabled. The imported entry's identity is derived from the file's content, and the completion marker is written in the same transaction as the entry, so an interrupted import can be replayed without producing a duplicate. The legacy file itself is never modified or removed, and an import failure is not fatal to launch.
+The former one-slot `last-transcript.txt` cache is imported at registration when history is enabled. Its deterministic identity and transactional completion marker make retries idempotent. The legacy file is deleted only after that transaction commits; unreadable data remains untouched and yields a content-free diagnostic.
 
 ### Auto-paste
 

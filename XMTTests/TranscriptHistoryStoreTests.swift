@@ -241,12 +241,12 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         XCTAssertEqual(count, 1)
 
         let second = try await LegacyTranscriptImport.run(store: store, directory: root, localeIdentifier: "en-US")
-        XCTAssertEqual(second, .alreadyImported)
+        XCTAssertEqual(second, .nothingToImport)
         let count2 = try await store.count()
         XCTAssertEqual(count2, 1)
-        XCTAssertTrue(FileManager.default.fileExists(
+        XCTAssertFalse(FileManager.default.fileExists(
             atPath: root.appendingPathComponent(LegacyTranscriptImport.fileName).path),
-            "the legacy cache is left in place for paste latest")
+            "the legacy cache is deleted only after the transaction commits")
     }
 
     func testLegacyImportIsIdempotentWhenTheMarkerIsLost() async throws {
@@ -257,6 +257,7 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         // Simulate a crash that lost the marker but kept the row: the content-addressed identity
         // still makes the replay a duplicate rather than a second copy.
         try await store.setMetadata(LegacyTranscriptImport.markerKey, "")
+        try writeLegacy("interrupted upgrade")
         let replay = try await LegacyTranscriptImport.run(store: store, directory: root, localeIdentifier: "en-US")
         XCTAssertEqual(replay, .alreadyImported)
         let count = try await store.count()
@@ -287,15 +288,16 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         let outcome = try await LegacyTranscriptImport.run(store: store, directory: root, localeIdentifier: "en-US")
         XCTAssertEqual(outcome, .nothingToImport)
         let marker = try await store.metadataValue(LegacyTranscriptImport.markerKey)
-        XCTAssertEqual(marker, "empty")
+        XCTAssertEqual(marker, "absent")
         let count = try await store.count()
         XCTAssertEqual(count, 0)
 
         try writeLegacy("   \n\t ")
-        let outcome2 = try await LegacyTranscriptImport.run(store: store, directory: root, localeIdentifier: "en-US")
-        XCTAssertEqual(outcome2, .nothingToImport)
-        let count2 = try await store.count()
-        XCTAssertEqual(count2, 0)
+        do {
+            _ = try await LegacyTranscriptImport.run(store: store, directory: root, localeIdentifier: "en-US")
+            XCTFail("unusable legacy data must remain for diagnosis")
+        } catch LegacyTranscriptImport.ImportError.unreadableLegacyTranscript {}
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(LegacyTranscriptImport.fileName).path))
     }
 
     func testLegacyImportOfRewrittenCacheAddsExactlyOneMoreEntry() async throws {
@@ -309,7 +311,7 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         let count = try await store.count()
         XCTAssertEqual(count, 2)
         let replay = try await LegacyTranscriptImport.run(store: store, directory: root, localeIdentifier: "en-US")
-        XCTAssertEqual(replay, .alreadyImported)
+        XCTAssertEqual(replay, .nothingToImport)
         let count2 = try await store.count()
         XCTAssertEqual(count2, 2)
     }

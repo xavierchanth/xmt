@@ -96,6 +96,7 @@ final class VoiceTranscriptionModule: ObservableObject {
             let history = try SharedTranscriptHistoryStore.shared(retention: historyRetentionPolicy)
             _ = try await LegacyTranscriptImport.run(
                 store: history, directory: directory, localeIdentifier: locale)
+            if let newest = try await history.entries(limit: 1).first { lastTranscript = newest.text }
         } catch {
             configDiagnostic = configDiagnostic ?? "Transcript history is unavailable"
         }
@@ -217,7 +218,10 @@ final class VoiceTranscriptionModule: ObservableObject {
         applying = false
         applyPasteLatestShortcut(value.pasteLatestTranscriptShortcut)
         if historyEnabled, lastTranscript.isEmpty {
-            lastTranscript = (try? TranscriptCommitter.loadRetainedTranscript()) ?? ""
+            Task { [weak self] in
+                guard let self, let newest = try? await SharedTranscriptHistoryStore.shared().entries(limit: 1).first else { return }
+                self.lastTranscript = newest.text
+            }
         }
         if isEnabled { recoverDegradedAndObserve() } else { stop() }
         WindowMoverModule.shared.applyManaged(enabled: value.windowMoverEnabled, shortcut: value.windowMoverShortcut)

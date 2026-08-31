@@ -18,12 +18,10 @@ struct TranscriptCommitter {
 
     struct Result {
         let pasteError: Error?
-        /// History is an accessory of the commit, never a precondition: a failed append is reported
-        /// but never withdraws the clipboard, the retained file, or the recovery deletion.
         var historyError: Error?
         var historyEntry: TranscriptHistoryEntry?
     }
-    enum CommitError: Error { case recoveryCleanupFailed(Error) }
+    enum CommitError: Error { case historyStorageFailed(Error); case recoveryCleanupFailed(Error) }
     struct Dependencies {
         var setClipboard: (String) throws -> Void
         var write: (Data, URL) throws -> Void
@@ -104,7 +102,7 @@ struct TranscriptCommitter {
             targetApplicationPID: targetPID)).entry
         if let entry {
             do { try await dependencies.appendHistory(entry, settings.historyRetention) }
-            catch { historyError = error }
+            catch { throw CommitError.historyStorageFailed(error) }
         }
         do { try await dependencies.deleteRecovery() }
         catch { throw CommitError.recoveryCleanupFailed(error) }

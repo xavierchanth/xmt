@@ -38,12 +38,14 @@ This checklist defines the deferred manual exercise for Voice behavior that cann
 - Invoke paste latest during recording and verify it pastes only the previous completed transcript, does not alter auto-paste, does not stop or start recording, and creates no additional retained item.
 - Remove Accessibility trust and force a target/layout failure; verify the latest text remains on the clipboard and temporary feedback does not replace recording status.
 - Invoke paste latest with no transcript and with XMT frontmost; verify concise temporary no-op feedback and no paste into XMT.
-- Relaunch with retention enabled and verify `last-transcript.txt` restores the latest transcript; repeat with retention disabled and verify the file is not loaded.
+- Relaunch with history enabled and verify the newest retained database row backs Paste Latest; repeat with history disabled and verify no durable row is written.
+- Seed `last-transcript.txt` and verify one-time import preserves its mtime, deletes it only after commit, and leaves unreadable data untouched with a content-free diagnostic.
 - Change the paste-latest recorder binding, then manage it through version-1 configuration; verify config precedence, disabled recorder state, and restoration of the prior local binding after removing the key.
 
 ## Recovery and cleanup
 
 - Interrupt XMT during capture and verify reconciliation converges to at most one usable pending recording after relaunch.
 - Retry and delete pending recordings and verify successful commit clears all recovery artifacts without affecting paste-latest behavior.
-- Confirm paste latest never rewrites `last-transcript.txt`, deletes recovery artifacts, or creates a multi-entry history store.
+- Confirm paste latest never writes history or deletes recovery artifacts; confirm clear, single delete, and disabling history also preserve pending recovery audio.
+- Exercise menu and panel focus capture, target exit, Accessibility revocation, activation timeout, paste failure, single-delete confirmation, and clear confirmation; verify every failed paste leaves the selected transcript on the clipboard and never targets another app.
 - Restore the original permissions, keyboard layout, audio defaults, and retained/recovery files after the exercise.
