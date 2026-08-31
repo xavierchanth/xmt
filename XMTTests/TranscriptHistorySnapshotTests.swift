@@ -42,12 +42,8 @@ final class TranscriptHistorySnapshotTests: XCTestCase {
         XCTAssertTrue(snapshot.search("absent").isEmpty)
     }
 
-    func testRemoveAffectsOnlyTheNamedEntry() {
-        let doomed = UUID()
-        var snapshot = TranscriptHistorySnapshot([entry("keep", offset: 1), entry("drop", offset: 2, id: doomed)])
-        XCTAssertTrue(snapshot.remove(id: doomed))
-        XCTAssertFalse(snapshot.remove(id: doomed))
-        XCTAssertEqual(snapshot.entries.map(\.text), ["keep"])
+    func testRemoveAllClearsSnapshot() {
+        var snapshot = TranscriptHistorySnapshot([entry("keep", offset: 1)])
         snapshot.removeAll()
         XCTAssertTrue(snapshot.isEmpty)
     }

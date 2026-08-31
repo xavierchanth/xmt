@@ -34,6 +34,7 @@ enum LegacyTranscriptImport {
     /// content-free diagnostic while the newest durable row still loads and the store stays usable.
     static func reconcileAfterConfiguration(
         enabled: Bool, directory: URL, localeIdentifier: String,
+        retention: TranscriptRetentionPolicy,
         openStore: () throws -> TranscriptHistoryStore
     ) async throws -> Reconciliation {
         guard enabled else {
@@ -41,6 +42,9 @@ enum LegacyTranscriptImport {
             return Reconciliation()
         }
         let store = try openStore()
+        // Enforce launch bounds before migration or any surface can observe durable rows. This is
+        // event-driven once per resolved startup, never periodic.
+        _ = try await store.setRetention(retention)
         var diagnostic: String?
         do {
             _ = try await run(store: store, directory: directory, localeIdentifier: localeIdentifier)

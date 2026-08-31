@@ -208,6 +208,24 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         XCTAssertEqual(texts2, ["fresh"])
     }
 
+    func testStartupReconciliationPrunesExactlyAgedRowsBeforeReadingLatest() async throws {
+        let store = try makeStore(TranscriptRetentionPolicy(maximumEntries: 100, maximumAge: nil))
+        let now = Date()
+        try await store.append(TranscriptHistoryEntry(id: UUID(), recordedAt: now.addingTimeInterval(-172_800),
+                                                      text: "aged", localeIdentifier: "en-US", source: .live))
+        try await store.append(TranscriptHistoryEntry(id: UUID(), recordedAt: now.addingTimeInterval(-60),
+                                                      text: "retained", localeIdentifier: "en-US", source: .live))
+
+        let result = try await LegacyTranscriptImport.reconcileAfterConfiguration(
+            enabled: true, directory: root, localeIdentifier: "en-US",
+            retention: TranscriptRetentionPolicy(maximumEntries: 100, maximumAge: 86_400),
+            openStore: { store })
+
+        XCTAssertEqual(result.newest?.text, "retained")
+        let retainedTexts = try await store.entries().map(\.text)
+        XCTAssertEqual(retainedTexts, ["retained"])
+    }
+
     func testDeleteAndDeleteAllRemoveOnlyWhatWasAsked() async throws {
         let store = try makeStore()
         let doomed = entry("remove me", at: 5)
@@ -496,7 +514,7 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         var opened = false
 
         let reconciliation = try await LegacyTranscriptImport.reconcileAfterConfiguration(
-            enabled: false, directory: root, localeIdentifier: "en-US",
+            enabled: false, directory: root, localeIdentifier: "en-US", retention: .default,
             openStore: {
                 opened = true
                 return try TranscriptHistoryStore(url: database)
@@ -521,7 +539,7 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         try Data([0xFF, 0xFE, 0x00, 0xC3, 0x28]).write(to: legacy)
 
         let reconciliation = try await LegacyTranscriptImport.reconcileAfterConfiguration(
-            enabled: true, directory: root, localeIdentifier: "en-US", openStore: { store })
+            enabled: true, directory: root, localeIdentifier: "en-US", retention: .default, openStore: { store })
 
         XCTAssertEqual(reconciliation.newest?.id, stored.id, "the newest durable row still loads")
         XCTAssertEqual(reconciliation.migrationDiagnostic, LegacyTranscriptImport.unreadableDiagnostic)
@@ -548,7 +566,7 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         try Data(bytes).write(to: legacy)
 
         let reconciliation = try await LegacyTranscriptImport.reconcileAfterConfiguration(
-            enabled: true, directory: root, localeIdentifier: "en-US", openStore: { store })
+            enabled: true, directory: root, localeIdentifier: "en-US", retention: .default, openStore: { store })
 
         let diagnostic = try XCTUnwrap(reconciliation.migrationDiagnostic)
         XCTAssertFalse(diagnostic.contains("private"))

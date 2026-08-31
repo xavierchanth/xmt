@@ -55,6 +55,8 @@ final class VoiceTranscriptionModule: ObservableObject {
     private var effective = EffectiveSettings.resolve(config: nil)
     private var reloader: ConfigReloader?
     private var applying = false
+    /// History remains unpublished until the first effective configuration and startup prune finish.
+    private var hasResolvedInitialHistory = false
     private var isPasteLatestHandlerInstalled = false
     private var unmanagedPasteLatestShortcut: KeyboardShortcuts.Shortcut?
     private var feedbackGeneration: UInt64 = 0
@@ -99,16 +101,9 @@ final class VoiceTranscriptionModule: ObservableObject {
                 Task { @MainActor in self?.lastTranscript = note.object as? String ?? "" }
             }
         }
-        // The surfaces start from the persisted preference, so a menu opened before configuration
-        // resolves cannot read history the user has turned off. Managed configuration overrides it
-        // moments later through `apply`.
-        TranscriptHistoryViewModel.shared.setHistoryEnabled(historyEnabled)
-        // One authoritative launch task: effective managed configuration must be applied before
-        // history is allowed to touch durable storage.
-        Task {
-            await configureAndReload()
-            await reconcileLegacyTranscriptForEffectiveHistory()
-        }
+        // One authoritative launch task. Surfaces are born disabled and remain inert until managed
+        // configuration is resolved and enabled storage has been opened and pruned.
+        Task { await configureAndReload() }
     }
 
     /// Applies legacy retention only after effective configuration has resolved. Enabled history is
@@ -119,6 +114,7 @@ final class VoiceTranscriptionModule: ObservableObject {
         do {
             let reconciliation = try await LegacyTranscriptImport.reconcileAfterConfiguration(
                 enabled: historyEnabled, directory: directory, localeIdentifier: localeIdentifier,
+                retention: historyRetentionPolicy,
                 openStore: { try SharedTranscriptHistoryStore.shared(retention: historyRetentionPolicy) })
             lastTranscript = reconciliation.newest?.text ?? ""
             // A migration that could not read the old cache is reported as such. History itself
@@ -219,6 +215,12 @@ final class VoiceTranscriptionModule: ObservableObject {
         reloader = loader
         await loader.addApplyCallback { [weak self] result in await self?.apply(result.effective) }
         await loadConfig()
+        await reconcileLegacyTranscriptForEffectiveHistory()
+        hasResolvedInitialHistory = true
+        TranscriptHistoryViewModel.shared.setHistoryEnabled(historyEnabled)
+        if historyEnabled {
+            await TranscriptHistoryViewModel.shared.reload(limit: TranscriptHistorySnapshot.menuPreviewCount)
+        }
     }
 
     private func loadConfig() async {
@@ -354,15 +356,14 @@ final class VoiceTranscriptionModule: ObservableObject {
     /// here: the control is disabled while the configuration file owns the setting, and `apply` is
     /// the only path that may change an effective value.
     private func applyLocalHistoryEnabled() {
-        guard !applying, !effective.historyEnabled.isManaged else { return }
+        guard !applying, hasResolvedInitialHistory, !effective.historyEnabled.isManaged else { return }
         TranscriptHistoryViewModel.shared.setHistoryEnabled(historyEnabled)
     }
 
     /// A locally changed retention bound, applied at once to a store that is already open. As in
     /// `applyHistorySettings`, tightening retention never opens or creates the database.
     private func applyLocalHistoryRetention() {
-        guard !applying, historyEnabled,
-              !effective.historyRetentionDays.isManaged, !effective.historyMaxEntries.isManaged,
+        guard !applying, hasResolvedInitialHistory, historyEnabled,
               let store = SharedTranscriptHistoryStore.opened() else { return }
         let policy = historyRetentionPolicy
         Task { _ = try? await store.setRetention(policy) }
@@ -374,6 +375,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     /// open: tightening retention must not be the thing that creates the database, and a disabled
     /// history must never reach storage at all. Pruning here is event-driven, not periodic.
     private func applyHistorySettings(changedKeys: Set<EffectiveSettings.Key>) {
+        guard hasResolvedInitialHistory else { return }
         TranscriptHistoryViewModel.shared.setHistoryEnabled(historyEnabled)
         guard historyEnabled,
               !changedKeys.isDisjoint(with: [.historyRetentionDays, .historyMaxEntries]),

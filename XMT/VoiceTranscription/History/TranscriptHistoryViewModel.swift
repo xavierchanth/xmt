@@ -21,8 +21,6 @@ final class TranscriptHistoryViewModel: ObservableObject {
         var setClipboard: (String) throws -> Void
         var captureFrontmostTarget: () -> CapturedPasteTarget?
         var paste: (String, CapturedPasteTarget?) async -> CapturedTargetPaster.Outcome
-        /// Diagnostic surfaced when the durable store could not be opened at launch.
-        var openDiagnostic: String?
 
         @MainActor static var live: Dependencies {
             let board = NSPasteboard.general
@@ -40,8 +38,7 @@ final class TranscriptHistoryViewModel: ObservableObject {
                 repository: SharedTranscriptHistoryRepository(),
                 setClipboard: setClipboard,
                 captureFrontmostTarget: { CapturedPasteTarget.frontmost() },
-                paste: { await paster.paste($0, to: $1) },
-                openDiagnostic: nil)
+                paste: { await paster.paste($0, to: $1) })
         }
     }
 
@@ -55,7 +52,7 @@ final class TranscriptHistoryViewModel: ObservableObject {
     @Published private(set) var capturedTarget: CapturedPasteTarget?
     /// Effective history setting. While false every surface is inert: nothing reads, deletes, or
     /// clears, so no repository call — and therefore no database creation — can originate here.
-    @Published private(set) var isHistoryEnabled = true
+    @Published private(set) var isHistoryEnabled = false
 
     private var dependencies: Dependencies
     /// True when the snapshot in hand holds every retained entry rather than a menu-sized prefix.
@@ -68,7 +65,6 @@ final class TranscriptHistoryViewModel: ObservableObject {
 
     init(dependencies: Dependencies) {
         self.dependencies = dependencies
-        diagnostic = dependencies.openDiagnostic
     }
 
     convenience init() { self.init(dependencies: .live) }
@@ -100,8 +96,7 @@ final class TranscriptHistoryViewModel: ObservableObject {
         do {
             snapshot = TranscriptHistorySnapshot(try await dependencies.repository.entries(limit: effectiveLimit))
             isSnapshotComplete = effectiveLimit == nil
-            diagnostic = dependencies.openDiagnostic
-        } catch {
+            } catch {
             diagnostic = "History could not be read"
         }
     }
@@ -162,8 +157,7 @@ final class TranscriptHistoryViewModel: ObservableObject {
             // have committed while the panel was open, and Paste Latest must follow the store.
             snapshot = TranscriptHistorySnapshot(try await dependencies.repository.entries(limit: nil))
             isSnapshotComplete = true
-            diagnostic = dependencies.openDiagnostic
-            NotificationCenter.default.post(name: .transcriptHistoryLatestChanged,
+                NotificationCenter.default.post(name: .transcriptHistoryLatestChanged,
                                             object: snapshot.entries.first?.text ?? "")
             showFeedback("Deleted transcript")
         } catch {
@@ -187,8 +181,7 @@ final class TranscriptHistoryViewModel: ObservableObject {
             var updated = snapshot
             updated.removeAll()
             snapshot = updated
-            diagnostic = dependencies.openDiagnostic
-            NotificationCenter.default.post(name: .transcriptHistoryLatestChanged, object: "")
+                NotificationCenter.default.post(name: .transcriptHistoryLatestChanged, object: "")
             showFeedback("History cleared")
         } catch {
             diagnostic = "History could not be cleared"

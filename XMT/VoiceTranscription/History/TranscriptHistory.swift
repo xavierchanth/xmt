@@ -37,14 +37,6 @@ struct TranscriptHistorySnapshot: Equatable, Sendable {
         return entries.filter { $0.text.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
     }
 
-    /// Local removal after a repository delete succeeded. Returns false when the entry was already gone.
-    @discardableResult
-    mutating func remove(id: UUID) -> Bool {
-        guard let index = entries.firstIndex(where: { $0.id == id }) else { return false }
-        entries.remove(at: index)
-        return true
-    }
-
     mutating func removeAll() { entries.removeAll() }
 
     /// Single-line, length-bounded rendering for menu items and list rows.

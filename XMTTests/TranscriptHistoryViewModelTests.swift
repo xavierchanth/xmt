@@ -65,7 +65,8 @@ final class TranscriptHistoryViewModelTests: XCTestCase {
     private func makeHarness(
         entries: [TranscriptHistoryEntry],
         target: CapturedPasteTarget? = CapturedPasteTarget(pid: 42, bundleIdentifier: "com.example.editor",
-                                                           localizedName: "Editor", capturedAt: Date())
+                                                           localizedName: "Editor", capturedAt: Date()),
+        initiallyEnabled: Bool = true
     ) -> Harness {
         let repository = SpyRepository(entries)
         let clipboard = Harness.Box()
@@ -80,8 +81,8 @@ final class TranscriptHistoryViewModelTests: XCTestCase {
             paste: { text, capturedTarget in
                 pastes.requests.append((text, capturedTarget))
                 return pastes.outcome
-            },
-            openDiagnostic: nil))
+            }))
+        if initiallyEnabled { model.setHistoryEnabled(true) }
         return Harness(model: model, repository: repository, clipboard: clipboard, pastes: pastes)
     }
 
@@ -328,14 +329,15 @@ final class TranscriptHistoryViewModelTests: XCTestCase {
         XCTAssertTrue(harness.model.hasEntries)
     }
 
-    func testDisabledPanelControllerBuildsNothingAndReadsNothing() async {
-        let harness = makeHarness(entries: [entry("one", offset: 1)])
-        harness.model.setHistoryEnabled(false)
+    func testMenuAndPanelBeforeInitialConfigurationDoNoRepositoryWork() async {
+        let harness = makeHarness(entries: [entry("one", offset: 1)], initiallyEnabled: false)
         let controller = TranscriptHistoryPanelController(viewModel: harness.model)
 
+        await harness.model.reload(limit: TranscriptHistorySnapshot.menuPreviewCount)
         controller.show()
 
-        XCTAssertFalse(controller.isPresented, "a disabled Show All built a panel")
+        XCTAssertFalse(harness.model.isHistoryEnabled)
+        XCTAssertFalse(controller.isPresented, "a pre-config Show All built a panel")
         XCTAssertEqual(harness.repository.reads, 0)
         XCTAssertNil(harness.model.capturedTarget)
     }
