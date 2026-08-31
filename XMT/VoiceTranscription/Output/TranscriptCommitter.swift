@@ -3,8 +3,26 @@ import Foundation
 
 @MainActor
 struct TranscriptCommitter {
-    struct Settings { let keepLastTranscript: Bool; let autoPaste: Bool }
-    struct Result { let pasteError: Error? }
+    struct Settings {
+        let keepLastTranscript: Bool
+        let autoPaste: Bool
+        /// History is opt-in per commit; retries and non-final text never set it.
+        var recordHistory: Bool = false
+        /// Identity of the committing session. History rows are keyed by it, so a replayed commit
+        /// after an interrupted run re-inserts the same row instead of a duplicate.
+        var sessionID: UUID = UUID()
+        var localeIdentifier: String = ""
+        var secureInputActive: Bool = false
+        var historyRetention: TranscriptRetentionPolicy = .default
+    }
+
+    struct Result {
+        let pasteError: Error?
+        /// History is an accessory of the commit, never a precondition: a failed append is reported
+        /// but never withdraws the clipboard, the retained file, or the recovery deletion.
+        var historyError: Error?
+        var historyEntry: TranscriptHistoryEntry?
+    }
     enum CommitError: Error { case recoveryCleanupFailed(Error) }
     struct Dependencies {
         var setClipboard: (String) throws -> Void
@@ -15,6 +33,8 @@ struct TranscriptCommitter {
         var exists: (URL) -> Bool
         var paste: (String, pid_t?) async throws -> Void
         var deleteRecovery: () async throws -> Void
+        /// Durable history append. Defaults to a no-op so a caller that wants no history writes none.
+        var appendHistory: (TranscriptHistoryEntry, TranscriptRetentionPolicy) async throws -> Void = { _, _ in }
 
         @MainActor static var live: Dependencies {
             let fm = FileManager.default, board = NSPasteboard.general, service = PasteService()
@@ -27,6 +47,9 @@ struct TranscriptCommitter {
                 paste: { try await service.paste(text: $0, targetPID: $1) },
                 deleteRecovery: {
                     _ = try Reconciliation.run(store: PendingRecordingStore(), transcriptWasCommitted: true)
+                },
+                appendHistory: { entry, retention in
+                    try await SharedTranscriptHistoryStore.shared().append(entry, retention: retention)
                 })
         }
     }
@@ -67,12 +90,29 @@ struct TranscriptCommitter {
         } else {
             try dependencies.remove(transcriptURL)
         }
+        // History is written before the commit point on purpose. A crash between the two replays the
+        // whole commit from the surviving recovery artifact, and the append is idempotent by session
+        // identity, so the replay restores the same single row rather than adding a second one.
+        var historyError: Error?
+        let entry = TranscriptHistoryPolicy.decide(TranscriptCommitContext(
+            sessionID: settings.sessionID,
+            recordedAt: Date(),
+            text: transcript,
+            localeIdentifier: settings.localeIdentifier,
+            historyEnabled: settings.recordHistory,
+            secureInputActive: settings.secureInputActive,
+            targetApplicationPID: targetPID)).entry
+        if let entry {
+            do { try await dependencies.appendHistory(entry, settings.historyRetention) }
+            catch { historyError = error }
+        }
         do { try await dependencies.deleteRecovery() }
         catch { throw CommitError.recoveryCleanupFailed(error) }
         var pasteError: Error?
         if settings.autoPaste {
             do { try await dependencies.paste(transcript, targetPID) } catch { pasteError = error }
         }
-        return Result(pasteError: pasteError)
+        return Result(pasteError: pasteError, historyError: historyError,
+                      historyEntry: historyError == nil ? entry : nil)
     }
 }

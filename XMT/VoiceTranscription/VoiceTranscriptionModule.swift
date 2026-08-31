@@ -84,6 +84,21 @@ final class VoiceTranscriptionModule: ObservableObject {
         reconcileRecovery()
         registerPasteLatestShortcut()
         Task { await configureAndReload() }
+        Task { await importLegacyTranscriptIfNeeded() }
+    }
+
+    /// Carries the pre-history one-slot cache into the durable store, at most once. The import is
+    /// idempotent and its failure is not fatal: history is an accessory, never a launch dependency.
+    private func importLegacyTranscriptIfNeeded() async {
+        guard historyEnabled else { return }
+        let directory = store.root, locale = localeIdentifier
+        do {
+            let history = try SharedTranscriptHistoryStore.shared(retention: historyRetentionPolicy)
+            _ = try await LegacyTranscriptImport.run(
+                store: history, directory: directory, localeIdentifier: locale)
+        } catch {
+            configDiagnostic = configDiagnostic ?? "Transcript history is unavailable"
+        }
     }
 
     func stop() {
@@ -148,7 +163,8 @@ final class VoiceTranscriptionModule: ObservableObject {
                     Task { @MainActor in self?.partialTranscript = update.text }
                 }
                 _ = machine.handle(.finalized(session))
-                try await commit(text, target: nil, recovery: .pending)
+                try await commit(text, target: nil, recovery: .pending, sessionID: pending.metadata.sessionID,
+                                 localeIdentifier: pending.metadata.localeIdentifier)
             } catch { await captureFailed(error) }
         }
     }
@@ -296,7 +312,7 @@ final class VoiceTranscriptionModule: ObservableObject {
         Task {
             if let error = await analysisTask?.value { await captureFailed(error); return }
             capture = nil; analysisTask = nil
-            do { let text = try await transcriber?.finish() ?? ""; _ = machine.handle(.finalized(session)); try await commit(text, target: targetPID, recovery: .active) }
+            do { let text = try await transcriber?.finish() ?? ""; _ = machine.handle(.finalized(session)); try await commit(text, target: targetPID, recovery: .active, sessionID: session.id, localeIdentifier: session.localeIdentifier) }
             catch { await captureFailed(error) }
             _ = drainingCapture
         }
@@ -304,7 +320,15 @@ final class VoiceTranscriptionModule: ObservableObject {
 
     private enum RecoverySource { case active, pending }
 
-    private func commit(_ text: String, target: pid_t?, recovery: RecoverySource) async throws {
+    /// Bounded retention as resolved for this run. Days of zero means "count only".
+    private var historyRetentionPolicy: TranscriptRetentionPolicy {
+        TranscriptRetentionPolicy(
+            maximumEntries: historyMaxEntries,
+            maximumAge: historyRetentionDays > 0 ? Double(historyRetentionDays) * 86_400 : nil)
+    }
+
+    private func commit(_ text: String, target: pid_t?, recovery: RecoverySource,
+                        sessionID: UUID, localeIdentifier: String) async throws {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else {
             switch recovery {
@@ -319,7 +343,10 @@ final class VoiceTranscriptionModule: ObservableObject {
         }
         let result = try await TranscriptCommitter().commit(
             clean,
-            settings: .init(keepLastTranscript: historyEnabled, autoPaste: autoPaste && target != nil),
+            settings: .init(keepLastTranscript: historyEnabled, autoPaste: autoPaste && target != nil,
+                            recordHistory: historyEnabled, sessionID: sessionID,
+                            localeIdentifier: localeIdentifier,
+                            historyRetention: historyRetentionPolicy),
             targetPID: target
         )
         lastTranscript = clean; partialTranscript = ""; _ = machine.handle(.committed)

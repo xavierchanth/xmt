@@ -19,7 +19,7 @@ The module is a main-actor singleton owned by the app delegate. It is compiled i
 - At `applicationWillTerminate`, the module stops: the event tap observation is cancelled, the maximum-duration timer is invalidated, capture is stopped, the arming and analysis tasks are cancelled, any live transcriber is cancelled and its asset reservation released, and the partial transcript is cleared. A stop while a recovery recording is pending preserves that pending state; otherwise the session reducer is reset and the status becomes disabled.
 - Enabling the module installs the Fn event tap and enables the paste-latest shortcut; disabling it performs the same stop as termination and disables both triggers. Neither requires restarting XMT.
 
-The persisted enabled setting defaults to **enabled**, as do auto-paste, transcript history, and system-default fallback. History retention defaults to 30 days and 500 entries. The default locale is `en-US` and the default device-priority list is empty. This increment provides the canonical history configuration and managed settings controls; the commit path still uses only the enabled value for its existing latest-transcript cache, and a bounded history store is not implemented.
+The persisted enabled setting defaults to **enabled**, as do auto-paste, transcript history, and system-default fallback. History retention defaults to 30 days and 500 entries. The default locale is `en-US` and the default device-priority list is empty. Retention values bound the durable history store described under [durable history storage](#durable-history-storage).
 
 ### Status values
 
@@ -140,15 +140,28 @@ A retried transcript has no captured target application, so XMT skips auto-paste
 
 ## Transcript commit
 
-Commit is ordered so the transcript survives every later failure. It is covered by `XMTTests/CommitSequenceTests.swift`.
+Commit is ordered so the transcript survives every later failure. It is covered by `XMTTests/CommitSequenceTests.swift` and `XMTTests/TranscriptHistoryCommitTests.swift`.
 
 1. The recognized text is trimmed of surrounding whitespace and newlines.
 2. The clipboard is cleared and set to the transcript. A clipboard failure aborts the commit before anything else happens.
-3. If **transcript history** is enabled, the text is written atomically to `last-transcript.txt` in the same cache directory, replacing any previous file. If it is disabled, an existing file is removed. The retention-days and maximum-entries settings do not alter this one-slot commit path.
-4. Recovery artifacts for the session are deleted. This deletion is the commit point.
-5. Only then, if **auto-paste** is enabled and a trustworthy target application was captured, a logical Command-V is posted.
+3. If **transcript history** is enabled, the text is written atomically to `last-transcript.txt` in the same cache directory, replacing any previous file. If it is disabled, an existing file is removed.
+4. If **transcript history** is enabled, the transcript is appended to the durable history store described below and retention is applied in the same transaction. An append failure is reported on the commit result and never withdraws anything already done.
+5. Recovery artifacts for the session are deleted. This deletion is the commit point.
+6. Only then, if **auto-paste** is enabled and a trustworthy target application was captured, a logical Command-V is posted.
 
 The module also keeps the transcript in memory as the last transcript, exposed as `Copy Last Transcript` in the menu and in settings. When transcript history resolves enabled, registration loads an existing nonempty UTF-8 `last-transcript.txt`, so that transcript is available after relaunch. With history disabled, the file is not loaded; a transcript committed during the current run remains available in memory. The clipboard is never restored or wiped afterwards, so a failed paste still leaves usable text.
+
+### Durable history storage
+
+Retained transcripts are stored in one SQLite database, `transcript-history.sqlite3`, in the same Voice Transcription cache directory. The behavior below is covered by `XMTTests/TranscriptHistoryStoreTests.swift`.
+
+Access is serialized: the store is an actor owning a single connection opened in SQLite's serialized threading mode, and it is the only writer. The schema is declared `STRICT`, carries the schema version in both `PRAGMA user_version` and a `schema_metadata` table, and is created idempotently on every open; a database whose version is newer than the running build is rejected rather than reinterpreted.
+
+An entry holds five values and no others: identity, recorded instant in milliseconds, insertion sequence, text, and locale. No application identity, process identifier, audio path, or partial transcript is stored, because no column exists to hold one. Entries are listed newest first, ties on the recorded instant broken by insertion sequence, so commit order is total.
+
+Each append runs in one immediate transaction that inserts and then prunes, so history is never observed above its bounds. The insert is idempotent on the entry identity, which is the committing session's identity: a commit replayed after an interrupted run restores the same row rather than a second one. Retention prunes by maximum entries and, when retention days are set, by age; the newest retained entry is never pruned by an append.
+
+The former one-slot `last-transcript.txt` cache is imported into the store at most once, at registration, when history is enabled. The imported entry's identity is derived from the file's content, and the completion marker is written in the same transaction as the entry, so an interrupted import can be replayed without producing a duplicate. The legacy file itself is never modified or removed, and an import failure is not fatal to launch.
 
 ### Auto-paste
 
