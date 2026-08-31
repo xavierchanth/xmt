@@ -24,7 +24,9 @@ final class VoiceTranscriptionModule: ObservableObject {
     @Published private(set) var temporaryFeedback: String?
     @Published var isEnabled: Bool { didSet { persistAndReconfigure("voice.enabled", isEnabled) } }
     @Published var autoPaste: Bool { didSet { persist("voice.autoPaste", autoPaste) } }
-    @Published var keepLastTranscript: Bool { didSet { persist("voice.keepLastTranscript", keepLastTranscript) } }
+    @Published var historyEnabled: Bool { didSet { persist(VoiceHistoryPreferences.enabledKey, historyEnabled) } }
+    @Published var historyRetentionDays: Int { didSet { persist(VoiceHistoryPreferences.retentionDaysKey, historyRetentionDays) } }
+    @Published var historyMaxEntries: Int { didSet { persist(VoiceHistoryPreferences.maxEntriesKey, historyMaxEntries) } }
     @Published var fallbackToSystemDefault: Bool { didSet { persist("voice.fallback", fallbackToSystemDefault) } }
     @Published var localeIdentifier: String { didSet { persist("voice.locale", localeIdentifier) } }
     @Published var devicePriority: [InputDeviceDTO] { didSet { saveDevices() } }
@@ -58,10 +60,17 @@ final class VoiceTranscriptionModule: ObservableObject {
 
     private init() {
         let d = UserDefaults.standard
-        d.register(defaults: ["voice.enabled": true, "voice.autoPaste": true, "voice.keepLastTranscript": true,
-                              "voice.fallback": true, "voice.locale": "en-US"])
+        // Migration must precede registration: registered values participate in
+        // `object(forKey:)` and would otherwise look like persisted canonical data.
+        VoiceHistoryPreferences.migrate(in: d)
+        d.register(defaults: ["voice.enabled": true, "voice.autoPaste": true,
+                              "voice.fallback": true, "voice.locale": "en-US"]
+            .merging(VoiceHistoryPreferences.registeredDefaults) { current, _ in current })
         isEnabled = d.bool(forKey: "voice.enabled"); autoPaste = d.bool(forKey: "voice.autoPaste")
-        keepLastTranscript = d.bool(forKey: "voice.keepLastTranscript"); fallbackToSystemDefault = d.bool(forKey: "voice.fallback")
+        historyEnabled = d.bool(forKey: VoiceHistoryPreferences.enabledKey)
+        historyRetentionDays = d.integer(forKey: VoiceHistoryPreferences.retentionDaysKey)
+        historyMaxEntries = d.integer(forKey: VoiceHistoryPreferences.maxEntriesKey)
+        fallbackToSystemDefault = d.bool(forKey: "voice.fallback")
         localeIdentifier = d.string(forKey: "voice.locale") ?? "en-US"
         devicePriority = (d.data(forKey: "voice.devices").flatMap { try? JSONDecoder().decode([InputDeviceDTO].self, from: $0) }) ?? []
         if d.bool(forKey: Self.pasteLatestShortcutBackupActiveKey) {
@@ -155,8 +164,9 @@ final class VoiceTranscriptionModule: ObservableObject {
     func reloadConfig() { Task { await loadConfig() } }
 
     private func configureAndReload() async {
-        let local = SettingsValues(voiceEnabled: isEnabled, autoPaste: autoPaste, keepLastTranscript: keepLastTranscript,
-                                   locale: localeIdentifier, inputDevicePriority: devicePriority,
+        let local = SettingsValues(voiceEnabled: isEnabled, autoPaste: autoPaste,
+                                   historyEnabled: historyEnabled, historyRetentionDays: historyRetentionDays,
+                                   historyMaxEntries: historyMaxEntries, locale: localeIdentifier, inputDevicePriority: devicePriority,
                                    fallbackToSystemDefault: fallbackToSystemDefault)
         let loader = ConfigReloader(local: local)
         reloader = loader
@@ -175,16 +185,22 @@ final class VoiceTranscriptionModule: ObservableObject {
         effective = value; managedKeys = Set(EffectiveSettings.Key.allCases.filter { key in
             switch key { case .voiceEnabled: return value.voiceEnabled.isManaged; case .voiceShortcut: return value.voiceShortcut.isManaged
             case .pasteLatestTranscriptShortcut: return value.pasteLatestTranscriptShortcut.isManaged
-            case .autoPaste: return value.autoPaste.isManaged; case .keepLastTranscript: return value.keepLastTranscript.isManaged; case .locale: return value.locale.isManaged
+            case .autoPaste: return value.autoPaste.isManaged
+            case .historyEnabled: return value.historyEnabled.isManaged
+            case .historyRetentionDays: return value.historyRetentionDays.isManaged
+            case .historyMaxEntries: return value.historyMaxEntries.isManaged
+            case .locale: return value.locale.isManaged
             case .inputDevicePriority: return value.inputDevicePriority.isManaged; case .fallbackToSystemDefault: return value.fallbackToSystemDefault.isManaged
             default: return false }
         })
         applying = true
-        isEnabled = value.voiceEnabled.value; autoPaste = value.autoPaste.value; keepLastTranscript = value.keepLastTranscript.value
+        isEnabled = value.voiceEnabled.value; autoPaste = value.autoPaste.value
+        historyEnabled = value.historyEnabled.value; historyRetentionDays = value.historyRetentionDays.value
+        historyMaxEntries = value.historyMaxEntries.value
         localeIdentifier = value.locale.value; devicePriority = value.inputDevicePriority.value; fallbackToSystemDefault = value.fallbackToSystemDefault.value
         applying = false
         applyPasteLatestShortcut(value.pasteLatestTranscriptShortcut)
-        if keepLastTranscript, lastTranscript.isEmpty {
+        if historyEnabled, lastTranscript.isEmpty {
             lastTranscript = (try? TranscriptCommitter.loadRetainedTranscript()) ?? ""
         }
         if isEnabled { recoverDegradedAndObserve() } else { stop() }
@@ -303,7 +319,7 @@ final class VoiceTranscriptionModule: ObservableObject {
         }
         let result = try await TranscriptCommitter().commit(
             clean,
-            settings: .init(keepLastTranscript: keepLastTranscript, autoPaste: autoPaste && target != nil),
+            settings: .init(keepLastTranscript: historyEnabled, autoPaste: autoPaste && target != nil),
             targetPID: target
         )
         lastTranscript = clean; partialTranscript = ""; _ = machine.handle(.committed)
@@ -340,12 +356,20 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     private func currentLocalSettings() -> SettingsValues {
-        SettingsValues(windowMoverEnabled: WindowMoverModule.shared.persistedEnabled,
-                       windowMoverShortcut: WindowMoverModule.shared.persistedShortcut,
-                       voiceEnabled: isEnabled, voiceShortcut: .modifierHold("fn"),
-                       pasteLatestTranscriptShortcut: persistedPasteLatestTranscriptShortcut,
-                       autoPaste: autoPaste, keepLastTranscript: keepLastTranscript, locale: localeIdentifier,
-                       inputDevicePriority: devicePriority, fallbackToSystemDefault: fallbackToSystemDefault)
+        let defaults = UserDefaults.standard
+        let persistedDevices = defaults.data(forKey: "voice.devices")
+            .flatMap { try? JSONDecoder().decode([InputDeviceDTO].self, from: $0) } ?? []
+        return SettingsValues(windowMoverEnabled: WindowMoverModule.shared.persistedEnabled,
+                              windowMoverShortcut: WindowMoverModule.shared.persistedShortcut,
+                              voiceEnabled: defaults.bool(forKey: "voice.enabled"), voiceShortcut: .modifierHold("fn"),
+                              pasteLatestTranscriptShortcut: persistedPasteLatestTranscriptShortcut,
+                              autoPaste: defaults.bool(forKey: "voice.autoPaste"),
+                              historyEnabled: defaults.bool(forKey: VoiceHistoryPreferences.enabledKey),
+                              historyRetentionDays: defaults.integer(forKey: VoiceHistoryPreferences.retentionDaysKey),
+                              historyMaxEntries: defaults.integer(forKey: VoiceHistoryPreferences.maxEntriesKey),
+                              locale: defaults.string(forKey: "voice.locale") ?? "en-US",
+                              inputDevicePriority: persistedDevices,
+                              fallbackToSystemDefault: defaults.bool(forKey: "voice.fallback"))
     }
 
     private func recoverDegradedAndObserve() {

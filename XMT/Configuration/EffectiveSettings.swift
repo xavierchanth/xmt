@@ -8,6 +8,31 @@ struct ResolvedSetting<Value: Equatable & Sendable>: Equatable, Sendable {
     var isManaged: Bool { source == .configFile }
 }
 
+/// Canonical local preference keys and the one-release migration from the
+/// former one-slot retention preference.
+enum VoiceHistoryPreferences {
+    static let enabledKey = "voice.history.enabled"
+    static let retentionDaysKey = "voice.history.retentionDays"
+    static let maxEntriesKey = "voice.history.maxEntries"
+    static let legacyKeepLastTranscriptKey = "voice.keepLastTranscript"
+
+    static let registeredDefaults: [String: Any] = [
+        enabledKey: true,
+        retentionDaysKey: 30,
+        maxEntriesKey: 500
+    ]
+
+    /// Canonical data always wins if an interrupted/older migration left both
+    /// keys behind. Removing the alias makes repeated calls a no-op.
+    static func migrate(in defaults: UserDefaults) {
+        guard let legacy = defaults.object(forKey: legacyKeepLastTranscriptKey) else { return }
+        if defaults.object(forKey: enabledKey) == nil {
+            defaults.set((legacy as? NSNumber)?.boolValue ?? true, forKey: enabledKey)
+        }
+        defaults.removeObject(forKey: legacyKeepLastTranscriptKey)
+    }
+}
+
 /// Persisted/UI values are partial by definition.
 struct SettingsValues: Equatable, Sendable {
     var windowMoverEnabled: Bool? = nil
@@ -16,7 +41,9 @@ struct SettingsValues: Equatable, Sendable {
     var voiceShortcut: ShortcutDTO? = nil
     var pasteLatestTranscriptShortcut: ShortcutDTO? = nil
     var autoPaste: Bool? = nil
-    var keepLastTranscript: Bool? = nil
+    var historyEnabled: Bool? = nil
+    var historyRetentionDays: Int? = nil
+    var historyMaxEntries: Int? = nil
     var locale: String? = nil
     var fnHoldThresholdMs: Int? = nil
     var maxSessionSeconds: Int? = nil
@@ -32,7 +59,9 @@ struct BuiltInSettings: Equatable, Sendable {
     var voiceShortcut: ShortcutDTO = .modifierHold("fn")
     var pasteLatestTranscriptShortcut: ShortcutDTO = .key(key: "v", modifiers: ["control", "command"])
     var autoPaste = true
-    var keepLastTranscript = true
+    var historyEnabled = true
+    var historyRetentionDays = 30
+    var historyMaxEntries = 500
     var locale = "en-US"
     var fnHoldThresholdMs = 150
     var maxSessionSeconds = 300
@@ -49,7 +78,9 @@ struct EffectiveSettings: Equatable, Sendable {
     let voiceShortcut: ResolvedSetting<ShortcutDTO>
     let pasteLatestTranscriptShortcut: ResolvedSetting<ShortcutDTO>
     let autoPaste: ResolvedSetting<Bool>
-    let keepLastTranscript: ResolvedSetting<Bool>
+    let historyEnabled: ResolvedSetting<Bool>
+    let historyRetentionDays: ResolvedSetting<Int>
+    let historyMaxEntries: ResolvedSetting<Int>
     let locale: ResolvedSetting<String>
     let fnHoldThresholdMs: ResolvedSetting<Int>
     let maxSessionSeconds: ResolvedSetting<Int>
@@ -58,7 +89,7 @@ struct EffectiveSettings: Equatable, Sendable {
 
     enum Key: String, CaseIterable, Sendable {
         case windowMoverEnabled, windowMoverShortcut, voiceEnabled, voiceShortcut, pasteLatestTranscriptShortcut, autoPaste
-        case keepLastTranscript, locale, fnHoldThresholdMs, maxSessionSeconds
+        case historyEnabled, historyRetentionDays, historyMaxEntries, locale, fnHoldThresholdMs, maxSessionSeconds
         case inputDevicePriority, fallbackToSystemDefault
     }
 
@@ -75,7 +106,9 @@ struct EffectiveSettings: Equatable, Sendable {
             voiceShortcut: pick(config?.voice.shortcut, local.voiceShortcut, builtIn.voiceShortcut),
             pasteLatestTranscriptShortcut: pick(config?.voice.pasteLatestTranscriptShortcut, local.pasteLatestTranscriptShortcut, builtIn.pasteLatestTranscriptShortcut),
             autoPaste: pick(config?.voice.autoPaste, local.autoPaste, builtIn.autoPaste),
-            keepLastTranscript: pick(config?.voice.keepLastTranscript, local.keepLastTranscript, builtIn.keepLastTranscript),
+            historyEnabled: pick(config?.voice.history?.enabled, local.historyEnabled, builtIn.historyEnabled),
+            historyRetentionDays: pick(config?.voice.history?.retentionDays, local.historyRetentionDays, builtIn.historyRetentionDays),
+            historyMaxEntries: pick(config?.voice.history?.maxEntries, local.historyMaxEntries, builtIn.historyMaxEntries),
             locale: pick(config?.voice.locale, local.locale, builtIn.locale),
             fnHoldThresholdMs: pick(config?.voice.fnHoldThresholdMs, local.fnHoldThresholdMs, builtIn.fnHoldThresholdMs),
             maxSessionSeconds: pick(config?.voice.maxSessionSeconds, local.maxSessionSeconds, builtIn.maxSessionSeconds),
@@ -92,7 +125,9 @@ struct EffectiveSettings: Equatable, Sendable {
         if voiceShortcut != old.voiceShortcut { result.insert(.voiceShortcut) }
         if pasteLatestTranscriptShortcut != old.pasteLatestTranscriptShortcut { result.insert(.pasteLatestTranscriptShortcut) }
         if autoPaste != old.autoPaste { result.insert(.autoPaste) }
-        if keepLastTranscript != old.keepLastTranscript { result.insert(.keepLastTranscript) }
+        if historyEnabled != old.historyEnabled { result.insert(.historyEnabled) }
+        if historyRetentionDays != old.historyRetentionDays { result.insert(.historyRetentionDays) }
+        if historyMaxEntries != old.historyMaxEntries { result.insert(.historyMaxEntries) }
         if locale != old.locale { result.insert(.locale) }
         if fnHoldThresholdMs != old.fnHoldThresholdMs { result.insert(.fnHoldThresholdMs) }
         if maxSessionSeconds != old.maxSessionSeconds { result.insert(.maxSessionSeconds) }

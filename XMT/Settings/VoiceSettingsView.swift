@@ -18,7 +18,6 @@ struct VoiceSettingsView: View {
             }
             Section("Output") {
                 Toggle("Paste completed transcript", isOn: $module.autoPaste).disabled(module.managedKeys.contains(.autoPaste))
-                Toggle("Keep last transcript", isOn: $module.keepLastTranscript).disabled(module.managedKeys.contains(.keepLastTranscript))
                 TextField("Locale", text: $module.localeIdentifier).disabled(module.managedKeys.contains(.locale))
                 Button("Copy Last Transcript") { module.copyLastTranscript() }.disabled(module.lastTranscript.isEmpty)
                 KeyboardShortcuts.Recorder(
@@ -26,6 +25,14 @@ struct VoiceSettingsView: View {
                     name: .pasteLatestTranscript
                 )
                 .disabled(module.managedKeys.contains(.pasteLatestTranscriptShortcut))
+            }
+            Section("Transcript history") {
+                Toggle("Save transcript history", isOn: $module.historyEnabled)
+                    .disabled(module.managedKeys.contains(.historyEnabled))
+                TextField("Retention (days)", value: $module.historyRetentionDays, format: .number)
+                    .disabled(!module.historyEnabled || module.managedKeys.contains(.historyRetentionDays))
+                TextField("Maximum entries", value: $module.historyMaxEntries, format: .number)
+                    .disabled(!module.historyEnabled || module.managedKeys.contains(.historyMaxEntries))
             }
             Section("Input priority") {
                 DevicePriorityListView(module: module,

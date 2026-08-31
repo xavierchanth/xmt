@@ -14,12 +14,12 @@ The target's deployment target is macOS 26.0, and the speech types are compiled 
 
 The module is a main-actor singleton owned by the app delegate. It is compiled in, not registered through a general module list.
 
-- At `applicationDidFinishLaunching`, XMT registers the module. Registration reconciles any recovery artifacts left by a previous run, installs the paste-latest shortcut handler, and then loads configuration; applying that configuration loads `last-transcript.txt` when retention resolves enabled and starts Voice triggers when the module resolves enabled. Registration acquires no microphone, speech, or analyzer resource, and it prompts for nothing.
+- At `applicationDidFinishLaunching`, XMT registers the module. Registration reconciles any recovery artifacts left by a previous run, installs the paste-latest shortcut handler, migrates the former keep-last preference to the canonical history-enabled preference, and then loads configuration; applying that configuration loads `last-transcript.txt` when history resolves enabled and starts Voice triggers when the module resolves enabled. Registration acquires no microphone, speech, or analyzer resource, and it prompts for nothing.
 - When the app becomes active, XMT refreshes the input-device list and reloads configuration.
 - At `applicationWillTerminate`, the module stops: the event tap observation is cancelled, the maximum-duration timer is invalidated, capture is stopped, the arming and analysis tasks are cancelled, any live transcriber is cancelled and its asset reservation released, and the partial transcript is cleared. A stop while a recovery recording is pending preserves that pending state; otherwise the session reducer is reset and the status becomes disabled.
 - Enabling the module installs the Fn event tap and enables the paste-latest shortcut; disabling it performs the same stop as termination and disables both triggers. Neither requires restarting XMT.
 
-The persisted enabled setting defaults to **enabled**, as do auto-paste, keep-last-transcript, and system-default fallback. The default locale is `en-US` and the default device-priority list is empty.
+The persisted enabled setting defaults to **enabled**, as do auto-paste, transcript history, and system-default fallback. History retention defaults to 30 days and 500 entries. The default locale is `en-US` and the default device-priority list is empty. This increment provides the canonical history configuration and managed settings controls; the commit path still uses only the enabled value for its existing latest-transcript cache, and a bounded history store is not implemented.
 
 ### Status values
 
@@ -144,11 +144,11 @@ Commit is ordered so the transcript survives every later failure. It is covered 
 
 1. The recognized text is trimmed of surrounding whitespace and newlines.
 2. The clipboard is cleared and set to the transcript. A clipboard failure aborts the commit before anything else happens.
-3. If **keep last transcript** is enabled, the text is written atomically to `last-transcript.txt` in the same cache directory, replacing any previous file. If it is disabled, an existing file is removed.
+3. If **transcript history** is enabled, the text is written atomically to `last-transcript.txt` in the same cache directory, replacing any previous file. If it is disabled, an existing file is removed. The retention-days and maximum-entries settings do not alter this one-slot commit path.
 4. Recovery artifacts for the session are deleted. This deletion is the commit point.
 5. Only then, if **auto-paste** is enabled and a trustworthy target application was captured, a logical Command-V is posted.
 
-The module also keeps the transcript in memory as the last transcript, exposed as `Copy Last Transcript` in the menu and in settings. When keep-last-transcript resolves enabled, registration loads an existing nonempty UTF-8 `last-transcript.txt`, so that transcript is available after relaunch. With retention disabled, the file is not loaded; a transcript committed during the current run remains available in memory. The clipboard is never restored or wiped afterwards, so a failed paste still leaves usable text.
+The module also keeps the transcript in memory as the last transcript, exposed as `Copy Last Transcript` in the menu and in settings. When transcript history resolves enabled, registration loads an existing nonempty UTF-8 `last-transcript.txt`, so that transcript is available after relaunch. With history disabled, the file is not loaded; a transcript committed during the current run remains available in memory. The clipboard is never restored or wiped afterwards, so a failed paste still leaves usable text.
 
 ### Auto-paste
 
@@ -180,7 +180,8 @@ The `Voice` tab in Settings contains:
 
 - the enable toggle, with the gesture hint for hold-Fn and Fn-Space;
 - speech-asset status with check and download actions, the contextual access request, and the shared Accessibility status row naming completed-transcript and paste-latest delivery as its consumers;
-- output settings — paste completed transcript, keep last transcript, locale, copy last transcript, and the paste-latest shortcut recorder;
+- output settings — paste completed transcript, locale, copy last transcript, and the paste-latest shortcut recorder;
+- transcript-history controls for enabled, retention days, and maximum entries;
 - the ordered input-device priority list with add, reorder, and remove actions, plus the separate system-default fallback toggle;
 - recovery actions, shown only while a recording is pending or failed;
 - a configuration reload button and the last configuration diagnostic.

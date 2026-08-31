@@ -42,12 +42,89 @@ struct ConfigFile: Codable, Equatable, Sendable {
         var shortcut: ShortcutDTO?
         var pasteLatestTranscriptShortcut: ShortcutDTO?
         var autoPaste: Bool?
-        var keepLastTranscript: Bool?
+        var history: History?
         var locale: String?
         var fnHoldThresholdMs: Int?
         var maxSessionSeconds: Int?
         var inputDevicePriority: [InputDeviceDTO]?
         var fallbackToSystemDefault: Bool?
+
+        /// `keepLastTranscript` is a decode-only, one-release alias for
+        /// `history.enabled`. Encoding always emits the canonical history object.
+        fileprivate var historyEnabledAliasConflict = false
+
+        struct History: Codable, Equatable, Sendable {
+            var enabled: Bool?
+            var retentionDays: Int?
+            var maxEntries: Int?
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case enabled, shortcut, pasteLatestTranscriptShortcut, autoPaste, history
+            case keepLastTranscript
+            case locale, fnHoldThresholdMs, maxSessionSeconds, inputDevicePriority, fallbackToSystemDefault
+        }
+        private enum HistoryCodingKeys: String, CodingKey { case enabled }
+
+        init(enabled: Bool? = nil, shortcut: ShortcutDTO? = nil,
+             pasteLatestTranscriptShortcut: ShortcutDTO? = nil, autoPaste: Bool? = nil,
+             history: History? = nil, locale: String? = nil, fnHoldThresholdMs: Int? = nil,
+             maxSessionSeconds: Int? = nil, inputDevicePriority: [InputDeviceDTO]? = nil,
+             fallbackToSystemDefault: Bool? = nil) {
+            self.enabled = enabled
+            self.shortcut = shortcut
+            self.pasteLatestTranscriptShortcut = pasteLatestTranscriptShortcut
+            self.autoPaste = autoPaste
+            self.history = history
+            self.locale = locale
+            self.fnHoldThresholdMs = fnHoldThresholdMs
+            self.maxSessionSeconds = maxSessionSeconds
+            self.inputDevicePriority = inputDevicePriority
+            self.fallbackToSystemDefault = fallbackToSystemDefault
+        }
+
+        init(from decoder: Decoder) throws {
+            let box = try decoder.container(keyedBy: CodingKeys.self)
+            enabled = try box.decodeIfPresent(Bool.self, forKey: .enabled)
+            shortcut = try box.decodeIfPresent(ShortcutDTO.self, forKey: .shortcut)
+            pasteLatestTranscriptShortcut = try box.decodeIfPresent(ShortcutDTO.self, forKey: .pasteLatestTranscriptShortcut)
+            autoPaste = try box.decodeIfPresent(Bool.self, forKey: .autoPaste)
+            let canonicalEnabledWasSpecified: Bool
+            if box.contains(.history), try !box.decodeNil(forKey: .history) {
+                let historyBox = try box.nestedContainer(keyedBy: HistoryCodingKeys.self, forKey: .history)
+                canonicalEnabledWasSpecified = historyBox.contains(.enabled)
+            } else {
+                canonicalEnabledWasSpecified = false
+            }
+            history = try box.decodeIfPresent(History.self, forKey: .history)
+            locale = try box.decodeIfPresent(String.self, forKey: .locale)
+            fnHoldThresholdMs = try box.decodeIfPresent(Int.self, forKey: .fnHoldThresholdMs)
+            maxSessionSeconds = try box.decodeIfPresent(Int.self, forKey: .maxSessionSeconds)
+            inputDevicePriority = try box.decodeIfPresent([InputDeviceDTO].self, forKey: .inputDevicePriority)
+            fallbackToSystemDefault = try box.decodeIfPresent(Bool.self, forKey: .fallbackToSystemDefault)
+
+            let aliasWasSpecified = box.contains(.keepLastTranscript)
+            let alias = try box.decodeIfPresent(Bool.self, forKey: .keepLastTranscript)
+            historyEnabledAliasConflict = aliasWasSpecified && canonicalEnabledWasSpecified
+            if !historyEnabledAliasConflict, let alias {
+                if history != nil { history?.enabled = alias }
+                else { history = History(enabled: alias) }
+            }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var box = encoder.container(keyedBy: CodingKeys.self)
+            try box.encodeIfPresent(enabled, forKey: .enabled)
+            try box.encodeIfPresent(shortcut, forKey: .shortcut)
+            try box.encodeIfPresent(pasteLatestTranscriptShortcut, forKey: .pasteLatestTranscriptShortcut)
+            try box.encodeIfPresent(autoPaste, forKey: .autoPaste)
+            try box.encodeIfPresent(history, forKey: .history)
+            try box.encodeIfPresent(locale, forKey: .locale)
+            try box.encodeIfPresent(fnHoldThresholdMs, forKey: .fnHoldThresholdMs)
+            try box.encodeIfPresent(maxSessionSeconds, forKey: .maxSessionSeconds)
+            try box.encodeIfPresent(inputDevicePriority, forKey: .inputDevicePriority)
+            try box.encodeIfPresent(fallbackToSystemDefault, forKey: .fallbackToSystemDefault)
+        }
     }
 
     static func defaultURL(environment: [String: String] = ProcessInfo.processInfo.environment,
@@ -92,6 +169,15 @@ struct ConfigFile: Codable, Equatable, Sendable {
             }
             do { try shortcut.validate() }
             catch { throw ConfigDiagnostic.invalidValue(path: "voice.pasteLatestTranscriptShortcut", reason: String(describing: error)) }
+        }
+        if voice.historyEnabledAliasConflict {
+            throw ConfigDiagnostic.invalidValue(path: "voice.keepLastTranscript", reason: "conflicts with voice.history.enabled")
+        }
+        if let value = voice.history?.retentionDays, value < 1 {
+            throw ConfigDiagnostic.invalidValue(path: "voice.history.retentionDays", reason: "must be at least 1")
+        }
+        if let value = voice.history?.maxEntries, value < 1 {
+            throw ConfigDiagnostic.invalidValue(path: "voice.history.maxEntries", reason: "must be at least 1")
         }
         if let locale = voice.locale, locale.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             throw ConfigDiagnostic.invalidValue(path: "voice.locale", reason: "must not be blank")

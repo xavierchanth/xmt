@@ -39,6 +39,74 @@ final class ConfigTests: XCTestCase {
         XCTAssertTrue(EffectiveSettings.resolve(config: nil).voiceEnabled.value)
     }
 
+    func testCanonicalHistoryDefaultsAndPerKeyPrecedence() throws {
+        let defaults = EffectiveSettings.resolve(config: nil)
+        XCTAssertTrue(defaults.historyEnabled.value)
+        XCTAssertEqual(defaults.historyRetentionDays.value, 30)
+        XCTAssertEqual(defaults.historyMaxEntries.value, 500)
+        XCTAssertEqual(defaults.historyEnabled.source, .builtIn)
+
+        var local = SettingsValues()
+        local.historyEnabled = false
+        local.historyRetentionDays = 14
+        local.historyMaxEntries = 200
+        let file = try decode(#"{"version":1,"voice":{"history":{"retentionDays":60}}}"#)
+        let resolved = EffectiveSettings.resolve(config: file, local: local)
+        XCTAssertFalse(resolved.historyEnabled.value)
+        XCTAssertEqual(resolved.historyEnabled.source, .local)
+        XCTAssertEqual(resolved.historyRetentionDays.value, 60)
+        XCTAssertTrue(resolved.historyRetentionDays.isManaged)
+        XCTAssertEqual(resolved.historyMaxEntries.value, 200)
+        XCTAssertEqual(resolved.historyMaxEntries.source, .local)
+    }
+
+    func testKeepLastTranscriptAliasDecodesButCanonicalEncodingIsUsed() throws {
+        let aliased = try decode(#"{"version":1,"voice":{"keepLastTranscript":false,"history":{"retentionDays":7,"maxEntries":20}}}"#)
+        XCTAssertEqual(aliased.voice.history?.enabled, false)
+        XCTAssertEqual(aliased.voice.history?.retentionDays, 7)
+        let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(aliased)) as? [String: Any]
+        let voice = encoded?["voice"] as? [String: Any]
+        XCTAssertNil(voice?["keepLastTranscript"])
+        XCTAssertEqual((voice?["history"] as? [String: Any])?["enabled"] as? Bool, false)
+    }
+
+    func testKeepLastTranscriptAndCanonicalEnabledConflictRejectsWholeCandidate() async throws {
+        XCTAssertThrowsError(try decode(#"{"version":1,"voice":{"keepLastTranscript":true,"history":{"enabled":true}}}"#)) {
+            XCTAssertEqual($0 as? ConfigDiagnostic,
+                           .invalidValue(path: "voice.keepLastTranscript", reason: "conflicts with voice.history.enabled"))
+        }
+
+        final class Box: @unchecked Sendable { var data = Data(#"{"version":1,"voice":{"history":{"enabled":false}}}"#.utf8) }
+        let box = Box()
+        let loader = ConfigReloader(url: URL(fileURLWithPath: "/unused"), read: { _ in box.data })
+        _ = try await loader.reload()
+        box.data = Data(#"{"version":1,"voice":{"keepLastTranscript":true,"history":{"enabled":false}}}"#.utf8)
+        do { _ = try await loader.reload(); XCTFail("conflicting aliases were accepted") } catch {}
+        let retained = await loader.effective
+        XCTAssertFalse(retained.historyEnabled.value)
+        XCTAssertTrue(retained.historyEnabled.isManaged)
+    }
+
+    func testHistoryDefaultsMigrationIsIdempotentAndCanonicalWins() {
+        let suiteName = "ConfigTests.history-migration.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else { return XCTFail("could not create defaults suite") }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(false, forKey: VoiceHistoryPreferences.legacyKeepLastTranscriptKey)
+        VoiceHistoryPreferences.migrate(in: defaults)
+        XCTAssertEqual(defaults.object(forKey: VoiceHistoryPreferences.enabledKey) as? Bool, false)
+        XCTAssertNil(defaults.object(forKey: VoiceHistoryPreferences.legacyKeepLastTranscriptKey))
+        let first = defaults.persistentDomain(forName: suiteName)
+        VoiceHistoryPreferences.migrate(in: defaults)
+        XCTAssertEqual(defaults.persistentDomain(forName: suiteName) as NSDictionary?, first as NSDictionary?)
+
+        defaults.set(true, forKey: VoiceHistoryPreferences.enabledKey)
+        defaults.set(false, forKey: VoiceHistoryPreferences.legacyKeepLastTranscriptKey)
+        VoiceHistoryPreferences.migrate(in: defaults)
+        XCTAssertTrue(defaults.bool(forKey: VoiceHistoryPreferences.enabledKey))
+        XCTAssertNil(defaults.object(forKey: VoiceHistoryPreferences.legacyKeepLastTranscriptKey))
+    }
+
     func testUnsupportedMalformedAndInvalidKnownValues() {
         XCTAssertThrowsError(try decode(#"{"version":2}"#)) { XCTAssertEqual($0 as? ConfigDiagnostic, .unsupportedVersion(2)) }
         XCTAssertThrowsError(try decode("{"))
@@ -47,6 +115,8 @@ final class ConfigTests: XCTestCase {
             #"{"version":1,"voice":{"fnHoldThresholdMs":501}}"#,
             #"{"version":1,"voice":{"maxSessionSeconds":0}}"#,
             #"{"version":1,"voice":{"maxSessionSeconds":3601}}"#,
+            #"{"version":1,"voice":{"history":{"retentionDays":0}}}"#,
+            #"{"version":1,"voice":{"history":{"maxEntries":0}}}"#,
             #"{"version":1,"voice":{"locale":"  "}}"#,
             #"{"version":1,"voice":{"inputDevicePriority":[{"name":" "}]}}"#,
             #"{"version":1,"voice":{"inputDevicePriority":[{"name":"Mic","uid":" "}]}}"#,

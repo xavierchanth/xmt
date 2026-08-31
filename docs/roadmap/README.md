@@ -54,7 +54,7 @@ Until at least a recording, a transcription, and a paste have been performed by 
 
 ## Future Voice history and clients
 
-The first history increment retains and pastes only one latest transcript. A searchable, bounded transcript history with a native XMT panel is deferred; it must not be inferred from the one-slot `last-transcript.txt` cache.
+The first history increment retains and pastes only one latest transcript. Canonical enabled/retention/maximum configuration and managed settings controls now exist as groundwork, but a searchable, bounded transcript history with a native XMT panel remains deferred; it must not be inferred from either those settings or the one-slot `last-transcript.txt` cache.
 
 A Raycast client is also deferred. It must consume an app-owned, stable JSON boundary designed for external clients rather than reading XMT's cache or any future internal history store directly. Versioning, lifetime, privacy, and write ownership for that boundary must be settled before the client ships.
 

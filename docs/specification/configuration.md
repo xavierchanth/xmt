@@ -31,7 +31,11 @@ The document is a JSON object with a required integer `version`. The only suppor
     "shortcut": { "type": "modifierHold", "modifier": "fn" },
     "pasteLatestTranscriptShortcut": { "type": "key", "key": "v", "modifiers": ["control", "command"] },
     "autoPaste": true,
-    "keepLastTranscript": true,
+    "history": {
+      "enabled": true,
+      "retentionDays": 30,
+      "maxEntries": 500
+    },
     "locale": "en-US",
     "fnHoldThresholdMs": 150,
     "maxSessionSeconds": 300,
@@ -59,6 +63,8 @@ Decoding is all-or-nothing: a document is decoded, version-checked, and fully va
 - `windowMover.shortcut` MUST be a key shortcut — a modifier hold is rejected for Window Mover — and MUST convert to a real key and modifier set.
 - `voice.shortcut` MUST be a modifier hold naming `fn` or `function`; key shortcuts and other modifiers are rejected.
 - `voice.pasteLatestTranscriptShortcut` MUST be a key shortcut that converts to a real key and modifier set; modifier holds are rejected.
+- `voice.history.retentionDays` and `voice.history.maxEntries` MUST each be at least 1.
+- `voice.keepLastTranscript` is a decode-only compatibility alias for `voice.history.enabled` for one release. Supplying both keys rejects the complete candidate, even when their Boolean values agree; encoding emits only the canonical `history` object.
 - `voice.locale` MUST NOT be blank.
 - `voice.fnHoldThresholdMs` MUST be between 50 and 500.
 - `voice.maxSessionSeconds` MUST be between 1 and 3600.
@@ -70,7 +76,7 @@ An empty `inputDevicePriority` array is a valid explicit value and is distinct f
 
 Effective settings resolve per key, from lowest to highest precedence:
 
-1. **Built-in defaults.** Window Mover enabled with Option-Space; Voice enabled with Fn gestures; paste latest transcript with Control-Command-V; auto-paste on; keep last transcript on; locale `en-US`; Fn hold threshold 150 ms; maximum session 300 seconds; empty device priority; system-default fallback on.
+1. **Built-in defaults.** Window Mover enabled with Option-Space; Voice enabled with Fn gestures; paste latest transcript with Control-Command-V; auto-paste on; transcript history enabled with 30 retention days and at most 500 entries; locale `en-US`; Fn hold threshold 150 ms; maximum session 300 seconds; empty device priority; system-default fallback on.
 2. **Persisted local values** written by the settings UI.
 3. **Values explicitly present in the configuration file.**
 
@@ -78,11 +84,13 @@ Resolution is per key, not per section: omitting a key leaves the persisted valu
 
 The Window Mover and paste-latest shortcuts may be managed by the file. For each, XMT preserves the prior recorder value when management begins and restores it when the key is removed. Voice Transcription v1 accepts only an Fn modifier-hold value for `voice.shortcut`; that fixed gesture setting is separate from the ordinary configurable `voice.pasteLatestTranscriptShortcut` key.
 
+The former local `voice.keepLastTranscript` preference is migrated once to `voice.history.enabled` before defaults are registered. Existing canonical data wins if both keys exist, the legacy key is removed, and repeating the migration changes nothing.
+
 ## Managed values
 
 A value supplied by the configuration file is **managed**. Managed values are applied immediately and are not written back to persisted settings, so removing the file restores what the user had configured.
 
-The settings UI disables the control for a managed value rather than presenting a write that would not take effect: the Voice enable toggle, paste-latest shortcut recorder, auto-paste, keep last transcript, locale, the device priority list and its add action, and the system-default fallback toggle; and in Window Mover, the enable toggle and the shortcut recorder. Managed ordinary shortcuts are pushed into the shortcut store directly.
+The settings UI disables the control for a managed value rather than presenting a write that would not take effect: the Voice enable toggle, paste-latest shortcut recorder, auto-paste, each of the history enabled/retention/maximum controls, locale, the device priority list and its add action, and the system-default fallback toggle; and in Window Mover, the enable toggle and the shortcut recorder. Managed ordinary shortcuts are pushed into the shortcut store directly.
 
 Applying a snapshot also applies module lifecycle: a Voice module that resolves to enabled recovers from any degraded state and starts observing, and one that resolves to disabled performs a full stop.
 
