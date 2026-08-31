@@ -7,6 +7,9 @@ enum TranscriptHistoryError: Error, Equatable {
     case open(code: Int32, message: String)
     case statement(sql: String, code: Int32, message: String)
     case unsupportedSchemaVersion(Int32)
+    /// An existing file declares a `transcript_entries` this build cannot safely use — a foreign
+    /// table of the same name, or one whose columns are not exactly the expected privacy surface.
+    case incompatibleSchema(String)
     case closed
 }
 
@@ -123,15 +126,25 @@ actor TranscriptHistoryStore {
     static let entriesTable = "transcript_entries"
     static let metadataTable = "schema_metadata"
 
+    /// Expected entries columns, in order. Migration refuses any other shape rather than writing
+    /// into it, so a foreign or drifted table can neither be read as history nor gain XMT's rows.
+    static let entryColumns = ["id", "recorded_at_ms", "sequence", "text", "locale", "source"]
+    /// Owner-only file and directory modes. Transcript text is personal data and the app is not
+    /// sandboxed, so the database must not be readable by other users on the machine.
+    static let filePermissions: Int16 = 0o600
+    static let directoryPermissions: Int16 = 0o700
+
     let url: URL
-    let retention: TranscriptRetentionPolicy
+    private(set) var retention: TranscriptRetentionPolicy
     private let db: SQLiteConnection
 
     init(url: URL, retention: TranscriptRetentionPolicy = .default) throws {
         self.url = url
         self.retention = retention
+        let directory = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            at: directory, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: NSNumber(value: Self.directoryPermissions)])
         let db = try SQLiteConnection(path: url.path)
         self.db = db
         do {
@@ -142,6 +155,21 @@ actor TranscriptHistoryStore {
         } catch {
             db.close()
             throw error
+        }
+        // After migration, so the write-ahead and shared-memory side files exist to be tightened
+        // too. Best effort by design: a permission that cannot be set must not deny the user their
+        // history, and the directory itself already restricts traversal.
+        Self.restrictPermissions(of: url)
+    }
+
+    /// Narrows the database and its side files to owner-only, and the containing directory with it.
+    static func restrictPermissions(of url: URL, fileManager: FileManager = .default) {
+        let directory = url.deletingLastPathComponent()
+        try? fileManager.setAttributes(
+            [.posixPermissions: NSNumber(value: directoryPermissions)], ofItemAtPath: directory.path)
+        for path in [url.path, url.path + "-wal", url.path + "-shm", url.path + "-journal"]
+        where fileManager.fileExists(atPath: path) {
+            try? fileManager.setAttributes([.posixPermissions: NSNumber(value: filePermissions)], ofItemAtPath: path)
         }
     }
 
@@ -162,6 +190,15 @@ actor TranscriptHistoryStore {
     private static func migrate(_ db: SQLiteConnection) throws {
         let version = Int32(try db.scalar("PRAGMA user_version;") ?? 0)
         guard version <= schemaVersion else { throw StoreError.unsupportedSchemaVersion(version) }
+        // A file may carry a newer version in metadata while `user_version` was never written —
+        // a partially created database, or one restored from a newer build. Trust the stricter of
+        // the two rather than creating tables over it.
+        if let recorded = try metadataSchemaVersion(db), recorded > schemaVersion {
+            throw StoreError.unsupportedSchemaVersion(recorded)
+        }
+        // An existing entries table is checked before anything is created against it, so a foreign
+        // table of the same name is refused as such rather than surfacing as a confusing SQL error.
+        if try tableExists(db, entriesTable) { try validate(db) }
         try db.transaction {
             try db.execute("""
                 CREATE TABLE IF NOT EXISTS \(metadataTable) (
@@ -193,6 +230,44 @@ actor TranscriptHistoryStore {
                     """, binding: [.text(key), .text(value)])
             }
             try db.execute("PRAGMA user_version = \(schemaVersion);")
+        }
+        try validate(db)
+    }
+
+    private static func tableExists(_ db: SQLiteConnection, _ name: String) throws -> Bool {
+        var exists = false
+        try db.query("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = ?;",
+                     binding: [.text(name)]) { _ in exists = true }
+        return exists
+    }
+
+    /// Reads the version metadata written alongside the schema, if the metadata table exists at all.
+    private static func metadataSchemaVersion(_ db: SQLiteConnection) throws -> Int32? {
+        guard try tableExists(db, metadataTable) else { return nil }
+        var recorded: Int32?
+        try db.query("SELECT value FROM \(metadataTable) WHERE key = 'schema_version';") { statement in
+            recorded = Int32(String(cString: sqlite3_column_text(statement, 0)))
+        }
+        return recorded
+    }
+
+    /// Post-migration shape check. `CREATE TABLE IF NOT EXISTS` silently accepts an existing table
+    /// of the same name whatever its columns, so the schema this build depends on — and the privacy
+    /// boundary those columns *are* — is asserted rather than assumed.
+    private static func validate(_ db: SQLiteConnection) throws {
+        var columns: [String] = []
+        try db.query("SELECT name FROM pragma_table_info('\(entriesTable)');") { statement in
+            columns.append(String(cString: sqlite3_column_text(statement, 0)))
+        }
+        guard columns == entryColumns else {
+            throw StoreError.incompatibleSchema("unexpected columns: \(columns.joined(separator: ","))")
+        }
+        var declaration = ""
+        try db.query("""
+            SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = '\(entriesTable)';
+            """) { statement in declaration = String(cString: sqlite3_column_text(statement, 0)) }
+        guard declaration.uppercased().contains("STRICT") else {
+            throw StoreError.incompatibleSchema("entries table is not STRICT")
         }
     }
 
@@ -264,6 +339,17 @@ actor TranscriptHistoryStore {
             outcome = .inserted(pruned: try pruneRows(retention: retention ?? self.retention, now: now))
         }
         return outcome
+    }
+
+    /// Adopts a new retention policy and enforces it immediately, returning what that removed.
+    ///
+    /// Retention is otherwise applied only by an append, so without this a history tightened in
+    /// settings would keep showing — and keep storing — entries the user has just excluded until
+    /// the next transcript happened to arrive.
+    @discardableResult
+    func setRetention(_ policy: TranscriptRetentionPolicy, now: Date = Date()) throws -> [UUID] {
+        retention = policy
+        return try prune(retention: policy, now: now)
     }
 
     /// Applies retention outside an append. Returns the identifiers removed.

@@ -53,9 +53,16 @@ final class TranscriptHistoryViewModel: ObservableObject {
     @Published private(set) var feedback: String?
     @Published private(set) var diagnostic: String?
     @Published private(set) var capturedTarget: CapturedPasteTarget?
+    /// Effective history setting. While false every surface is inert: nothing reads, deletes, or
+    /// clears, so no repository call — and therefore no database creation — can originate here.
+    @Published private(set) var isHistoryEnabled = true
 
     private var dependencies: Dependencies
-    private var hasLoaded = false
+    /// True when the snapshot in hand holds every retained entry rather than a menu-sized prefix.
+    private var isSnapshotComplete = false
+    /// Set while a surface that lists everything (the panel) is open. It makes a menu-sized read
+    /// upgrade to a full one, so refreshing the menu can never truncate what the panel is showing.
+    private var requiresCompleteSnapshot = false
     private var feedbackGeneration: UInt64 = 0
     private var isPasting = false
 
@@ -76,21 +83,46 @@ final class TranscriptHistoryViewModel: ObservableObject {
 
     var hasEntries: Bool { !snapshot.isEmpty }
 
-    /// Reads persisted history once, lazily: no storage is touched until a surface needs it.
+    /// Reads persisted history once, lazily: no storage is touched until a surface needs it. The
+    /// caller is a surface that lists everything, so later menu-sized reads stay complete.
     func loadIfNeeded() async {
-        guard !hasLoaded else { return }
-        hasLoaded = true
+        guard isHistoryEnabled else { return }
+        requiresCompleteSnapshot = true
+        guard !isSnapshotComplete else { return }
         await reload()
     }
 
+    /// Reads history newest first. `limit` is a hint, not a promise: while a surface needs the whole
+    /// history the limit is ignored, because a menu refresh must never shrink the panel's list.
     func reload(limit: Int? = nil) async {
+        guard isHistoryEnabled else { return }
+        let effectiveLimit = requiresCompleteSnapshot ? nil : limit
         do {
-            snapshot = TranscriptHistorySnapshot(try await dependencies.repository.entries(limit: limit))
+            snapshot = TranscriptHistorySnapshot(try await dependencies.repository.entries(limit: effectiveLimit))
+            isSnapshotComplete = effectiveLimit == nil
             diagnostic = dependencies.openDiagnostic
         } catch {
             diagnostic = "History could not be read"
         }
     }
+
+    /// Applies the effective history setting. Disabling drops the in-memory snapshot and any pending
+    /// confirmation immediately, so nothing recorded before the change stays visible or actionable.
+    func setHistoryEnabled(_ enabled: Bool) {
+        guard enabled != isHistoryEnabled else { return }
+        isHistoryEnabled = enabled
+        isSnapshotComplete = false
+        requiresCompleteSnapshot = false
+        if !enabled {
+            snapshot = TranscriptHistorySnapshot()
+            isClearConfirmationPending = false
+            searchQuery = ""
+            capturedTarget = nil
+        }
+    }
+
+    /// A full-history surface closed. The next menu read may be menu-sized again.
+    func completeSnapshotNoLongerNeeded() { requiresCompleteSnapshot = false }
 
     func copyLatest() {
         guard let latest = snapshot.latest else { return showFeedback("No transcript to copy") }
@@ -123,11 +155,13 @@ final class TranscriptHistoryViewModel: ObservableObject {
     func paste(id: UUID) async { if let entry = snapshot.entry(id: id) { await paste(entry) } }
 
     func delete(_ entry: TranscriptHistoryEntry) async {
+        guard isHistoryEnabled else { return }
         do {
             try await dependencies.repository.delete(id: entry.id)
             // Re-read rather than deriving from the panel's load-once snapshot: a transcript may
             // have committed while the panel was open, and Paste Latest must follow the store.
             snapshot = TranscriptHistorySnapshot(try await dependencies.repository.entries(limit: nil))
+            isSnapshotComplete = true
             diagnostic = dependencies.openDiagnostic
             NotificationCenter.default.post(name: .transcriptHistoryLatestChanged,
                                             object: snapshot.entries.first?.text ?? "")
@@ -139,14 +173,14 @@ final class TranscriptHistoryViewModel: ObservableObject {
 
     /// Clearing is destructive, so it is always two-step: request, then confirm.
     func requestClear() {
-        guard hasEntries else { return }
+        guard isHistoryEnabled, hasEntries else { return }
         isClearConfirmationPending = true
     }
 
     func cancelClear() { isClearConfirmationPending = false }
 
     func confirmClear() async {
-        guard isClearConfirmationPending else { return }
+        guard isHistoryEnabled, isClearConfirmationPending else { return }
         isClearConfirmationPending = false
         do {
             try await dependencies.repository.deleteAll()
@@ -162,7 +196,10 @@ final class TranscriptHistoryViewModel: ObservableObject {
     }
 
     /// Captures the frontmost application before an XMT history surface takes key focus.
-    func captureTarget() { capturedTarget = dependencies.captureFrontmostTarget() }
+    func captureTarget() {
+        guard isHistoryEnabled else { return }
+        capturedTarget = dependencies.captureFrontmostTarget()
+    }
 
     func releaseTarget() { capturedTarget = nil }
 

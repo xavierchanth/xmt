@@ -18,7 +18,10 @@ final class TranscriptHistoryPanelController: NSObject, NSWindowDelegate {
 
     var isPresented: Bool { panel != nil }
 
+    /// Presents the panel. When history is effectively disabled this is inert: no window is built,
+    /// no paste target is captured, and no history is read, so the store is never opened or created.
     func show() {
+        guard viewModel.isHistoryEnabled else { return }
         // Capture the paste destination before XMT takes key focus.
         viewModel.captureTarget()
         Task { await viewModel.loadIfNeeded() }
@@ -56,5 +59,6 @@ final class TranscriptHistoryPanelController: NSObject, NSWindowDelegate {
         panel = nil
         viewModel.releaseTarget()
         viewModel.searchQuery = ""
+        viewModel.completeSnapshotNoLongerNeeded()
     }
 }

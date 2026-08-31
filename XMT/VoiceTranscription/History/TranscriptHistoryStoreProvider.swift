@@ -27,6 +27,15 @@ enum SharedTranscriptHistoryStore {
         }
     }
 
+    /// The store if it has already been opened, and never an open. Callers that want to act on an
+    /// existing database — re-applying retention, for instance — must not be the reason one is
+    /// created, so this returns `nil` rather than opening.
+    static func opened() -> TranscriptHistoryStore? {
+        lock.lock()
+        defer { lock.unlock() }
+        return cached
+    }
+
     /// Test seam: replaces the shared instance and clears any remembered failure.
     static func override(_ store: TranscriptHistoryStore?) {
         lock.lock()

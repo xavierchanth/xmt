@@ -22,8 +22,11 @@ final class TranscriptHistoryViewModelTests: XCTestCase {
             }.map(\.element)
         }
 
+        var requestedLimits: [Int?] = []
+
         func entries(limit: Int?) async throws -> [TranscriptHistoryEntry] {
             reads += 1
+            requestedLimits.append(limit)
             if let failure { throw failure }
             guard let limit else { return stored }
             return Array(stored.prefix(max(0, limit)))
@@ -227,6 +230,114 @@ final class TranscriptHistoryViewModelTests: XCTestCase {
         harness.model.copyLatest()
         XCTAssertNil(harness.clipboard.value)
         XCTAssertEqual(harness.model.feedback, "Could not copy transcript")
+    }
+
+    // MARK: - Menu reads must not truncate the panel
+
+    func testMenuRefreshDoesNotTruncateTheOpenPanelsHistory() async {
+        let harness = makeHarness(entries: (0..<8).map { entry("transcript \($0)", offset: TimeInterval($0)) })
+        // The panel is open and listing everything.
+        await harness.model.loadIfNeeded()
+        XCTAssertEqual(harness.model.results.count, 8)
+
+        // Opening the menu refreshes with a menu-sized hint while the panel is still open.
+        await harness.model.reload(limit: TranscriptHistorySnapshot.menuPreviewCount)
+
+        XCTAssertEqual(harness.model.results.count, 8, "a menu refresh truncated the panel's history")
+        XCTAssertEqual(harness.model.recentPreviews.count, TranscriptHistorySnapshot.menuPreviewCount)
+        XCTAssertEqual(harness.repository.requestedLimits, [nil, nil],
+                       "the menu's limit must be ignored while a full-history surface is open")
+    }
+
+    func testPanelOpenedAfterAMenuReadStillSeesEveryEntry() async {
+        let harness = makeHarness(entries: (0..<8).map { entry("transcript \($0)", offset: TimeInterval($0)) })
+        // Menu first: a bounded read is enough for five previews.
+        await harness.model.reload(limit: TranscriptHistorySnapshot.menuPreviewCount)
+        XCTAssertEqual(harness.model.results.count, TranscriptHistorySnapshot.menuPreviewCount)
+
+        // Then the panel, which must upgrade rather than reuse the truncated snapshot.
+        await harness.model.loadIfNeeded()
+        XCTAssertEqual(harness.model.results.count, 8)
+        XCTAssertEqual(harness.repository.requestedLimits,
+                       [TranscriptHistorySnapshot.menuPreviewCount, nil])
+    }
+
+    func testMenuReadIsBoundedAgainAfterThePanelCloses() async {
+        let harness = makeHarness(entries: (0..<8).map { entry("transcript \($0)", offset: TimeInterval($0)) })
+        await harness.model.loadIfNeeded()
+        harness.model.completeSnapshotNoLongerNeeded()
+        await harness.model.reload(limit: TranscriptHistorySnapshot.menuPreviewCount)
+        XCTAssertEqual(harness.repository.requestedLimits,
+                       [nil, TranscriptHistorySnapshot.menuPreviewCount])
+    }
+
+    // MARK: - Disabled history
+
+    func testDisabledHistoryPerformsNoRepositoryWork() async {
+        let harness = makeHarness(entries: [entry("one", offset: 1), entry("two", offset: 2)])
+        harness.model.setHistoryEnabled(false)
+
+        await harness.model.loadIfNeeded()
+        await harness.model.reload(limit: TranscriptHistorySnapshot.menuPreviewCount)
+        await harness.model.delete(entry("one", offset: 1))
+        harness.model.requestClear()
+        await harness.model.confirmClear()
+
+        XCTAssertEqual(harness.repository.reads, 0, "a disabled surface read history")
+        XCTAssertTrue(harness.repository.deleted.isEmpty)
+        XCTAssertEqual(harness.repository.clears, 0)
+        XCTAssertFalse(harness.model.hasEntries)
+        XCTAssertFalse(harness.model.isClearConfirmationPending)
+    }
+
+    func testDisablingHistoryDropsTheLoadedSnapshotAndPendingConfirmation() async {
+        let harness = makeHarness(entries: [entry("private", offset: 1)])
+        await harness.model.loadIfNeeded()
+        harness.model.captureTarget()
+        harness.model.searchQuery = "priv"
+        harness.model.requestClear()
+        XCTAssertTrue(harness.model.isClearConfirmationPending)
+
+        harness.model.setHistoryEnabled(false)
+
+        XCTAssertFalse(harness.model.hasEntries)
+        XCTAssertTrue(harness.model.results.isEmpty)
+        XCTAssertFalse(harness.model.isClearConfirmationPending)
+        XCTAssertEqual(harness.model.searchQuery, "")
+        XCTAssertNil(harness.model.capturedTarget)
+    }
+
+    func testDisabledHistoryCapturesNoPasteTargetAndCopiesNothing() async {
+        let harness = makeHarness(entries: [entry("private", offset: 1)])
+        harness.model.setHistoryEnabled(false)
+        harness.model.captureTarget()
+        XCTAssertNil(harness.model.capturedTarget)
+        harness.model.copyLatest()
+        XCTAssertNil(harness.clipboard.value)
+    }
+
+    func testReEnablingHistoryReadsAgain() async {
+        let harness = makeHarness(entries: [entry("one", offset: 1)])
+        harness.model.setHistoryEnabled(false)
+        await harness.model.loadIfNeeded()
+        XCTAssertEqual(harness.repository.reads, 0)
+
+        harness.model.setHistoryEnabled(true)
+        await harness.model.loadIfNeeded()
+        XCTAssertEqual(harness.repository.reads, 1)
+        XCTAssertTrue(harness.model.hasEntries)
+    }
+
+    func testDisabledPanelControllerBuildsNothingAndReadsNothing() async {
+        let harness = makeHarness(entries: [entry("one", offset: 1)])
+        harness.model.setHistoryEnabled(false)
+        let controller = TranscriptHistoryPanelController(viewModel: harness.model)
+
+        controller.show()
+
+        XCTAssertFalse(controller.isPresented, "a disabled Show All built a panel")
+        XCTAssertEqual(harness.repository.reads, 0)
+        XCTAssertNil(harness.model.capturedTarget)
     }
 
     func testInMemoryRepositoryAdapterServesNewestFirstAndDeletes() async throws {

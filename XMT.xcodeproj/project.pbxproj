@@ -103,6 +103,8 @@
 		H100021 /* TranscriptHistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100019 /* TranscriptHistoryViewModel.swift */; };
 		H100023 /* TranscriptHistoryPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100022 /* TranscriptHistoryPanelController.swift */; };
 		H100025 /* TranscriptHistoryPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100024 /* TranscriptHistoryPanelView.swift */; };
+		H100032 /* TranscriptHistoryPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100022 /* TranscriptHistoryPanelController.swift */; };
+		H100033 /* TranscriptHistoryPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100024 /* TranscriptHistoryPanelView.swift */; };
 		H100027 /* TranscriptHistorySnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100026 /* TranscriptHistorySnapshotTests.swift */; };
 		H100029 /* CapturedPasteTargetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100028 /* CapturedPasteTargetTests.swift */; };
 		H100031 /* TranscriptHistoryViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H100030 /* TranscriptHistoryViewModelTests.swift */; };
@@ -657,6 +659,8 @@
 				H100015 /* TranscriptHistoryRepository.swift in Sources */,
 				H100018 /* CapturedPasteTarget.swift in Sources */,
 				H100021 /* TranscriptHistoryViewModel.swift in Sources */,
+				H100032 /* TranscriptHistoryPanelController.swift in Sources */,
+				H100033 /* TranscriptHistoryPanelView.swift in Sources */,
 				H100027 /* TranscriptHistorySnapshotTests.swift in Sources */,
 				H100029 /* CapturedPasteTargetTests.swift in Sources */,
 				H100031 /* TranscriptHistoryViewModelTests.swift in Sources */,

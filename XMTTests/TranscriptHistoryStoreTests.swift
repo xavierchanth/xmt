@@ -79,6 +79,85 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         }
     }
 
+    func testStoreRecordingANewerVersionInMetadataIsRejected() async throws {
+        let store = try makeStore()
+        await store.close()
+        let raw = try SQLiteConnection(path: databaseURL.path)
+        // `user_version` is left at this build's value: metadata alone must be enough to refuse.
+        try raw.execute("""
+            INSERT INTO \(TranscriptHistoryStore.metadataTable) (key, value) VALUES ('schema_version', ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+            """, binding: [.text(String(TranscriptHistoryStore.schemaVersion + 1))])
+        raw.close()
+        XCTAssertThrowsError(try makeStore()) { error in
+            XCTAssertEqual(error as? TranscriptHistoryError,
+                           .unsupportedSchemaVersion(TranscriptHistoryStore.schemaVersion + 1))
+        }
+    }
+
+    func testForeignEntriesTableIsRejectedRatherThanWrittenInto() throws {
+        let raw = try SQLiteConnection(path: databaseURL.path)
+        // Same name, wrong shape — and carrying a column history is not allowed to store.
+        try raw.execute("""
+            CREATE TABLE \(TranscriptHistoryStore.entriesTable) (
+                id TEXT PRIMARY KEY NOT NULL, text TEXT NOT NULL, target_bundle_id TEXT
+            ) STRICT;
+            """)
+        try raw.execute("INSERT INTO \(TranscriptHistoryStore.entriesTable) (id, text) VALUES ('x', 'y');")
+        raw.close()
+        XCTAssertThrowsError(try makeStore()) { error in
+            guard case .incompatibleSchema = error as? TranscriptHistoryError else {
+                return XCTFail("expected an incompatible-schema refusal, got \(error)")
+            }
+        }
+    }
+
+    func testNonStrictEntriesTableIsRejected() throws {
+        let raw = try SQLiteConnection(path: databaseURL.path)
+        try raw.execute("""
+            CREATE TABLE \(TranscriptHistoryStore.entriesTable) (
+                id TEXT PRIMARY KEY NOT NULL, recorded_at_ms INTEGER NOT NULL, sequence INTEGER NOT NULL,
+                text TEXT NOT NULL, locale TEXT NOT NULL, source TEXT NOT NULL
+            );
+            """)
+        raw.close()
+        XCTAssertThrowsError(try makeStore()) { error in
+            guard case .incompatibleSchema = error as? TranscriptHistoryError else {
+                return XCTFail("expected an incompatible-schema refusal, got \(error)")
+            }
+        }
+    }
+
+    // MARK: - Permissions
+
+    func testDatabaseAndSideFilesAreOwnerOnly() async throws {
+        let store = try makeStore()
+        try await store.append(entry("private", at: 1))
+        let manager = FileManager.default
+
+        let directoryMode = try XCTUnwrap(
+            manager.attributesOfItem(atPath: root.path)[.posixPermissions] as? NSNumber)
+        XCTAssertEqual(directoryMode.int16Value, TranscriptHistoryStore.directoryPermissions)
+
+        for path in [databaseURL.path, databaseURL.path + "-wal", databaseURL.path + "-shm"]
+        where manager.fileExists(atPath: path) {
+            let mode = try XCTUnwrap(manager.attributesOfItem(atPath: path)[.posixPermissions] as? NSNumber)
+            XCTAssertEqual(mode.int16Value, TranscriptHistoryStore.filePermissions, "world-readable: \(path)")
+        }
+    }
+
+    func testOpeningAnExistingWorldReadableDatabaseTightensIt() async throws {
+        let first = try makeStore()
+        await first.close()
+        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: Int16(0o644))],
+                                              ofItemAtPath: databaseURL.path)
+        let second = try makeStore()
+        let mode = try XCTUnwrap(
+            FileManager.default.attributesOfItem(atPath: databaseURL.path)[.posixPermissions] as? NSNumber)
+        XCTAssertEqual(mode.int16Value, TranscriptHistoryStore.filePermissions)
+        await second.close()
+    }
+
     // MARK: - Insert and prune
 
     func testAppendIsIdempotentByIdentity() async throws {
@@ -145,6 +224,30 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         try await store.deleteAll()
         let count = try await store.count()
         XCTAssertEqual(count, 0)
+    }
+
+    func testTighteningRetentionPrunesImmediatelyAndBindsLaterAppends() async throws {
+        let store = try makeStore(TranscriptRetentionPolicy(maximumEntries: 10))
+        for index in 1...5 { try await store.append(entry("t\(index)", at: Double(index))) }
+
+        let removed = try await store.setRetention(TranscriptRetentionPolicy(maximumEntries: 2))
+        XCTAssertEqual(removed.count, 3, "entries beyond the new bound go at once, not at next commit")
+        let texts = try await store.entries().map(\.text)
+        XCTAssertEqual(texts, ["t5", "t4"])
+
+        // The adopted policy is the one later appends enforce, with no per-call retention argument.
+        try await store.append(entry("t6", at: 6))
+        let after = try await store.entries().map(\.text)
+        XCTAssertEqual(after, ["t6", "t5"])
+    }
+
+    func testLooseningRetentionPrunesNothing() async throws {
+        let store = try makeStore(TranscriptRetentionPolicy(maximumEntries: 2))
+        for index in 1...3 { try await store.append(entry("t\(index)", at: Double(index))) }
+        let removed = try await store.setRetention(TranscriptRetentionPolicy(maximumEntries: 50))
+        XCTAssertTrue(removed.isEmpty)
+        let count = try await store.count()
+        XCTAssertEqual(count, 2, "a wider bound cannot resurrect what earlier retention removed")
     }
 
     // MARK: - Ordering

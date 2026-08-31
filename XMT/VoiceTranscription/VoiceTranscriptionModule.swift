@@ -24,9 +24,17 @@ final class VoiceTranscriptionModule: ObservableObject {
     @Published private(set) var temporaryFeedback: String?
     @Published var isEnabled: Bool { didSet { persistAndReconfigure("voice.enabled", isEnabled) } }
     @Published var autoPaste: Bool { didSet { persist("voice.autoPaste", autoPaste) } }
-    @Published var historyEnabled: Bool { didSet { persist(VoiceHistoryPreferences.enabledKey, historyEnabled) } }
-    @Published var historyRetentionDays: Int { didSet { persist(VoiceHistoryPreferences.retentionDaysKey, historyRetentionDays) } }
-    @Published var historyMaxEntries: Int { didSet { persist(VoiceHistoryPreferences.maxEntriesKey, historyMaxEntries) } }
+    // History settings take effect when changed, not at the next configuration reload: turning
+    // history off must silence the surfaces immediately rather than after the next launch.
+    @Published var historyEnabled: Bool {
+        didSet { persist(VoiceHistoryPreferences.enabledKey, historyEnabled); applyLocalHistoryEnabled() }
+    }
+    @Published var historyRetentionDays: Int {
+        didSet { persist(VoiceHistoryPreferences.retentionDaysKey, historyRetentionDays); applyLocalHistoryRetention() }
+    }
+    @Published var historyMaxEntries: Int {
+        didSet { persist(VoiceHistoryPreferences.maxEntriesKey, historyMaxEntries); applyLocalHistoryRetention() }
+    }
     @Published var fallbackToSystemDefault: Bool { didSet { persist("voice.fallback", fallbackToSystemDefault) } }
     @Published var localeIdentifier: String { didSet { persist("voice.locale", localeIdentifier) } }
     @Published var devicePriority: [InputDeviceDTO] { didSet { saveDevices() } }
@@ -91,6 +99,10 @@ final class VoiceTranscriptionModule: ObservableObject {
                 Task { @MainActor in self?.lastTranscript = note.object as? String ?? "" }
             }
         }
+        // The surfaces start from the persisted preference, so a menu opened before configuration
+        // resolves cannot read history the user has turned off. Managed configuration overrides it
+        // moments later through `apply`.
+        TranscriptHistoryViewModel.shared.setHistoryEnabled(historyEnabled)
         // One authoritative launch task: effective managed configuration must be applied before
         // history is allowed to touch durable storage.
         Task {
@@ -212,6 +224,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     private func apply(_ value: EffectiveSettings) {
+        let changed = value.changedKeys(from: effective)
         effective = value; managedKeys = Set(EffectiveSettings.Key.allCases.filter { key in
             switch key { case .voiceEnabled: return value.voiceEnabled.isManaged; case .voiceShortcut: return value.voiceShortcut.isManaged
             case .pasteLatestTranscriptShortcut: return value.pasteLatestTranscriptShortcut.isManaged
@@ -230,6 +243,7 @@ final class VoiceTranscriptionModule: ObservableObject {
         localeIdentifier = value.locale.value; devicePriority = value.inputDevicePriority.value; fallbackToSystemDefault = value.fallbackToSystemDefault.value
         applying = false
         applyPasteLatestShortcut(value.pasteLatestTranscriptShortcut)
+        applyHistorySettings(changedKeys: changed)
         if isEnabled { recoverDegradedAndObserve() } else { stop() }
         WindowMoverModule.shared.applyManaged(enabled: value.windowMoverEnabled, shortcut: value.windowMoverShortcut)
     }
@@ -330,6 +344,38 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     private enum RecoverySource { case active, pending }
+
+    /// A locally changed history switch, applied at once. A managed value is never followed from
+    /// here: the control is disabled while the configuration file owns the setting, and `apply` is
+    /// the only path that may change an effective value.
+    private func applyLocalHistoryEnabled() {
+        guard !applying, !effective.historyEnabled.isManaged else { return }
+        TranscriptHistoryViewModel.shared.setHistoryEnabled(historyEnabled)
+    }
+
+    /// A locally changed retention bound, applied at once to a store that is already open. As in
+    /// `applyHistorySettings`, tightening retention never opens or creates the database.
+    private func applyLocalHistoryRetention() {
+        guard !applying, historyEnabled,
+              !effective.historyRetentionDays.isManaged, !effective.historyMaxEntries.isManaged,
+              let store = SharedTranscriptHistoryStore.opened() else { return }
+        let policy = historyRetentionPolicy
+        Task { _ = try? await store.setRetention(policy) }
+    }
+
+    /// Propagates effective history settings to the surfaces and to an already-open store.
+    ///
+    /// Retention is re-applied only when it actually changed and only to a store that is already
+    /// open: tightening retention must not be the thing that creates the database, and a disabled
+    /// history must never reach storage at all. Pruning here is event-driven, not periodic.
+    private func applyHistorySettings(changedKeys: Set<EffectiveSettings.Key>) {
+        TranscriptHistoryViewModel.shared.setHistoryEnabled(historyEnabled)
+        guard historyEnabled,
+              !changedKeys.isDisjoint(with: [.historyRetentionDays, .historyMaxEntries]),
+              let store = SharedTranscriptHistoryStore.opened() else { return }
+        let policy = historyRetentionPolicy
+        Task { _ = try? await store.setRetention(policy) }
+    }
 
     /// Bounded retention as resolved for this run. Days of zero means "count only".
     private var historyRetentionPolicy: TranscriptRetentionPolicy {

@@ -48,4 +48,7 @@ This checklist defines the deferred manual exercise for Voice behavior that cann
 - Retry and delete pending recordings and verify successful commit clears all recovery artifacts without affecting paste-latest behavior.
 - Confirm paste latest never writes history or deletes recovery artifacts; confirm clear, single delete, and disabling history also preserve pending recovery audio.
 - Exercise menu and panel focus capture, target exit, Accessibility revocation, activation timeout, paste failure, single-delete confirmation, and clear confirmation; verify every failed paste leaves the selected transcript on the clipboard and never targets another app.
+- With more than five retained transcripts and the panel open, open the menu and verify the panel keeps listing every entry, its search still matches beyond the newest five, and delete still targets the right row.
+- Disable history through the configuration file, then delete the database and relaunch: verify the menu shows only `Transcript history is off`, no `Show All Transcripts...` is offered, and no `history.sqlite3` is recreated while the app runs.
+- Inspect `history.sqlite3` and its directory with `ls -l` and verify owner-only modes; tighten retention days or maximum entries in settings and verify the excess entries disappear at once rather than at the next transcript.
 - Restore the original permissions, keyboard layout, audio defaults, and retained/recovery files after the exercise.
