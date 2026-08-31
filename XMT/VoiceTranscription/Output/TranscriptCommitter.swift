@@ -78,16 +78,8 @@ struct TranscriptCommitter {
     func commit(_ transcript: String, settings: Settings, targetPID: pid_t?) async throws -> Result {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try dependencies.setClipboard(transcript)
-        if settings.keepLastTranscript {
-            let temporary = directory.appendingPathComponent(".last-transcript-\(UUID().uuidString).tmp")
-            do {
-                try dependencies.write(Data(transcript.utf8), temporary)
-                if dependencies.exists(transcriptURL) { try dependencies.replace(temporary, transcriptURL) }
-                else { try dependencies.move(temporary, transcriptURL) }
-            } catch { try? dependencies.remove(temporary); throw error }
-        } else {
-            try dependencies.remove(transcriptURL)
-        }
+        // `last-transcript.txt` is legacy migration input only. New commits use SQLite history (or
+        // process memory while history is disabled) and must never recreate the legacy file.
         // History is written before the commit point on purpose. A crash between the two replays the
         // whole commit from the surviving recovery artifact, and the append is idempotent by session
         // identity, so the replay restores the same single row rather than adding a second one.

@@ -43,7 +43,7 @@ import XCTest
         let result = try await TranscriptCommitter(directory: root, dependencies: deps)
             .commit("ordered", settings: settings(sessionID: UUID()), targetPID: 12)
 
-        XCTAssertEqual(events, ["clipboard", "temp", "move", "history:ordered", "delete-audio", "paste"])
+        XCTAssertEqual(events, ["clipboard", "history:ordered", "delete-audio", "paste"])
         XCTAssertNil(result.pasteError)
         XCTAssertNil(result.historyError)
         XCTAssertEqual(result.historyEntry?.text, "ordered")
@@ -62,7 +62,7 @@ import XCTest
                 return XCTFail("wrong error: \(error)")
             }
         }
-        XCTAssertEqual(events, ["clipboard", "temp", "move", "history:resilient"])
+        XCTAssertEqual(events, ["clipboard", "history:resilient"])
         XCTAssertFalse(events.contains("delete-audio"))
         XCTAssertFalse(events.contains("paste"))
     }

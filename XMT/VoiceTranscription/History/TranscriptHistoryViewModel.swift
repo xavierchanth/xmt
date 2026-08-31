@@ -2,6 +2,10 @@ import AppKit
 import Combine
 import Foundation
 
+extension Notification.Name {
+    static let transcriptHistoryLatestChanged = Notification.Name("TranscriptHistoryLatestChanged")
+}
+
 /// Main-actor owner of the transcript history surfaces. It holds a newest-first snapshot, mediates
 /// every action the menu and the panel expose, and delegates persistence to a repository and paste
 /// delivery to injected dependencies. It performs no Accessibility, clipboard, or SQLite work itself.
@@ -125,6 +129,8 @@ final class TranscriptHistoryViewModel: ObservableObject {
             updated.remove(id: entry.id)
             snapshot = updated
             diagnostic = dependencies.openDiagnostic
+            NotificationCenter.default.post(name: .transcriptHistoryLatestChanged,
+                                            object: snapshot.entries.first?.text ?? "")
             showFeedback("Deleted transcript")
         } catch {
             diagnostic = "Transcript could not be deleted"
@@ -148,6 +154,7 @@ final class TranscriptHistoryViewModel: ObservableObject {
             updated.removeAll()
             snapshot = updated
             diagnostic = dependencies.openDiagnostic
+            NotificationCenter.default.post(name: .transcriptHistoryLatestChanged, object: "")
             showFeedback("History cleared")
         } catch {
             diagnostic = "History could not be cleared"

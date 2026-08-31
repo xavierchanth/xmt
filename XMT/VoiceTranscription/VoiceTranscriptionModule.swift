@@ -51,6 +51,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     private var unmanagedPasteLatestShortcut: KeyboardShortcuts.Shortcut?
     private var feedbackGeneration: UInt64 = 0
     private var isPastingLatest = false
+    private var historyLatestObserver: NSObjectProtocol?
     private static let pasteLatestShortcutBackupActiveKey = "voice.pasteLatestShortcutBackupActive"
     private static let pasteLatestShortcutBackupDataKey = "voice.pasteLatestShortcutBackupData"
 
@@ -83,6 +84,13 @@ final class VoiceTranscriptionModule: ObservableObject {
     func register() {
         reconcileRecovery()
         registerPasteLatestShortcut()
+        if historyLatestObserver == nil {
+            historyLatestObserver = NotificationCenter.default.addObserver(
+                forName: .transcriptHistoryLatestChanged, object: nil, queue: .main
+            ) { [weak self] note in
+                Task { @MainActor in self?.lastTranscript = note.object as? String ?? "" }
+            }
+        }
         Task { await configureAndReload() }
         Task { await importLegacyTranscriptIfNeeded() }
     }
