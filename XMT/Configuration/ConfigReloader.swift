@@ -65,6 +65,13 @@ actor ConfigReloader {
         }
 
         let next = EffectiveSettings.resolve(config: candidate, local: local, builtIn: builtIn)
+        guard next.windowMoverShortcut.value != next.pasteLatestTranscriptShortcut.value else {
+            let diagnostic = ConfigDiagnostic.invalidValue(
+                path: "windowMover.shortcut",
+                reason: "conflicts with voice.pasteLatestTranscriptShortcut")
+            lastDiagnostic = diagnostic
+            throw diagnostic
+        }
         let result = ConfigLoadResult(effective: next, changedKeys: next.changedKeys(from: effective))
         effective = next
         lastDiagnostic = nil

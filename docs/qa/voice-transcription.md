@@ -20,7 +20,8 @@ This checklist defines the deferred manual exercise for Voice behavior that cann
 
 - Verify a bare Fn tap does nothing, a hold begins push-to-talk after the configured threshold, and release ends it.
 - Verify Fn-Space starts and stops latched recording, converts active push-to-talk to latched, consumes only its matching Space events, and leaves unrelated Fn chords usable.
-- Exercise secure input and event-tap interruption; confirm an active push-to-talk session stops and no idle polling remains.
+- Release Fn and toggle off during each slow arming phase; confirm recording never begins after cancellation.
+- Exercise secure input during arming, push-to-talk, and latched recording; confirm capture stops, automatic paste/history are suppressed for the interrupted session, and no idle polling remains.
 - Confirm Control-Command-V never starts or stops recording and never changes Fn or Fn-Space behavior.
 
 ## Capture, devices, and speech

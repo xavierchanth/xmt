@@ -44,7 +44,7 @@ The intended modules, their scope, and their permission boundary. This table sta
 | Module | Scope | Declared permissions |
 |---|---|---|
 | Window Mover | Move the focused window to the next display | Accessibility |
-| Voice Transcription | Dictate text, retain the last transcript, and optionally paste it into the focused input | Microphone; Input Monitoring for Fn gestures; Accessibility when auto-paste is enabled |
+| Voice Transcription | Dictate text, retain the last transcript, and optionally paste it into the focused input | Microphone; Input Monitoring and Accessibility for the consuming Fn tap; Accessibility for paste |
 | Keyboard Customization | Hyper Caps and home-row modifiers, independently enabled and explicitly scoped by device | Input Monitoring and approval/activation required by macOS for its isolated HID components |
 | Menu Bar Management | Control XMT's own menu bar item only; cross-app management is a public-API no-go | None beyond shell needs |
 
@@ -66,7 +66,7 @@ Audio is held in a bounded in-memory queue during normal processing. Temporary r
 
 A completed result replaces the module's last transcript. Automatic paste is optional: when enabled, commit preserves the transcript first and then asks a separate paste service to insert it into the focused input. A paste failure does not discard the transcript. When auto-paste is disabled, no Accessibility insertion is attempted.
 
-The module declares Microphone permission for capture and Input Monitoring for Fn observation. Accessibility is required only for enabled auto-paste. XMT also includes a speech-recognition usage description defensively; whether SpeechAnalyzer presents that authorization flow remains a [hardware-validation question](../roadmap/README.md#voice-transcription-validation-gaps). Permission acquisition and presentation remain shell responsibilities.
+The module declares Microphone permission for capture. Its active Fn observer declares Input Monitoring and Accessibility because Fn-Space is consumed; paste also uses Accessibility. XMT includes a speech-recognition usage description defensively, and Bluetooth consent is requested only from the contextual Settings action. Whether SpeechAnalyzer presents its own authorization flow remains a [hardware-validation question](../roadmap/README.md#voice-transcription-validation-gaps). Permission acquisition and presentation remain shell responsibilities.
 
 Voice settings, including triggers, ordered devices, separate system-default fallback, recovery policy, transcript handling, and auto-paste, participate in the shared [versioned declarative configuration](configuration.md) and its precedence rules.
 

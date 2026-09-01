@@ -185,6 +185,18 @@ final class ConfigTests: XCTestCase {
         XCTAssertTrue(result.effective.autoPaste.value); XCTAssertEqual(result.effective.autoPaste.source, .builtIn)
     }
 
+    func testReloadRejectsEffectiveGlobalShortcutConflict() async throws {
+        let json = #"{"version":1,"windowMover":{"shortcut":{"type":"key","key":"v","modifiers":["control","command"]}}}"#
+        let loader = ConfigReloader(local: .init(), read: { _ in Data(json.utf8) })
+        do {
+            _ = try await loader.reload()
+            XCTFail("expected shortcut conflict")
+        } catch {
+            XCTAssertEqual(error as? ConfigDiagnostic,
+                           .invalidValue(path: "windowMover.shortcut", reason: "conflicts with voice.pasteLatestTranscriptShortcut"))
+        }
+    }
+
     func testReloadUsesUpdatedLiveLocalBaseline() async throws {
         final class Box: @unchecked Sendable { var removed = false }
         let box = Box()

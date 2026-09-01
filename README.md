@@ -28,7 +28,7 @@ Maintained for personal use. There are no plans to publish it and no support com
 
 - macOS 26 or later
 - Xcode 26 or later
-- Accessibility permission for Window Mover, Voice Transcription's optional auto-paste, and Paste Latest
+- Accessibility permission for Window Mover, the consuming Voice Fn shortcut tap, auto-paste, and Paste Latest
 - Microphone and Input Monitoring permission for Voice Transcription
 - Speech assets for the configured locale, downloadable from the Voice settings tab
 
@@ -52,7 +52,7 @@ Both build into `.build/xcode`; `just clean` removes that directory.
 
 Alternatively, open `XMT.xcodeproj` in Xcode and run the `XMT` target.
 
-Once running, the app appears in the menu bar. The settings window shows `General` first for Launch at Login and the permission overview, then `Window Mover` for its enabled state, Accessibility status, shortcut, and behavior note, then `Voice` for its enabled state, speech assets, permissions, output and locale settings, input-device priority, and configuration reload.
+Once running, XMT opens Settings and also requests a menu-bar item. macOS 26 can clip status items on crowded notched menu bars, so reopening XMT always presents Settings as a recovery route. The settings window shows `General` first for Launch at Login and the permission overview, then `Window Mover` for its enabled state, Accessibility status, shortcut, and behavior note, then `Voice` for its enabled state, speech assets, permissions, output and locale settings, input-device priority, and configuration reload.
 
 ## Testing
 

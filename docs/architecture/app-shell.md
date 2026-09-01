@@ -73,7 +73,7 @@ These rules explain why resource use stays small. They do not promise a number.
 
 The shell coordinates two trigger providers behind one event vocabulary. The shortcut provider owns ordinary configurable global shortcuts. The Fn provider observes the Function key transitions needed for hold-Fn push-to-talk and the Fn-Space toggle without pretending those gestures are ordinary shortcut-library bindings. Providers acquire and release their registrations together with the consuming module and publish events to an arbitrator; neither starts module work directly. Arbitration suppresses duplicate or contradictory transitions and preserves the single-flight rule.
 
-The Fn observer is an Input Monitoring boundary. Voice Transcription declares that permission in addition to its capture permission; observing Fn must not grant the module broader keyboard-remapping ownership. Configurable alternatives remain with the shortcut provider, and the declarative representation of those alternatives remains independent of the shortcut library's private storage.
+The active Fn observer is an Input Monitoring and Accessibility boundary because it consumes Fn-Space. Voice Transcription declares both permissions in addition to capture permission; observing Fn must not grant the module broader keyboard-remapping ownership. Configurable alternatives remain with the shortcut provider, and the declarative representation of those alternatives remains independent of the shortcut library's private storage.
 
 ## Configuration resolution
 

@@ -41,7 +41,7 @@ None of the entitlements below has been requested from Apple, granted by Apple, 
 | `com.apple.developer.driverkit` | `XMTVirtualKeyboard.dext` | Permits a DriverKit extension at all. Restricted; requires an Apple grant. |
 | `com.apple.developer.driverkit.family.hid.device` | `XMTVirtualKeyboard.dext` | Permits providing a HID device — the virtual keyboard output. Restricted. |
 | `com.apple.developer.driverkit.transport.hid` | `XMTVirtualKeyboard.dext` | Permits the HID transport the family is served over. Restricted. |
-| `com.apple.developer.driverkit.userclient-access` | `XMTVirtualKeyboard.dext` | Names the app allowed to open a user client on the extension. Restricted. |
+| `com.apple.developer.driverkit.userclient-access` | Future XMT client/helper target | Names `com.xavierchanth.xmt.virtualkeyboard` as the dext whose user client may be opened. Restricted. It is deliberately absent from both current entitlement files until that client boundary exists. |
 | `com.apple.developer.system-extension.install` | `XMT.app` | Would be required for the app to request activation. **Not added.** The app's entitlements file is untouched, because adding it is only meaningful once activation is in scope, and activation is not in scope. |
 
 Apple's approval process for the DriverKit family is a request that Apple may decline; nothing in this repository is evidence that it has been made or answered.

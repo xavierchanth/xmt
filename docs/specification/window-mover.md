@@ -51,9 +51,7 @@ Two further early returns exist in the code — failing to resolve a screen for 
 
 ## Coordinate space
 
-Accessibility reports window positions with the origin at the **top-left** of the virtual desktop and Y increasing downward; `NSScreen` frames use a **bottom-left** origin with Y increasing upward. Conversion flips Y around the top edge of the union of all screen frames.
-
-Using the union rather than the primary screen's height matters: with a secondary display taller than the primary one, flipping around the primary height misplaces windows. This is the reason the desktop union is computed on every conversion instead of being cached.
+Accessibility reports window positions with the origin at the **top-left of the primary display** and Y increasing downward; `NSScreen` frames use a bottom-left origin with Y increasing upward. Conversion therefore flips Y around the primary display's top edge. A display arranged above the primary can extend the AppKit desktop union without changing that AX reference; using the union would misplace windows.
 
 ## Screen selection
 
@@ -81,7 +79,7 @@ For a window that is not in native full-screen:
 1. **Containment test.** The window is considered on-screen if its frame is fully contained in the source screen's frame expanded outward by a **16 pt** tolerance on every side. A window may hang up to 16 pt off any edge and still count as contained.
 2. **Contained → proportional mapping.** The window's left offset, top offset, width, and height are expressed as fractions of the source screen frame and re-applied to the destination screen frame. The top-left anchor fraction is preserved, and width and height scale independently with the destination's dimensions, so a window occupying the top-left quarter of one display occupies the top-left quarter of the next.
 3. **Not contained → fill.** A window hanging further than the tolerance off its source screen is treated as degenerate and is resized to exactly fill the destination screen frame. Proportional mapping of an already off-screen window would carry it off the destination screen too.
-4. The requested frame is written as an Accessibility position and size, then reconciled.
+4. The requested size is written first, followed by position, then the realized frame is reconciled. If either required Accessibility write fails, the action returns silently.
 
 The 16 pt tolerance and the fill fallback are covered by unit tests, as are the mapping arithmetic and the corrections below.
 
@@ -103,10 +101,10 @@ After the second phase the app's realized result is accepted as final. Window Mo
 If the focused window is in native macOS full-screen when the shortcut fires, a different sequence runs and the windowed path is not used at all.
 
 1. **Exit full-screen.** The full-screen attribute is cleared and the window is polled every 100 ms for up to 3 seconds for the transition to complete.
-2. **Abort on failure.** If the exit does not complete within that deadline, the action returns immediately. The window stays where it is, in full-screen, on its original display. No position or size is written and no error is shown. Repositioning a window mid-transition is worse than doing nothing.
+2. **Abort on failure.** If the exit is refused, unreadable, cancelled, or does not confirm within that deadline, the action returns without writing a frame. A timeout is indeterminate because macOS may still be transitioning; XMT does not claim the final full-screen state or display.
 3. **Move.** After a 200 ms settle delay, the window is set to fill the destination screen's full frame.
 4. **Re-enter full-screen.** After a further 300 ms delay, the full-screen attribute is set and polled every 100 ms for up to 3 seconds.
-5. **Fallback.** If re-entry does not complete within the deadline, the destination screen's full frame is written again and the action ends. The window remains on the destination display, filling it, but not in native full-screen.
+5. **Fallback.** If re-entry does not confirm within the deadline, the destination screen's full frame is requested again and the action ends. The timeout remains indeterminate; XMT does not claim that the application accepted the frame or abandoned its full-screen transition.
 
 The full-screen path never applies proportional mapping or the reconciliation passes; a full-screen window's target is always the destination's full frame.
 

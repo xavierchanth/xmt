@@ -16,14 +16,14 @@ The module is a main-actor singleton owned by the app delegate. It is compiled i
 
 - At `applicationDidFinishLaunching`, XMT registers the module. Registration reconciles recovery artifacts, installs the paste-latest shortcut handler, migrates the former keep-last preference, then resolves and applies initial configuration in one authoritative task before any history operation. Only when effective history is enabled does it open history, import the legacy one-slot transcript, and load the newest row as Paste Latest. When effectively disabled it removes stale legacy plaintext without opening or creating SQLite and never removes recovery audio. Registration acquires no microphone, speech, or analyzer resource, and it prompts for nothing.
 - When the app becomes active, XMT refreshes the input-device list and reloads configuration.
-- At `applicationWillTerminate`, the module stops: the event tap observation is cancelled, the maximum-duration timer is invalidated, capture is stopped, the arming and analysis tasks are cancelled, any live transcriber is cancelled and its asset reservation released, and the partial transcript is cleared. A stop while a recovery recording is pending preserves that pending state; otherwise the session reducer is reset and the status becomes disabled.
+- At `applicationWillTerminate`, the module stops: the event tap observation is cancelled, the maximum-duration timer is invalidated, capture is drained toward recovery, and arming, analysis, finalization, and retry tasks are cancelled. Any live transcriber is cancelled through its own reservation token, and stale task generations cannot commit after stop. A usable interrupted capture is promoted to pending recovery; an existing pending recording remains pending.
 - Enabling the module installs the Fn event tap and enables the paste-latest shortcut; disabling it performs the same stop as termination and disables both triggers. Neither requires restarting XMT.
 
 The persisted enabled setting defaults to **enabled**, as do auto-paste, transcript history, and system-default fallback. History retention defaults to 30 days and 500 entries. The default locale is `en-US` and the default device-priority list is empty. Retention values bound the durable history store described under [durable history storage](#durable-history-storage).
 
 ### Status values
 
-One published status drives the menu and settings surfaces: disabled, idle, arming, recording, finalizing, pending, no speech, paste failed, degraded, and failed. Degraded, paste-failed, and failed carry a message string. Arming is refused unless the status is idle, so a gesture arriving during the two-second no-speech notice, the three-second paste-failure notice, or while a recovery recording is pending is dropped without effect.
+One published status drives the menu and settings surfaces: disabled, idle, arming, recording, finalizing, pending, no speech, paste failed, degraded, and failed. Degraded, paste-failed, and failed carry a message string. No-speech and paste-failure notices remain armable; a recovery-pending or other single-flight state drops new recording triggers.
 
 ## Triggers and arbitration
 
@@ -33,7 +33,8 @@ The module observes the Function key through a `CGEventTap` at the session tap, 
 
 - **Hold Fn** starts push-to-talk once the hold threshold elapses. Releasing Fn ends it and finalizes the session.
 - **Fn-Space** requests a toggle. From an idle Fn hold it starts a latched session; pressed again — as Fn-Space, or through the menu's stop action — it stops one.
-- Pressing Fn-Space while push-to-talk is already active converts that session to latched, and the later Fn release does not stop it.
+- Pressing Fn-Space while push-to-talk is already active — including while its resources are still arming — converts that same session to latched, and the later Fn release does not stop it.
+- Releasing push-to-talk or toggling a latched session off while resources are still arming cancels that arming attempt. A stale completion cannot begin recording afterwards.
 
 The hold threshold is **150 ms** by default and is settable only through the configuration file, within 50–500 ms. Changing it while the module is idle rebuilds the observer with the new threshold; a change that arrives mid-session takes effect after the session commits.
 
@@ -66,17 +67,17 @@ A threshold that elapses after Fn is already released MUST NOT start push-to-tal
 
 ### Secure input and tap interruption
 
-While macOS reports secure event input — a password field, for example — the tap consumes nothing and starts no gesture, and an in-progress gesture is interrupted so its push-to-talk end is delivered. A watchdog polls secure-input state every 100 ms **only while a gesture is in progress**, and is invalidated as soon as arbitration returns to idle; the module runs no timer while idle. If macOS disables the tap by timeout or user input, the observer interrupts the gesture and re-enables the tap.
+While macOS reports secure event input — a password field, for example — the tap consumes nothing and starts no gesture. The observer interrupts arming and both push-to-talk and latched recording; a secure-input-interrupted transcript is excluded from durable history and automatic paste. A watchdog checks every 100 ms only while a gesture or recording is active and is invalidated when neither is active, so the module runs no timer while idle. If macOS disables the tap by timeout or user input, the observer interrupts the gesture and re-enables the tap.
 
 ## Permissions
 
-XMT requests nothing at launch. The declared usage descriptions are Accessibility, Microphone, and Bluetooth-always; there is no `NSSpeechRecognitionUsageDescription` key in `Info.plist`. The app is not sandboxed.
+XMT requests nothing at launch. The declared usage descriptions cover Accessibility, Input Monitoring, Microphone, Bluetooth-always, and Speech recognition. The app is not sandboxed.
 
-- **Input Monitoring** is required for the Fn tap. The module preflights access before creating the tap and, if access is absent or tap creation fails, reports the degraded message `Input Monitoring access is required` rather than prompting.
+- **Input Monitoring and Accessibility** are required for the active Fn tap because it consumes Fn-Space. The module preflights both before creating the tap and reports the missing grant rather than prompting from a trigger.
 - **Microphone** is required to arm a session. Arming checks the live `AVCaptureDevice` authorization for audio; if it is not authorized, the session is refused with `Microphone access is required` and no prompt is shown from the trigger path.
-- **Accessibility** is required for both synthetic paste actions: auto-paste and paste latest. Nothing else in the module uses it.
+- **Accessibility** is also required for both synthetic paste actions: auto-paste and paste latest.
 
-`Request Required Access` in Voice settings is the contextual request path: it asks for microphone access, Input Monitoring, and Accessibility trust. When a request grants access, the module clears its degraded state and starts observing.
+`Request Required Access` in Voice settings is the contextual request path: it asks for microphone, Input Monitoring, Accessibility, and, when still undetermined, Bluetooth access. Gesture-triggered device selection never initiates the Bluetooth prompt. When the required keyboard grants are available, the module clears its degraded state and starts observing.
 
 ## Speech analysis and assets
 
@@ -96,8 +97,8 @@ Finalization is bounded: a live session's finalization is cancelled after 5 seco
 
 Selection runs once per session, from the user's explicit ordered priority list, and is covered by `XMTTests/DeviceSelectorTests.swift`.
 
-1. Each priority entry is tried in order. An entry matches by device UID first, then by **exact** device name.
-2. The first matching entry that is eligible wins. An ineligible match does not stop the scan; later entries are still tried.
+1. Each priority entry is tried in order. A present UID is authoritative: if that device is ineligible, selection continues with the next priority rather than drifting to a same-name device. Exact-name migration is considered only when the configured UID is absent, and only one eligible exact-name match is accepted.
+2. The first unambiguous eligible entry wins. An ineligible entry does not stop the scan; later entries are still tried.
 3. If no configured entry is eligible, selection falls back to the current system-default input **only when the separate fallback setting is enabled**. Fallback is an independent choice, not an implied final list entry.
 4. With fallback disabled and no eligible entry, selection fails. With fallback enabled, it fails if the system default cannot be read, is not present in the device table, or is itself ineligible.
 
@@ -113,7 +114,7 @@ Any selection failure refuses the session with `No eligible input device`. The s
 
 Capture binds one `AVAudioEngine` input node to the selected device by UID and taps it at the hardware format; no format is requested, because a tap format differing from the bound graph can raise an Objective-C exception. Each tapped buffer is copied and offered to a bounded queue of 32 buffers; sending never blocks the realtime thread.
 
-A single drain worker writes every accepted buffer to a CAF recovery file **before** publishing it to the analyzer, so the recovery file is never behind what has been analyzed. Capture terminates the session, preserving what was written, when a buffer copy fails, when either bounded queue overflows, when no first buffer arrives within 1 second, when the engine reports a configuration change while the graph is no longer running, or when the bound device disappears. The engine is not restarted after such an event.
+A single drain worker writes every accepted buffer to a CAF recovery file **before** publishing it to the analyzer, so the recovery file is never behind what has been analyzed. Capture terminates the session, preserving what was written, when a buffer copy fails, when either bounded queue overflows, when no first buffer arrives within 1 second for ordinary devices or 3 seconds for Bluetooth, when the engine reports a configuration change while the graph is no longer running, or when the bound device disappears. The engine is not restarted after such an event.
 
 Recovery storage is a single slot under `~/Library/Caches/com.xavierchanth.xmt/VoiceTranscription/`, holding an active pair (`active.caf`, `active.json`) and at most one pending pair (`pending.caf`, `pending.json`). Metadata is versioned JSON — session identifier, timestamp, locale, and failure reason — written atomically through a temporary file; audio is never rewritten, only moved.
 

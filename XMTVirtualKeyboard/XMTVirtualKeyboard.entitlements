@@ -22,9 +22,5 @@
 	<true/>
 	<key>com.apple.developer.driverkit.transport.hid</key>
 	<true/>
-	<key>com.apple.developer.driverkit.userclient-access</key>
-	<array>
-		<string>com.xavierchanth.xmt</string>
-	</array>
 </dict>
 </plist>

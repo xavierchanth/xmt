@@ -21,6 +21,8 @@ build:
 
 # Build and install XMT in /Applications, then launch and verify it.
 install: build
+    #!/usr/bin/env bash
+    set -euo pipefail
     if pgrep -x XMT >/dev/null; then
         osascript -e 'tell application id "com.xavierchanth.xmt" to quit' 2>/dev/null || pkill -TERM -x XMT || true
         for _ in {1..50}; do pgrep -x XMT >/dev/null || break; sleep 0.1; done
