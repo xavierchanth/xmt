@@ -109,7 +109,7 @@ import XCTest
 
         var replayDeps = deps
         replayDeps.deleteRecovery = {}
-        let replay = try await TranscriptCommitter(dependencies: replayDeps)
+        _ = try await TranscriptCommitter(dependencies: replayDeps)
             .commit("interrupted", settings: settings(sessionID: sessionID), targetPID: nil)
 
         let count2 = try await store.count()

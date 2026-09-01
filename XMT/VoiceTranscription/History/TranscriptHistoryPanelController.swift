@@ -36,7 +36,7 @@ final class TranscriptHistoryPanelController: NSObject, NSWindowDelegate {
         }
 
         let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 420, height: 460),
-                            styleMask: [.titled, .closable, .resizable, .utilityWindow, .nonactivatingPanel],
+                            styleMask: [.titled, .closable, .resizable, .utilityWindow],
                             backing: .buffered, defer: false)
         panel.title = "Transcript History"
         panel.isFloatingPanel = true
@@ -53,7 +53,7 @@ final class TranscriptHistoryPanelController: NSObject, NSWindowDelegate {
     func close() { panel?.close() }
 
     private func present(_ panel: NSPanel) {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
     }
 

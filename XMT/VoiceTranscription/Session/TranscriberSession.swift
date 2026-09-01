@@ -43,9 +43,11 @@ actor TranscriberSession {
                         var converter: StreamConverter?
                         for try await buffer in buffers {
                             if converter == nil { converter = try StreamConverter(source: buffer.format, target: target) }
-                            continuation.yield(AnalyzerInput(buffer: try converter!.convert(buffer)))
+                            for convertedBuffer in try converter!.convert(buffer) {
+                                continuation.yield(AnalyzerInput(buffer: convertedBuffer))
+                            }
                         }
-                        if let tail = try converter?.finish(), tail.frameLength > 0 {
+                        for tail in try converter?.finish() ?? [] where tail.frameLength > 0 {
                             continuation.yield(AnalyzerInput(buffer: tail))
                         }
                         continuation.finish()
@@ -68,29 +70,44 @@ actor TranscriberSession {
             if source != target, converter == nil { throw SessionError.noCompatibleAudioFormat }
         }
 
-        func convert(_ buffer: AVAudioPCMBuffer) throws -> AVAudioPCMBuffer {
+        func convert(_ buffer: AVAudioPCMBuffer) throws -> [AVAudioPCMBuffer] {
             guard buffer.format == source else { throw SessionError.sourceFormatChanged }
-            guard let converter else { return buffer }
-            return try produce(converter: converter, sourceBuffer: buffer, end: false)
+            guard let converter else { return [buffer] }
+            return try produceAll(converter: converter, sourceBuffer: buffer, end: false)
         }
 
-        func finish() throws -> AVAudioPCMBuffer? {
-            guard let converter else { return nil }
-            return try produce(converter: converter, sourceBuffer: nil, end: true)
+        func finish() throws -> [AVAudioPCMBuffer] {
+            guard let converter else { return [] }
+            return try produceAll(converter: converter, sourceBuffer: nil, end: true)
         }
 
-        private func produce(converter: AVAudioConverter, sourceBuffer: AVAudioPCMBuffer?, end: Bool) throws -> AVAudioPCMBuffer {
+        private func produceAll(converter: AVAudioConverter, sourceBuffer: AVAudioPCMBuffer?, end: Bool) throws -> [AVAudioPCMBuffer] {
             let frames = sourceBuffer.map { Double($0.frameLength) } ?? 256
             let capacity = AVAudioFrameCount(ceil(frames * target.sampleRate / source.sampleRate)) + 16
-            guard let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { throw SessionError.noCompatibleAudioFormat }
-            var supplied = false, conversionError: NSError?
-            let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
-                if !supplied, let sourceBuffer { supplied = true; inputStatus.pointee = .haveData; return sourceBuffer }
-                inputStatus.pointee = end ? .endOfStream : .noDataNow; return nil
+            var supplied = false
+            var outputs: [AVAudioPCMBuffer] = []
+            for _ in 0..<64 {
+                guard let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else {
+                    throw SessionError.noCompatibleAudioFormat
+                }
+                var conversionError: NSError?
+                let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
+                    if !supplied, let sourceBuffer {
+                        supplied = true; inputStatus.pointee = .haveData; return sourceBuffer
+                    }
+                    inputStatus.pointee = end ? .endOfStream : .noDataNow; return nil
+                }
+                if let conversionError { throw conversionError }
+                guard status != .error else { throw SessionError.noCompatibleAudioFormat }
+                if output.frameLength > 0 { outputs.append(output) }
+                switch status {
+                case .haveData: continue
+                case .inputRanDry, .endOfStream: return outputs
+                case .error: throw SessionError.noCompatibleAudioFormat
+                @unknown default: throw SessionError.noCompatibleAudioFormat
+                }
             }
-            if let conversionError { throw conversionError }
-            guard status != .error else { throw SessionError.noCompatibleAudioFormat }
-            return output
+            throw SessionError.noCompatibleAudioFormat
         }
     }
 

@@ -33,7 +33,9 @@ struct PendingRecordingStore {
     }
 
     func prepareActive(_ metadata: PendingRecordingMetadata) throws -> URL {
-        try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: root, withIntermediateDirectories: true,
+                                        attributes: [.posixPermissions: 0o700])
+        try hardenPermissions()
         guard try loadPending() == nil else { throw StoreError.pendingAlreadyExists }
         try removeIfPresent(activeAudioURL); try removeIfPresent(activeMetadataURL)
         try atomicWrite(try JSONEncoder.xmt.encode(metadata), to: activeMetadataURL)
@@ -41,6 +43,7 @@ struct PendingRecordingStore {
     }
 
     func promoteActive(failureReason: String) throws -> Pending {
+        try hardenPermissions()
         guard !fileManager.fileExists(atPath: pendingAudioURL.path), !fileManager.fileExists(atPath: pendingMetadataURL.path) else {
             throw StoreError.pendingAlreadyExists
         }
@@ -50,13 +53,17 @@ struct PendingRecordingStore {
         let pending = PendingRecordingMetadata(sessionID: active.sessionID, timestamp: active.timestamp,
                                                localeIdentifier: active.localeIdentifier, failureReason: failureReason)
         try atomicWrite(try JSONEncoder.xmt.encode(pending), to: pendingMetadataURL)
-        do { try fileManager.moveItem(at: activeAudioURL, to: pendingAudioURL) }
+        do {
+            try fileManager.moveItem(at: activeAudioURL, to: pendingAudioURL)
+            try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: pendingAudioURL.path)
+        }
         catch { try? fileManager.removeItem(at: pendingMetadataURL); throw error }
         try removeIfPresent(activeMetadataURL)
         return Pending(metadata: pending, audioURL: pendingAudioURL)
     }
 
     func loadPending() throws -> Pending? {
+        try hardenPermissions()
         let audio = fileManager.fileExists(atPath: pendingAudioURL.path), json = fileManager.fileExists(atPath: pendingMetadataURL.path)
         guard audio || json else { return nil }
         guard audio, json, let metadata = try metadata(at: pendingMetadataURL) else { throw StoreError.incompletePending }
@@ -80,10 +87,20 @@ struct PendingRecordingStore {
         let temporary = root.appendingPathComponent(".recovery-metadata-\(UUID().uuidString).tmp")
         do {
             try data.write(to: temporary, options: [.atomic])
+            try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
             try fileManager.moveItem(at: temporary, to: destination)
         } catch {
             try? fileManager.removeItem(at: temporary)
             throw error
+        }
+    }
+
+    func hardenPermissions() throws {
+        guard fileManager.fileExists(atPath: root.path) else { return }
+        try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
+        for url in [activeAudioURL, activeMetadataURL, pendingAudioURL, pendingMetadataURL]
+            where fileManager.fileExists(atPath: url.path) {
+            try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
         }
     }
 }

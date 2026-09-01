@@ -1,3 +1,4 @@
+import CoreBluetooth
 import Foundation
 import IOBluetooth
 
@@ -6,6 +7,9 @@ public struct BluetoothLinkOracle: BluetoothLinkChecking {
     public init() {}
 
     public func isConnected(device input: AudioInputDevice) -> Bool {
+        // Never trigger the Bluetooth consent sheet from a keyboard gesture. The contextual
+        // permission button is the only path that may make the first paired-device query.
+        guard CBManager.authorization == .allowedAlways else { return false }
         let paired = (IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice]) ?? []
         let matches: [IOBluetoothDevice]
         if let address = input.bluetoothAddress {
@@ -17,5 +21,10 @@ public struct BluetoothLinkOracle: BluetoothLinkChecking {
         }
         guard matches.count == 1 else { return false }
         return matches[0].isConnected()
+    }
+
+    public static func requestAccessContextually() {
+        guard CBManager.authorization == .notDetermined else { return }
+        _ = IOBluetoothDevice.pairedDevices()
     }
 }

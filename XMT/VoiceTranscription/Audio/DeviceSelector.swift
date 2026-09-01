@@ -50,13 +50,15 @@ public struct DeviceSelector {
     public func select(priorities: [AudioDevicePreference], allowSystemDefaultFallback: Bool) throws -> AudioInputDevice {
         let available = try devices.inputDevices()
         for preference in priorities {
-            if let uid = preference.uid,
-               let candidate = available.first(where: { $0.uid == uid }), eligible(candidate) {
-                return candidate
+            if let uid = preference.uid, let candidate = available.first(where: { $0.uid == uid }) {
+                if eligible(candidate) { return candidate }
+                // A present stable identity must never drift to a different same-name device.
+                continue
             }
-            if let name = preference.exactName,
-               let candidate = available.first(where: { $0.name == name }), eligible(candidate) {
-                return candidate
+            if let name = preference.exactName {
+                let matches = available.filter { $0.name == name && eligible($0) }
+                if matches.count == 1 { return matches[0] }
+                // Zero or ambiguous migration matches are ineligible; continue priority order.
             }
         }
         guard allowSystemDefaultFallback else { throw DeviceSelectionError.noEligibleConfiguredDevice }

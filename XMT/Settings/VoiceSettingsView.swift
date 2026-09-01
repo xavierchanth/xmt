@@ -39,8 +39,10 @@ struct VoiceSettingsView: View {
                                        priorityManaged: module.managedKeys.contains(.inputDevicePriority),
                                        fallbackManaged: module.managedKeys.contains(.fallbackToSystemDefault))
             }
-            if module.status == .pending || { if case .failed = module.status { return true }; return false }() {
+            if module.status == .pending {
                 Section("Recovery") { Button("Retry Recording") { module.retryPending() }; Button("Delete Recording", role: .destructive) { module.deletePending() } }
+            } else if case .failed(let message) = module.status {
+                Section("Voice failure") { Text(message).foregroundStyle(.secondary) }
             }
             Section("Configuration") {
                 HStack { Button("Reload Configuration") { module.reloadConfig() }; if let diagnostic = module.configDiagnostic { Text(diagnostic).foregroundStyle(.red) } }

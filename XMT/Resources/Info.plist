@@ -23,11 +23,11 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAccessibilityUsageDescription</key>
-	<string>Window Mover needs Accessibility access to move windows between screens.</string>
+	<string>XMT uses Accessibility to move windows, observe Fn shortcuts, and paste transcribed text.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Voice Transcription checks whether a selected Bluetooth microphone is already connected before using it.</string>
 	<key>NSInputMonitoringUsageDescription</key>
-	<string>Voice Transcription uses Fn shortcuts to start and stop dictation.</string>
+	<string>XMT monitors configured keyboard gestures for Voice Transcription and Keyboard Customization.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Voice Transcription needs microphone access to transcribe spoken audio.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

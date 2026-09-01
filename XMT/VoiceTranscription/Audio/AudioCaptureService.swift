@@ -42,6 +42,7 @@ public final class AudioCaptureService: @unchecked Sendable {
     private var firstBufferSeen = false
     private var terminalError: AudioCaptureError?
     private var draining = false
+    private var stopWaiters: [CheckedContinuation<Void, Never>] = []
 
     public init() { control.setSpecific(key: controlKey, value: 1) }
     deinit {
@@ -137,6 +138,17 @@ public final class AudioCaptureService: @unchecked Sendable {
 
     public func stop() { control.async { [weak self] in self?.beginStop(nil) } }
 
+    public func stopAndWait() async {
+        await withCheckedContinuation { continuation in
+            control.async { [weak self] in
+                guard let self else { continuation.resume(); return }
+                beginStop(nil)
+                if !draining { continuation.resume() }
+                else { stopWaiters.append(continuation) }
+            }
+        }
+    }
+
     private func requestFailure(_ error: AudioCaptureError, token: UInt64) {
         control.async { [weak self] in guard let self, generation == token else { return }; requestFailureOnControl(error) }
     }
@@ -159,6 +171,8 @@ public final class AudioCaptureService: @unchecked Sendable {
         if let error { output?.finish(throwing: error) } else { output?.finish() }
         output = nil; worker = nil; url = nil; boundDeviceID = kAudioObjectUnknown
         terminalError = nil; draining = false
+        let waiters = stopWaiters; stopWaiters.removeAll()
+        waiters.forEach { $0.resume() }
     }
 
     private func configurationChanged(token: UInt64) {

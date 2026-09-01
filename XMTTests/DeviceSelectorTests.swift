@@ -3,6 +3,21 @@ import XCTest
 final class DeviceSelectorTests: XCTestCase {
     private let builtIn = AudioInputDevice(uid: "builtin", name: "Mac Microphone", transport: .builtIn, isAlive: true, hasInput: true, bluetoothAddress: nil)
 
+    func testPresentButIneligibleUIDNeverFallsThroughToSameNameDevice() throws {
+        let unavailable = AudioInputDevice(uid: "preferred", name: "Mic", transport: .usb,
+                                           isAlive: false, hasInput: true, bluetoothAddress: nil)
+        let impostor = device("other", "Mic")
+        let fallback = device("fallback", "Fallback")
+        let provider = FakeDevices(all: [unavailable, impostor, fallback], defaultUID: nil)
+        let selected = try DeviceSelector(devices: provider, bluetooth: FakeBluetooth()).select(
+            priorities: [
+                .init(uid: "preferred", exactName: "Mic"),
+                .init(uid: "fallback", exactName: nil)
+            ],
+            allowSystemDefaultFallback: false)
+        XCTAssertEqual(selected.uid, "fallback")
+    }
+
     func testPriorityOrderAndUIDBeforeNameFallback() throws {
         let named = device("named", "Headset")
         let uid = device("wanted", "Other")

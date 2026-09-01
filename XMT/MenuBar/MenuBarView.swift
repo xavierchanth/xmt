@@ -10,10 +10,11 @@ struct MenuBarView: View {
         switch voice.status {
         case .recording: Text("Voice: Recording…"); Button("Stop Recording") { voice.stopRecording() }
         case .finalizing: Text("Voice: Finalizing…")
-        case .pending, .failed:
+        case .pending:
             Text("Voice: Recording needs attention")
             Button("Retry Recording") { voice.retryPending() }
             Button("Delete Recording", role: .destructive) { voice.deletePending() }
+        case .failed(let reason): Text("Voice failed: \(reason)")
         case .degraded(let reason): Text("Voice: \(reason)")
         default: EmptyView()
         }
