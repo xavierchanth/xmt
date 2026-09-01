@@ -35,6 +35,18 @@ final class DeviceIdentityMatcherTests: XCTestCase {
         XCTAssertEqual(policy(rule(serial: "UNIT-A")).evaluate(external), .unmatched)
     }
 
+    func testBlankAllowConstraintFailsClosedInsteadOfBroadeningInclusion() {
+        let malformed = KeyboardDeviceRule(builtIn: false, vendorID: 0x1234, productID: 0x5678,
+                                           serialNumber: "   ", locationID: nil, transport: nil)
+        XCTAssertEqual(KeyboardDevicePolicy(allow: [malformed], exclude: []).evaluate(external), .ambiguous)
+    }
+
+    func testInventoryRejectsIndistinguishableAllowedDevices() {
+        let duplicate = KeyboardDeviceDescriptor(builtIn: false, vendorID: 0x1234, productID: 0x5678,
+                                                 serialNumber: "unit-a", locationID: 7, transport: "usb")
+        XCTAssertEqual(policy(rule()).evaluateInventory([external, duplicate]), [.ambiguous, .ambiguous])
+    }
+
     func testBlankExcludeFieldsNormalizeToWildcardsAndCannotFailOpen() {
         let malformed = KeyboardDeviceRule(builtIn: false, vendorID: 0x1234, productID: 0x5678,
                                            serialNumber: " \n", locationID: nil, transport: "\t")

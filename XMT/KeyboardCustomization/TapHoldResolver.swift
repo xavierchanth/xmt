@@ -22,7 +22,7 @@ struct TapHoldResolver {
     private(set) var configuration: KeyboardConfiguration
 
     init(configuration: KeyboardConfiguration = .excludingEverything) {
-        self.configuration = configuration
+        self.configuration = (try? configuration.validated()) ?? .excludingEverything
     }
 
     // MARK: - State
@@ -99,8 +99,10 @@ struct TapHoldResolver {
             cancel(device, into: &outputs)
 
         case .configurationReplaced(let replacement):
+            // Reject atomically: invalid input cannot cancel active keys or replace last-known-good.
+            guard let validated = try? replacement.validated() else { break }
             cancelEverything(into: &outputs)
-            configuration = replacement
+            configuration = validated
 
         case .teardown:
             cancelEverything(into: &outputs)
@@ -131,10 +133,8 @@ struct TapHoldResolver {
                                 into outputs: inout [KeyboardOutput]) {
         guard var state = devices[device] else { return }
         guard let policy = configuration.devices[device] else {
-            // Scope was withdrawn while events were buffered: nothing is
-            // interpreted, and no output is invented for the dropped events.
-            state.inbox.removeAll()
-            devices[device] = state.isEmpty ? nil : state
+            // Defensive fail-safe if scope disappears outside the normal validated replacement path.
+            cancel(device, into: &outputs)
             return
         }
 
@@ -377,5 +377,11 @@ struct TapHoldResolver {
             relinquish(modifier, into: &outputs)
         }
         modifierCounts.removeAll()
+        // Mirror modifier defence for ordinary keys: no malformed sequence may leave a key down.
+        for key in keyCounts.keys.sorted().reversed() {
+            keyCounts[key] = 1
+            relinquish(key, into: &outputs)
+        }
+        keyCounts.removeAll()
     }
 }

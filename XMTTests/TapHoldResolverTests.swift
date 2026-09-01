@@ -479,6 +479,16 @@ final class TapHoldResolverTests: XCTestCase {
         XCTAssertEqual(harness.take(), [.modifierDown(.control)], "the replacement's timing governs the next gesture")
     }
 
+    func testInvalidConfigurationReplacementPreservesLastKnownGoodAndActiveState() {
+        let valid = makeConfiguration(hold: 200)
+        var harness = ResolverHarness(configuration: valid)
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: false), at: 0)
+        harness.send(.configurationReplaced(makeConfiguration(hold: Int.max)), at: 50)
+        XCTAssertEqual(harness.resolver.configuration, valid)
+        harness.advance(to: 200)
+        XCTAssertEqual(harness.take(), [.modifierDown(.control)])
+    }
+
     func testConfigurationReplacementDropsQuickTapHistory() {
         var harness = ResolverHarness(configuration: makeConfiguration(hold: 200, quickTap: 150))
         harness.send(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: false), at: 0)
@@ -557,6 +567,16 @@ final class TapHoldResolverTests: XCTestCase {
         XCTAssertThrowsError(try configuration.validated()) { error in
             XCTAssertEqual(error as? KeyboardConfigurationError,
                            .nonPositiveHoldThreshold(device: TestDevice.included, key: nil))
+        }
+    }
+
+    func testExcessiveTimingAndUnknownModifierBitsAreRejected() {
+        XCTAssertThrowsError(try makeConfiguration(hold: Int.max).validated())
+        let unknown = ModifierSet(rawValue: 1 << 20)
+        let configuration = makeConfiguration(extraKeys: [TestKey.a: KeyBehavior(tap: nil, hold: unknown)])
+        XCTAssertThrowsError(try configuration.validated()) { error in
+            XCTAssertEqual(error as? KeyboardConfigurationError,
+                           .unknownModifierBits(device: TestDevice.included, key: TestKey.a))
         }
     }
 

@@ -15,8 +15,14 @@ struct KeyboardInstant: Comparable, Hashable, Sendable {
     init(milliseconds: Int) { self.milliseconds = milliseconds }
 
     static func < (lhs: KeyboardInstant, rhs: KeyboardInstant) -> Bool { lhs.milliseconds < rhs.milliseconds }
-    func advanced(by milliseconds: Int) -> KeyboardInstant { .init(milliseconds: self.milliseconds + milliseconds) }
-    func elapsed(since earlier: KeyboardInstant) -> Int { milliseconds - earlier.milliseconds }
+    func advanced(by delta: Int) -> KeyboardInstant {
+        let (value, overflow) = milliseconds.addingReportingOverflow(delta)
+        return .init(milliseconds: overflow ? (delta >= 0 ? Int.max : Int.min) : value)
+    }
+    func elapsed(since earlier: KeyboardInstant) -> Int {
+        let (value, overflow) = milliseconds.subtractingReportingOverflow(earlier.milliseconds)
+        return overflow ? (milliseconds >= earlier.milliseconds ? Int.max : Int.min) : value
+    }
 }
 
 /// Stable device identity. Scope is explicit: a device the configuration does
@@ -50,6 +56,7 @@ struct ModifierSet: OptionSet, Hashable, Sendable {
     static let command = ModifierSet(rawValue: 1 << 3)
     /// Control-Shift-Option-Command, the hold form of Hyper Caps.
     static let hyper: ModifierSet = [.control, .shift, .option, .command]
+    var containsOnlyKnownModifiers: Bool { rawValue & ~Self.hyper.rawValue == 0 }
 
     /// Members in canonical order. Presses use this order, releases its reverse.
     var ordered: [KeyModifier] {

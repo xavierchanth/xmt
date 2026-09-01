@@ -58,6 +58,7 @@ struct DeviceKeyboardPolicy: Equatable, Sendable {
 /// Explicit device scope plus per-device behavior. A device that is absent is
 /// excluded; there is no implicit inclusion and no wildcard.
 struct KeyboardConfiguration: Equatable, Sendable {
+    static let maximumTimingMilliseconds = 60_000
     var devices: [KeyboardDeviceID: DeviceKeyboardPolicy]
 
     init(devices: [KeyboardDeviceID: DeviceKeyboardPolicy] = [:]) { self.devices = devices }
@@ -79,6 +80,9 @@ struct KeyboardConfiguration: Equatable, Sendable {
                 if behavior.tap == nil, behavior.hold.isEmpty {
                     throw KeyboardConfigurationError.behaviorDoesNothing(device: device, key: key)
                 }
+                guard behavior.hold.containsOnlyKnownModifiers else {
+                    throw KeyboardConfigurationError.unknownModifierBits(device: device, key: key)
+                }
                 if let timing = behavior.timing { try Self.check(timing, device: device, key: key) }
             }
         }
@@ -92,6 +96,10 @@ struct KeyboardConfiguration: Equatable, Sendable {
         guard timing.quickTapMilliseconds >= 0 else {
             throw KeyboardConfigurationError.negativeQuickTapWindow(device: device, key: key)
         }
+        guard timing.holdMilliseconds <= maximumTimingMilliseconds,
+              timing.quickTapMilliseconds <= maximumTimingMilliseconds else {
+            throw KeyboardConfigurationError.timingOutOfRange(device: device, key: key)
+        }
     }
 }
 
@@ -100,4 +108,6 @@ enum KeyboardConfigurationError: Error, Equatable, Sendable {
     case nonPositiveHoldThreshold(device: KeyboardDeviceID, key: KeyCode?)
     case negativeQuickTapWindow(device: KeyboardDeviceID, key: KeyCode?)
     case behaviorDoesNothing(device: KeyboardDeviceID, key: KeyCode)
+    case unknownModifierBits(device: KeyboardDeviceID, key: KeyCode)
+    case timingOutOfRange(device: KeyboardDeviceID, key: KeyCode?)
 }

@@ -39,12 +39,16 @@ struct KeyboardDeviceRule: Hashable, Sendable {
     let serialNumber: String?
     let locationID: UInt32?
     let transport: String?
+    let hasMalformedOptionalConstraint: Bool
 
     init(builtIn: Bool, vendorID: UInt16, productID: UInt16, serialNumber: String?,
          locationID: UInt32?, transport: String?) {
         self.builtIn = builtIn
         self.vendorID = vendorID
         self.productID = productID
+        hasMalformedOptionalConstraint = [serialNumber, transport].contains { value in
+            value != nil && value!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
         self.serialNumber = serialNumber.normalizedIdentityField
         self.locationID = locationID
         self.transport = transport.normalizedTransport
@@ -70,9 +74,23 @@ struct KeyboardDevicePolicy: Sendable {
         let identity = KeyboardDeviceIdentity(descriptor)
         // Exclusions are fail-closed: one or multiple matching rules always exclude.
         if exclude.contains(where: { $0.matches(identity) }) { return .excluded }
+        guard !allow.contains(where: \.hasMalformedOptionalConstraint) else { return .ambiguous }
         let matches = allow.filter { $0.matches(identity) }
         guard !matches.isEmpty else { return .unmatched }
         return matches.count == 1 ? .allowed : .ambiguous
+    }
+
+    /// Evaluates a complete attachment snapshot so indistinguishable devices cannot both pass a
+    /// broad allow rule. The result order matches the descriptor order.
+    func evaluateInventory(_ descriptors: [KeyboardDeviceDescriptor]) -> [KeyboardDeviceMatch] {
+        var results = descriptors.map(evaluate)
+        let allowed = descriptors.indices.filter { results[$0] == .allowed }
+        for index in allowed {
+            let identity = KeyboardDeviceIdentity(descriptors[index])
+            let duplicates = allowed.filter { KeyboardDeviceIdentity(descriptors[$0]) == identity }
+            if duplicates.count > 1 { duplicates.forEach { results[$0] = .ambiguous } }
+        }
+        return results
     }
 }
 
