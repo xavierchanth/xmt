@@ -20,17 +20,5 @@ struct SettingsView: View {
         }
         .frame(width: 620, height: 560)
         .padding(20)
-        .background(SettingsWindowAccessor())
-    }
-}
-
-private struct SettingsWindowAccessor: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView { NSView() }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async {
-            guard let window = nsView.window else { return }
-            SettingsWindowController.shared.register(window: window)
-        }
     }
 }

@@ -19,16 +19,33 @@ build:
         -destination "platform=macOS" \
         -derivedDataPath "{{build_dir}}"
 
-# Build and install XMT in /Applications, then launch it.
+# Build and install XMT in /Applications, then launch and verify it.
 install: build
-    pkill -x XMT 2>/dev/null || true
-    if [[ -e "{{install_path}}" ]]; then rm -rf "{{install_path}}"; fi
-    ditto "{{app}}" "{{install_path}}"
-    open "{{install_path}}"
+    if pgrep -x XMT >/dev/null; then
+        osascript -e 'tell application id "com.xavierchanth.xmt" to quit' 2>/dev/null || pkill -TERM -x XMT || true
+        for _ in {1..50}; do pgrep -x XMT >/dev/null || break; sleep 0.1; done
+        if pgrep -x XMT >/dev/null; then pkill -KILL -x XMT; fi
+        for _ in {1..20}; do pgrep -x XMT >/dev/null || break; sleep 0.1; done
+        if pgrep -x XMT >/dev/null; then echo "XMT did not terminate" >&2; exit 1; fi
+    fi
+    staged="/Applications/.XMT.app.new.$$"
+    backup="/Applications/.XMT.app.old.$$"
+    ditto "{{app}}" "$staged"
+    codesign --verify --deep --strict "$staged"
+    if [[ -e "{{install_path}}" ]]; then mv "{{install_path}}" "$backup"; fi
+    if ! mv "$staged" "{{install_path}}"; then
+        if [[ -e "$backup" ]]; then mv "$backup" "{{install_path}}"; fi
+        exit 1
+    fi
+    if [[ -e "$backup" ]]; then rm -rf "$backup"; fi
+    open -n "{{install_path}}"
+    for _ in {1..50}; do pgrep -x XMT >/dev/null && exit 0; sleep 0.1; done
+    echo "XMT did not remain running after launch" >&2
+    exit 1
 
-# Build and launch without installing.
+# Build and launch a fresh instance without installing.
 run: build
-    open "{{app}}"
+    open -n "{{app}}"
 
 # Build the inert DriverKit virtual-keyboard spike target, unsigned. Not part of `check`.
 build-dext:

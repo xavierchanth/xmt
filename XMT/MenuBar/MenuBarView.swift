@@ -2,7 +2,6 @@ import AppKit
 import SwiftUI
 
 struct MenuBarView: View {
-    @Environment(\.openWindow) private var openWindow
     @ObservedObject private var voice = VoiceTranscriptionModule.shared
     @ObservedObject private var history = TranscriptHistoryViewModel.shared
 
@@ -47,7 +46,7 @@ struct MenuBarView: View {
             Text("Transcript history is off")
         }
         Divider()
-        Button("Settings...") { SettingsWindowController.shared.show { openWindow(id: SettingsWindowController.windowID) } }
+        Button("Settings...") { SettingsWindowController.shared.show() }
             .keyboardShortcut(",", modifiers: .command)
         Divider()
         Button("Quit XMT") { NSApplication.shared.terminate(nil) }.keyboardShortcut("q", modifiers: .command)

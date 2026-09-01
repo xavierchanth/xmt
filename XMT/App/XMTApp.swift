@@ -8,9 +8,5 @@ struct XMTApp: App {
         MenuBarExtra("XMT", image: "MenuBarIcon") {
             MenuBarView()
         }
-
-        Window("Settings", id: SettingsWindowController.windowID) {
-            SettingsView()
-        }
     }
 }
