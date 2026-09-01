@@ -12,6 +12,7 @@
 		AA000003 /* HotKeyNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100003 /* HotKeyNames.swift */; };
 		AA000004 /* AXWindowInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100004 /* AXWindowInfo.swift */; };
 		AA000005 /* ScreenCoordinates.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100005 /* ScreenCoordinates.swift */; };
+		W000001 /* ScreenCoordinates.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100005 /* ScreenCoordinates.swift */; };
 		AA000006 /* WindowMover.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100006 /* WindowMover.swift */; };
 		AA000008 /* AccessibilityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100008 /* AccessibilityService.swift */; };
 		AA000009 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100009 /* SettingsView.swift */; };
@@ -665,6 +666,7 @@
 				H100029 /* CapturedPasteTargetTests.swift in Sources */,
 				H100031 /* TranscriptHistoryViewModelTests.swift in Sources */,
 				AA000019 /* WindowGeometry.swift in Sources */,
+				W000001 /* ScreenCoordinates.swift in Sources */,
 				AA000021 /* WindowGeometryTests.swift in Sources */,
 				B000029 /* FnEventObserver.swift in Sources */,
 				B000030 /* TriggerArbitrator.swift in Sources */,

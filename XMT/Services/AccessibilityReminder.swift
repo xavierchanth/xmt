@@ -19,6 +19,7 @@ enum AccessibilityReminder {
         guard !hasShownReminderWhileDenied else { return }
         hasShownReminderWhileDenied = true
 
+        NSApp.activate()
         let alert = NSAlert()
         alert.messageText = "Accessibility access is required"
         alert.informativeText = "Window Mover needs Accessibility access to move windows. You can grant it in System Settings."
@@ -26,7 +27,6 @@ enum AccessibilityReminder {
         alert.addButton(withTitle: "OK")
 
         if alert.runModal() == .alertFirstButtonReturn {
-            AccessibilityService.shared.requestIfNeeded()
             AccessibilityService.shared.openSystemSettings()
         }
     }

@@ -2,6 +2,28 @@ import CoreGraphics
 import XCTest
 
 final class WindowGeometryTests: XCTestCase {
+    func testAXCoordinateFlipUsesPrimaryTopNotDesktopUnion() {
+        // An external display may sit above the primary and push the desktop union to y=1800.
+        // AX coordinates still flip around the primary display's top at y=900.
+        let frame = CGRect(x: 120, y: 1050, width: 500, height: 300)
+        let ax = ScreenCoordinates.axOrigin(forNSWindowFrame: frame, flipReferenceY: 900)
+        XCTAssertEqual(ax.x, 120, accuracy: 0.001)
+        XCTAssertEqual(ax.y, -450, accuracy: 0.001)
+        XCTAssertEqual(
+            ScreenCoordinates.nsWindowFrame(axOrigin: ax, axSize: frame.size, flipReferenceY: 900),
+            frame
+        )
+    }
+
+    func testAXCoordinateRoundTripAcrossNegativeDesktopCoordinates() {
+        let frame = CGRect(x: -1440, y: -700, width: 800, height: 600)
+        let origin = ScreenCoordinates.axOrigin(forNSWindowFrame: frame, flipReferenceY: 900)
+        XCTAssertEqual(
+            ScreenCoordinates.nsWindowFrame(axOrigin: origin, axSize: frame.size, flipReferenceY: 900),
+            frame
+        )
+    }
+
     func testProportionalFrameUsesTopLeftAnchoringAndVisibleFrames() {
         let sourceVisibleFrame = CGRect(x: 0, y: 0, width: 1000, height: 800)
         let destinationVisibleFrame = CGRect(x: 1000, y: 0, width: 1500, height: 900)

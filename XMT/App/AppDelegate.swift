@@ -8,7 +8,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         logger.notice("XMT finished launching")
         // Install callbacks and apply persisted state without prompting for permission.
-        WindowMoverModule.shared.register()
         VoiceTranscriptionModule.shared.register()
         // A crowded macOS 26 menu bar can clip status items. Always provide a visible
         // recovery surface when the user explicitly launches XMT.
@@ -32,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         logger.notice("XMT will terminate")
+        WindowMoverModule.shared.stop()
         VoiceTranscriptionModule.shared.stop()
     }
 }

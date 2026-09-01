@@ -4,151 +4,112 @@ import ApplicationServices
 // kAXFullScreenAttribute is an informal attribute not defined as a constant in headers.
 private let kAXFullScreen = "AXFullScreen"
 
-/// A wrapper around AXUIElement providing typed access to window attributes.
-/// Using a class (reference type) so mutating methods work naturally.
+/// Failure-tolerant typed access to one Accessibility window element.
 final class AXWindowInfo {
     let element: AXUIElement
 
-    init(element: AXUIElement) {
-        self.element = element
-    }
+    init(element: AXUIElement) { self.element = element }
 
-    // MARK: - Position
-
-    /// The window's top-left position in AX coordinate space (top-left origin, Y increases downward).
     var position: CGPoint? {
-        get {
-            var val: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &val) == .success,
-                  let axVal = val else { return nil }
-            var point = CGPoint.zero
-            // swiftlint:disable:next force_cast
-            AXValueGetValue(axVal as! AXValue, .cgPoint, &point)
-            return point
-        }
-        set {
-            guard var p = newValue,
-                  let axVal = AXValueCreate(.cgPoint, &p) else { return }
-            AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, axVal)
-        }
+        guard let value = copiedAXValue(kAXPositionAttribute, type: .cgPoint) else { return nil }
+        var result = CGPoint.zero
+        return AXValueGetValue(value, .cgPoint, &result) ? result : nil
     }
-
-    // MARK: - Size
-
-    /// The window's size.
     var size: CGSize? {
-        get {
-            var val: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &val) == .success,
-                  let axVal = val else { return nil }
-            var size = CGSize.zero
-            // swiftlint:disable:next force_cast
-            AXValueGetValue(axVal as! AXValue, .cgSize, &size)
-            return size
-        }
-        set {
-            guard var s = newValue,
-                  let axVal = AXValueCreate(.cgSize, &s) else { return }
-            AXUIElementSetAttributeValue(element, kAXSizeAttribute as CFString, axVal)
-        }
+        guard let value = copiedAXValue(kAXSizeAttribute, type: .cgSize) else { return nil }
+        var result = CGSize.zero
+        return AXValueGetValue(value, .cgSize, &result) ? result : nil
     }
+    var isFullScreen: Bool? { booleanAttribute(kAXFullScreen) }
+    var isMinimized: Bool? { booleanAttribute(kAXMinimizedAttribute) }
+    var role: String? { stringAttribute(kAXRoleAttribute) }
+    var subrole: String? { stringAttribute(kAXSubroleAttribute) }
 
-    // MARK: - Full Screen
-
-    /// Whether the window is currently in macOS full-screen mode.
-    var isFullScreen: Bool {
-        get {
-            var val: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(element, kAXFullScreen as CFString, &val) == .success,
-                  let boolVal = val else { return false }
-            return CFBooleanGetValue((boolVal as! CFBoolean))
-        }
-        set {
-            AXUIElementSetAttributeValue(
-                element,
-                kAXFullScreen as CFString,
-                newValue ? kCFBooleanTrue : kCFBooleanFalse
-            )
-        }
-    }
-
-    // MARK: - Minimized
-
-    /// Whether the window is currently minimized.
-    var isMinimized: Bool {
-        var val: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, kAXMinimizedAttribute as CFString, &val) == .success,
-              let boolVal = val else { return false }
-        return CFBooleanGetValue((boolVal as! CFBoolean))
-    }
-
-    var role: String? {
-        stringAttribute(kAXRoleAttribute)
-    }
-
-    var subrole: String? {
-        stringAttribute(kAXSubroleAttribute)
-    }
-
-    // MARK: - Full Screen Transitions
-
-    /// Exits full-screen mode and waits for the transition to complete (polls kAXFullScreen).
-    /// - Returns: `true` if full-screen was successfully exited, `false` if timed out.
     @discardableResult
-    func exitFullScreen() async -> Bool {
-        guard isFullScreen else { return true }
-        isFullScreen = false
+    func setPosition(_ point: CGPoint) -> Bool {
+        var point = point
+        guard let value = AXValueCreate(.cgPoint, &point) else { return false }
+        return AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, value) == .success
+    }
 
-        let deadline = Date().addingTimeInterval(3.0)
+    @discardableResult
+    func setSize(_ size: CGSize) -> Bool {
+        var size = size
+        guard let value = AXValueCreate(.cgSize, &size) else { return false }
+        return AXUIElementSetAttributeValue(element, kAXSizeAttribute as CFString, value) == .success
+    }
+
+    @discardableResult
+    func setFullScreen(_ value: Bool) -> Bool {
+        AXUIElementSetAttributeValue(
+            element, kAXFullScreen as CFString, value ? kCFBooleanTrue : kCFBooleanFalse
+        ) == .success
+    }
+
+    /// Requests a full-screen transition and waits until the AX attribute confirms it. A timeout is
+    /// indeterminate: callers must not claim where the window ultimately landed.
+    func exitFullScreen() async throws -> Bool {
+        guard let fullScreen = isFullScreen else { return false }
+        guard fullScreen else { return true }
+        guard setFullScreen(false) else { return false }
+        return try await waitForFullScreen(false)
+    }
+
+    func enterFullScreen() async throws -> Bool {
+        guard setFullScreen(true) else { return false }
+        return try await waitForFullScreen(true)
+    }
+
+    private func waitForFullScreen(_ expected: Bool) async throws -> Bool {
+        let deadline = Date().addingTimeInterval(3)
         while Date() < deadline {
-            try? await Task.sleep(for: .milliseconds(100))
-            if !isFullScreen { return true }
+            try Task.checkCancellation()
+            try await Task.sleep(for: .milliseconds(100))
+            guard let actual = isFullScreen else { return false }
+            if actual == expected { return true }
         }
         return false
     }
 
-    /// Enters full-screen mode and waits for the transition to complete.
-    /// - Returns: `true` if full-screen was successfully entered, `false` if timed out.
-    @discardableResult
-    func enterFullScreen() async -> Bool {
-        isFullScreen = true
-
-        let deadline = Date().addingTimeInterval(3.0)
-        while Date() < deadline {
-            try? await Task.sleep(for: .milliseconds(100))
-            if isFullScreen { return true }
-        }
-        return false
-    }
-
-    // MARK: - Factory Methods
-
-    /// Returns the focused window of the frontmost application, or nil if none.
     static func focusedWindow() -> AXWindowInfo? {
         guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
-        var val: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &val) == .success,
-              let win = val else { return nil }
-        // swiftlint:disable:next force_cast
-        return AXWindowInfo(element: win as! AXUIElement)
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+        return AXWindowInfo(element: unsafeBitCast(value, to: AXUIElement.self))
     }
 
-    /// Returns all windows for the given process ID.
     static func allWindows(for pid: pid_t) -> [AXWindowInfo] {
-        let axApp = AXUIElementCreateApplication(pid)
-        var val: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &val) == .success,
-              let windows = val as? [AXUIElement] else { return [] }
-        return windows.map { AXWindowInfo(element: $0) }
+        let app = AXUIElementCreateApplication(pid)
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success,
+              let values = value as? [CFTypeRef] else { return [] }
+        return values.compactMap { value in
+            guard CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+            return AXWindowInfo(element: unsafeBitCast(value, to: AXUIElement.self))
+        }
+    }
+
+    private func booleanAttribute(_ attribute: String) -> Bool? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == CFBooleanGetTypeID() else { return nil }
+        return CFBooleanGetValue(unsafeBitCast(value, to: CFBoolean.self))
     }
 
     private func stringAttribute(_ attribute: String) -> String? {
-        var val: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &val) == .success else {
-            return nil
-        }
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == CFStringGetTypeID() else { return nil }
+        return value as? String
+    }
 
-        return val as? String
+    private func copiedAXValue(_ attribute: String, type: AXValueType) -> AXValue? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+        let axValue = unsafeBitCast(value, to: AXValue.self)
+        return AXValueGetType(axValue) == type ? axValue : nil
     }
 }

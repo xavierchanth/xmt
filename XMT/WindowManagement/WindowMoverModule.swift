@@ -16,7 +16,8 @@ final class WindowMoverModule: ObservableObject {
     @Published private(set) var isShortcutManaged = false
     var persistedEnabled: Bool { UserDefaults.standard.bool(forKey: Self.enabledDefaultsKey) }
     var persistedShortcut: ShortcutDTO? {
-        unmanagedShortcut.flatMap(ShortcutDTO.fromKeyboardShortcut)
+        let shortcut = isShortcutManaged ? unmanagedShortcut : KeyboardShortcuts.getShortcut(for: .moveToNextScreen)
+        return shortcut.flatMap(ShortcutDTO.fromKeyboardShortcut)
     }
     private var isHandlerInstalled = false
     private var unmanagedShortcut: KeyboardShortcuts.Shortcut?
@@ -34,12 +35,14 @@ final class WindowMoverModule: ObservableObject {
     }
 
     func register() {
+        reconcileHandler()
+    }
+
+    private func installHandler() {
         guard !isHandlerInstalled else { return }
         isHandlerInstalled = true
-
         KeyboardShortcuts.onKeyUp(for: .moveToNextScreen) { [weak self] in
             Task { @MainActor in
-                // Defence in depth if a queued or library callback arrives after disable.
                 guard let self, self.isEnabled else { return }
                 WindowActionCoordinator.shared.perform {
                     await WindowMover.moveFocusedWindowToNextScreen()
@@ -49,11 +52,25 @@ final class WindowMoverModule: ObservableObject {
         applyShortcutState()
     }
 
+    func stop() {
+        WindowActionCoordinator.shared.cancel()
+        KeyboardShortcuts.disable(.moveToNextScreen)
+        if isHandlerInstalled {
+            KeyboardShortcuts.removeHandler(for: .moveToNextScreen)
+            isHandlerInstalled = false
+        }
+    }
+
+    private func reconcileHandler() {
+        if isEnabled { installHandler() }
+        else { stop() }
+    }
+
     func setEnabled(_ enabled: Bool) {
         guard !isEnabledManaged, enabled != isEnabled else { return }
         isEnabled = enabled
         UserDefaults.standard.set(enabled, forKey: Self.enabledDefaultsKey)
-        applyShortcutState()
+        reconcileHandler()
 
         if enabled {
             AccessibilityService.shared.refresh()
@@ -86,6 +103,9 @@ final class WindowMoverModule: ObservableObject {
         } else {
             unmanagedShortcut = KeyboardShortcuts.getShortcut(for: .moveToNextScreen)
         }
+        // `setShortcut` registers immediately inside KeyboardShortcuts. Re-apply lifecycle state so
+        // a disabled module never reserves and swallows its chord.
+        reconcileHandler()
     }
 
     private static func saveShortcutBackup(_ shortcut: KeyboardShortcuts.Shortcut?) {

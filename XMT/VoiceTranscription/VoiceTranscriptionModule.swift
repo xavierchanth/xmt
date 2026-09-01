@@ -60,6 +60,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     private var effective = EffectiveSettings.resolve(config: nil)
     private var reloader: ConfigReloader?
     private var applying = false
+    private var hasAppliedConfiguration = false
     /// History remains unpublished until the first effective configuration and startup prune finish.
     private var hasResolvedInitialHistory = false
     private var isPasteLatestHandlerInstalled = false
@@ -248,6 +249,11 @@ final class VoiceTranscriptionModule: ObservableObject {
         reloader = loader
         await loader.addApplyCallback { [weak self] result in await self?.apply(result.effective) }
         await loadConfig()
+        if !hasAppliedConfiguration {
+            // An invalid initial file must not leave modules unconfigured, but no trigger is started
+            // until the file has first been read and rejected atomically.
+            apply(EffectiveSettings.resolve(config: nil, local: local))
+        }
         await reconcileLegacyTranscriptForEffectiveHistory()
         hasResolvedInitialHistory = true
         TranscriptHistoryViewModel.shared.setHistoryEnabled(historyEnabled)
@@ -264,6 +270,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     private func apply(_ value: EffectiveSettings) {
+        hasAppliedConfiguration = true
         let changed = value.changedKeys(from: effective)
         effective = value; managedKeys = Set(EffectiveSettings.Key.allCases.filter { key in
             switch key { case .voiceEnabled: return value.voiceEnabled.isManaged; case .voiceShortcut: return value.voiceShortcut.isManaged

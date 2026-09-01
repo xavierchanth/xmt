@@ -16,8 +16,9 @@ enum WindowMover {
         let screens = NSScreen.screens
         guard screens.count > 1 else { return }
 
-        guard let windowInfo = AXWindowInfo.focusedWindow() else { return }
-        guard !windowInfo.isMinimized else { return }
+        guard let windowInfo = AXWindowInfo.focusedWindow(),
+              let isMinimized = windowInfo.isMinimized,
+              !isMinimized else { return }
 
         guard let axOrigin = windowInfo.position,
               let axSize = windowInfo.size else { return }
@@ -30,17 +31,23 @@ enum WindowMover {
         let nextIndex = (currentIndex + 1) % screens.count
         let targetScreen = screens[nextIndex]
 
-        let wasFullScreen = windowInfo.isFullScreen
+        guard let wasFullScreen = windowInfo.isFullScreen else { return }
 
         if wasFullScreen {
-            guard await windowInfo.exitFullScreen() else { return }
-            try? await Task.sleep(for: .milliseconds(200))
-            apply(frame: WindowGeometry.fillFrame(targetScreen.frame), to: windowInfo)
+            do {
+                guard try await windowInfo.exitFullScreen() else { return }
+                try await Task.sleep(for: .milliseconds(200))
+                guard apply(frame: WindowGeometry.fillFrame(targetScreen.frame), to: windowInfo) else { return }
 
-            try? await Task.sleep(for: .milliseconds(300))
-            let reenteredFullScreen = await windowInfo.enterFullScreen()
-            if !reenteredFullScreen {
-                apply(frame: WindowGeometry.fillFrame(targetScreen.frame), to: windowInfo)
+                try await Task.sleep(for: .milliseconds(300))
+                let reenteredFullScreen = try await windowInfo.enterFullScreen()
+                if !reenteredFullScreen {
+                    _ = apply(frame: WindowGeometry.fillFrame(targetScreen.frame), to: windowInfo)
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                return
             }
             return
         }
@@ -50,7 +57,7 @@ enum WindowMover {
             from: currentScreen.frame,
             to: targetScreen.frame
         )
-        apply(frame: requestedFrame, to: windowInfo)
+        guard apply(frame: requestedFrame, to: windowInfo) else { return }
         reconcileFrame(for: windowInfo, requestedFrame: requestedFrame, targetScreenFrame: targetScreen.frame)
     }
 
@@ -70,9 +77,11 @@ enum WindowMover {
         return WindowGeometry.fillFrame(targetScreenFrame)
     }
 
-    private static func apply(frame: CGRect, to windowInfo: AXWindowInfo) {
-        windowInfo.position = ScreenCoordinates.axOrigin(forNSWindowFrame: frame)
-        windowInfo.size = frame.size
+    @discardableResult
+    private static func apply(frame: CGRect, to windowInfo: AXWindowInfo) -> Bool {
+        // Size first because many applications clamp a position against their current dimensions.
+        guard windowInfo.setSize(frame.size) else { return false }
+        return windowInfo.setPosition(ScreenCoordinates.axOrigin(forNSWindowFrame: frame))
     }
 
     private static func reconcileFrame(
@@ -89,11 +98,11 @@ enum WindowMover {
         )
 
         if correctedFrame.origin != currentRealizedFrame.origin {
-            windowInfo.position = ScreenCoordinates.axOrigin(forNSWindowFrame: correctedFrame)
+            _ = windowInfo.setPosition(ScreenCoordinates.axOrigin(forNSWindowFrame: correctedFrame))
         }
 
         if needsSizeRetry(realizedSize: currentRealizedFrame.size, requestedSize: requestedFrame.size) {
-            windowInfo.size = requestedFrame.size
+            guard windowInfo.setSize(requestedFrame.size) else { return }
 
             guard let retriedFrame = realizedFrame(for: windowInfo) else { return }
             let retriedCorrectedFrame = WindowGeometry.correctedFrame(
@@ -103,7 +112,7 @@ enum WindowMover {
             )
 
             if retriedCorrectedFrame.origin != retriedFrame.origin {
-                windowInfo.position = ScreenCoordinates.axOrigin(forNSWindowFrame: retriedCorrectedFrame)
+                _ = windowInfo.setPosition(ScreenCoordinates.axOrigin(forNSWindowFrame: retriedCorrectedFrame))
             }
         }
     }
