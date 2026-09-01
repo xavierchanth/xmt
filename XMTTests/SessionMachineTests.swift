@@ -15,7 +15,7 @@ final class SessionMachineTests: XCTestCase {
     }
 
     func testUnlatchedPTTEndStops() {
-        let s = session(); var m = VoiceSessionMachine(); _ = m.handle(.armed(.pushToTalk, s))
+        let s = session(); var m = VoiceSessionMachine(); _ = m.handle(.pushToTalkBegan(s)); _ = m.handle(.armed(.pushToTalk, s))
         XCTAssertEqual(m.handle(.pushToTalkEnded), .accepted([.stop(s)]))
     }
 
@@ -25,8 +25,8 @@ final class SessionMachineTests: XCTestCase {
         for state in states {
             var m = VoiceSessionMachine(); if case .degraded = state { _ = m.handle(.degrade(.assetsMissing)) }
             // Construct the reachable finalizing/committing states.
-            if case .finalizing = state { _ = m.handle(.armed(.pushToTalk, s)); _ = m.handle(.pushToTalkEnded) }
-            if case .committing = state { _ = m.handle(.armed(.pushToTalk, s)); _ = m.handle(.pushToTalkEnded); _ = m.handle(.finalized(s)) }
+            if case .finalizing = state { _ = m.handle(.pushToTalkBegan(s)); _ = m.handle(.armed(.pushToTalk, s)); _ = m.handle(.pushToTalkEnded) }
+            if case .committing = state { _ = m.handle(.pushToTalkBegan(s)); _ = m.handle(.armed(.pushToTalk, s)); _ = m.handle(.pushToTalkEnded); _ = m.handle(.finalized(s)) }
             XCTAssertEqual(m.handle(.pushToTalkBegan(other)), .dropped)
             XCTAssertEqual(m.handle(.toggle(other)), .dropped)
         }
@@ -45,16 +45,16 @@ final class SessionMachineTests: XCTestCase {
         XCTAssertEqual(m.handle(.retryBegan(retry)), .accepted([.retry(pending)]))
         XCTAssertEqual(m.handle(.finalized(retry)), .accepted([.commit(retry)]))
         XCTAssertEqual(m.handle(.committed), .accepted([])); XCTAssertEqual(m.state, .idle)
-        _ = m.handle(.armed(.pushToTalk, retry)); _ = m.handle(.pushToTalkEnded); _ = m.handle(.finalized(retry))
+        _ = m.handle(.pushToTalkBegan(retry)); _ = m.handle(.armed(.pushToTalk, retry)); _ = m.handle(.pushToTalkEnded); _ = m.handle(.finalized(retry))
         let failed = VoiceSessionMachine.Pending(id: UUID(), audioURL: URL(fileURLWithPath: "/failed.caf"))
         XCTAssertEqual(m.handle(.failed(failed)), .accepted([])); XCTAssertEqual(m.state, .failed(failed))
         XCTAssertEqual(m.handle(.toggle(session())), .dropped)
     }
 
     func testMaximumDurationUsesReducerStopForBothModes() {
-        let ptt = session(); var first = VoiceSessionMachine(); _ = first.handle(.armed(.pushToTalk, ptt))
+        let ptt = session(); var first = VoiceSessionMachine(); _ = first.handle(.pushToTalkBegan(ptt)); _ = first.handle(.armed(.pushToTalk, ptt))
         XCTAssertEqual(first.handle(VoiceSessionMachine.maximumStopEvent(mode: .pushToTalk, session: ptt)), .accepted([.stop(ptt)]))
-        let latched = session(); var second = VoiceSessionMachine(); _ = second.handle(.armed(.latched, latched))
+        let latched = session(); var second = VoiceSessionMachine(); _ = second.handle(.toggle(latched)); _ = second.handle(.armed(.latched, latched))
         XCTAssertEqual(second.handle(VoiceSessionMachine.maximumStopEvent(mode: .latched, session: latched)), .accepted([.stop(latched)]))
     }
 
@@ -68,16 +68,48 @@ final class SessionMachineTests: XCTestCase {
 
     func testRepeatedArmingRefusalNeverWedgesReducer() {
         let first = session(), second = session(); var machine = VoiceSessionMachine()
-        XCTAssertEqual(machine.handle(.armingRefused(.assetsMissing)), .refused(.assetsMissing))
-        XCTAssertEqual(machine.handle(.pushToTalkBegan(first)), .accepted([.arm(.pushToTalk, first)]))
-        // Refusing a later fresh idle attempt remains non-durable as well.
-        machine = VoiceSessionMachine()
-        XCTAssertEqual(machine.handle(.armingRefused(.noInputDevice)), .refused(.noInputDevice))
-        XCTAssertEqual(machine.handle(.toggle(second)), .accepted([.arm(.latched, second)]))
+        _ = machine.handle(.pushToTalkBegan(first))
+        XCTAssertEqual(machine.handle(.armingRefused(first, .assetsMissing)), .refused(.assetsMissing))
+        XCTAssertEqual(machine.handle(.pushToTalkBegan(second)), .accepted([.arm(.pushToTalk, second)]))
+        XCTAssertEqual(machine.handle(.armingRefused(second, .noInputDevice)), .refused(.noInputDevice))
+        XCTAssertEqual(machine.state, .idle)
     }
 
     func testArmingRefusalIsOutcomeNotState() {
-        var m = VoiceSessionMachine()
-        XCTAssertEqual(m.handle(.armingRefused(.noInputDevice)), .refused(.noInputDevice)); XCTAssertEqual(m.state, .idle)
+        let s = session(); var m = VoiceSessionMachine()
+        _ = m.handle(.pushToTalkBegan(s))
+        XCTAssertEqual(m.handle(.armingRefused(s, .noInputDevice)), .refused(.noInputDevice)); XCTAssertEqual(m.state, .idle)
+    }
+
+    func testPushToTalkReleaseCancelsArmingAndRejectsStaleCompletion() {
+        let s = session(); var m = VoiceSessionMachine()
+        _ = m.handle(.pushToTalkBegan(s))
+        XCTAssertEqual(m.state, .arming(.pushToTalk, s))
+        XCTAssertEqual(m.handle(.pushToTalkEnded), .accepted([.cancelArm(s)]))
+        XCTAssertEqual(m.state, .idle)
+        XCTAssertEqual(m.handle(.armed(.pushToTalk, s)), .dropped)
+    }
+
+    func testToggleDuringPushToTalkArmingLatchesTheSameSession() {
+        let s = session(); var m = VoiceSessionMachine()
+        _ = m.handle(.pushToTalkBegan(s))
+        XCTAssertEqual(m.handle(.toggle(session())), .accepted([]))
+        XCTAssertEqual(m.state, .arming(.latched, s))
+        XCTAssertEqual(m.handle(.pushToTalkEnded), .accepted([]))
+        XCTAssertEqual(m.handle(.armed(.latched, s)), .accepted([]))
+        XCTAssertEqual(m.state, .recording(.latched, s))
+    }
+
+    func testInterruptionCancelsArmingAndStopsEitherRecordingMode() {
+        for mode in [VoiceSessionMachine.Mode.pushToTalk, .latched] {
+            let s = session(); var arming = VoiceSessionMachine()
+            _ = arming.handle(mode == .pushToTalk ? .pushToTalkBegan(s) : .toggle(s))
+            XCTAssertEqual(arming.handle(.interrupted), .accepted([.cancelArm(s)]))
+
+            var recording = VoiceSessionMachine()
+            _ = recording.handle(mode == .pushToTalk ? .pushToTalkBegan(s) : .toggle(s))
+            _ = recording.handle(.armed(mode, s))
+            XCTAssertEqual(recording.handle(.interrupted), .accepted([.stop(s)]))
+        }
     }
 }

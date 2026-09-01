@@ -12,4 +12,5 @@ enum TriggerEvent: Equatable {
     case pushToTalkBegan
     case pushToTalkEnded
     case toggleRequested
+    case secureInputBegan
 }

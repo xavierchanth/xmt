@@ -47,7 +47,9 @@ struct TranscriptCommitter {
     /// The deletion callback is the commit point: clipboard has succeeded and retention policy has
     /// been durably applied. Paste is intentionally subsequent and cannot invalidate that commit.
     func commit(_ transcript: String, settings: Settings, targetPID: pid_t?) async throws -> Result {
+        try Task.checkCancellation()
         try dependencies.setClipboard(transcript)
+        try Task.checkCancellation()
         // `last-transcript.txt` is legacy migration input only. New commits use SQLite history (or
         // process memory while history is disabled) and must never recreate the legacy file.
         // History is written before the commit point on purpose. A crash between the two replays the
@@ -64,10 +66,13 @@ struct TranscriptCommitter {
             targetApplicationPID: targetPID)).entry
         if let entry {
             do { try await dependencies.appendHistory(entry, settings.historyRetention) }
+            catch is CancellationError { throw CancellationError() }
             catch { throw CommitError.historyStorageFailed(error) }
         }
+        try Task.checkCancellation()
         do { try await dependencies.deleteRecovery() }
         catch { throw CommitError.recoveryCleanupFailed(error) }
+        try Task.checkCancellation()
         var pasteError: Error?
         if settings.autoPaste {
             do { try await dependencies.paste(transcript, targetPID) } catch { pasteError = error }

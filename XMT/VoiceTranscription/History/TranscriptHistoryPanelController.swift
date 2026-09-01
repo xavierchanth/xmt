@@ -11,7 +11,11 @@ final class TranscriptHistoryPanelController: NSObject, NSWindowDelegate {
     private let viewModel: TranscriptHistoryViewModel
     private var panel: NSPanel?
 
-    init(viewModel: TranscriptHistoryViewModel = .shared) {
+    override convenience init() {
+        self.init(viewModel: .shared)
+    }
+
+    init(viewModel: TranscriptHistoryViewModel) {
         self.viewModel = viewModel
         super.init()
     }

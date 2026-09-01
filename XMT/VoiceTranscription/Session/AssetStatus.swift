@@ -3,9 +3,14 @@ import Speech
 
 @available(macOS 26.0, *)
 actor VoiceAssetManager {
+    struct Reservation: Equatable, Sendable {
+        fileprivate let id: UUID
+        let locale: Locale
+    }
+
     enum Status: Equatable { case unsupported; case missing; case downloading; case installed; case failure(String) }
     private var installing = false
-    private var reservedLocale: Locale?
+    private var reservation: Reservation?
 
     /// On-demand snapshot only; this object performs no idle polling.
     func status(locale: Locale) async -> Status {
@@ -40,16 +45,20 @@ actor VoiceAssetManager {
         } catch { return .failure(error.localizedDescription) }
     }
 
-    func reserve(locale: Locale) async throws -> Bool {
-        if let reservedLocale { return reservedLocale == locale }
-        guard try await AssetInventory.reserve(locale: locale) else { return false }
-        reservedLocale = locale; return true
+    func reserve(locale: Locale) async throws -> Reservation? {
+        guard reservation == nil else { return nil }
+        guard try await AssetInventory.reserve(locale: locale) else { return nil }
+        let token = Reservation(id: UUID(), locale: locale)
+        reservation = token
+        return token
     }
 
-    @discardableResult func releaseReservation() async -> Bool {
-        guard let locale = reservedLocale else { return true }
-        let released = await AssetInventory.release(reservedLocale: locale)
-        if released { reservedLocale = nil }
+    @discardableResult func release(_ token: Reservation) async -> Bool {
+        guard reservation?.id == token.id else { return false }
+        // Keep ownership recorded across the suspension so another caller cannot reserve a new
+        // locale that a stale release would then accidentally relinquish.
+        let released = await AssetInventory.release(reservedLocale: token.locale)
+        if released, reservation?.id == token.id { reservation = nil }
         return released
     }
 }

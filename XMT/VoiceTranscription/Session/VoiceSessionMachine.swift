@@ -9,6 +9,7 @@ struct VoiceSessionMachine: Equatable {
     enum DegradedReason: Error, Equatable { case unsupportedLocale, assetsMissing, noInputDevice, permissionDenied }
     enum State: Equatable {
         case idle
+        case arming(Mode, Session)
         case recording(Mode, Session)
         case finalizing(Session)
         case committing(Session)
@@ -20,7 +21,8 @@ struct VoiceSessionMachine: Equatable {
         case pushToTalkEnded
         case toggle(Session)
         case armed(Mode, Session)
-        case armingRefused(DegradedReason)
+        case armingRefused(Session, DegradedReason)
+        case interrupted
         case finalized(Session)
         case committed
         case failed(Pending)
@@ -30,7 +32,7 @@ struct VoiceSessionMachine: Equatable {
         case degrade(DegradedReason)
         case resetDegraded
     }
-    enum Command: Equatable { case arm(Mode, Session); case stop(Session); case commit(Session); case retry(Pending); case deletePending(Pending) }
+    enum Command: Equatable { case arm(Mode, Session); case cancelArm(Session); case stop(Session); case commit(Session); case retry(Pending); case deletePending(Pending) }
     enum Outcome: Equatable { case accepted([Command]); case dropped; case refused(DegradedReason) }
 
     private(set) var state: State = .idle
@@ -42,13 +44,23 @@ struct VoiceSessionMachine: Equatable {
     mutating func handle(_ event: Event) -> Outcome {
         switch (state, event) {
         case (.idle, .pushToTalkBegan(let s)):
-            return .accepted([.arm(.pushToTalk, s)])
+            state = .arming(.pushToTalk, s); return .accepted([.arm(.pushToTalk, s)])
         case (.idle, .toggle(let s)):
-            return .accepted([.arm(.latched, s)])
-        case (.idle, .armed(let mode, let s)):
-            state = .recording(mode, s); return .accepted([])
-        case (.idle, .armingRefused(let reason)):
-            return .refused(reason) // refusal is deliberately not durable state
+            state = .arming(.latched, s); return .accepted([.arm(.latched, s)])
+        case (.arming(let expectedMode, let expected), .armed(let mode, let supplied))
+            where expectedMode == mode && expected == supplied:
+            state = .recording(mode, expected); return .accepted([])
+        case (.arming(.pushToTalk, let active), .pushToTalkEnded),
+             (.arming(.latched, let active), .toggle):
+            state = .idle; return .accepted([.cancelArm(active)])
+        case (.arming(.pushToTalk, let active), .toggle):
+            state = .arming(.latched, active); return .accepted([])
+        case (.arming(.latched, _), .pushToTalkEnded):
+            return .accepted([])
+        case (.arming(_, let expected), .armingRefused(let supplied, let reason)) where expected == supplied:
+            state = .idle; return .refused(reason)
+        case (.arming(_, let active), .interrupted):
+            state = .idle; return .accepted([.cancelArm(active)])
         case (.recording(.pushToTalk, let active), .toggle):
             state = .recording(.latched, active); return .accepted([])
         case (.recording(.pushToTalk, let active), .pushToTalkEnded):
@@ -56,6 +68,8 @@ struct VoiceSessionMachine: Equatable {
         case (.recording(.latched, _), .pushToTalkEnded):
             return .accepted([])
         case (.recording(.latched, let active), .toggle):
+            state = .finalizing(active); return .accepted([.stop(active)])
+        case (.recording(_, let active), .interrupted):
             state = .finalizing(active); return .accepted([.stop(active)])
         case (.finalizing(let active), .finalized(let supplied)) where active == supplied:
             state = .committing(active); return .accepted([.commit(active)])
@@ -75,6 +89,8 @@ struct VoiceSessionMachine: Equatable {
             return .dropped
         case (.degraded, .resetDegraded):
             state = .idle; return .accepted([])
+        case (.idle, .interrupted):
+            return .accepted([])
         default:
             return .dropped
         }

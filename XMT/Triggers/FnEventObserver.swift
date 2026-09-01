@@ -87,6 +87,7 @@ final class FnEventObserver {
     private var timer: Timer?
     private var secureInputWatchdog: Timer?
     private var physicalEvents = FnPhysicalEventMapper()
+    private var recordingIsActive = false
 
     init(holdThreshold: TimeInterval = 0.35) {
         threshold = holdThreshold
@@ -104,8 +105,19 @@ final class FnEventObserver {
     /// Allows the permission/UI boundary to make an existing observation inert
     /// as soon as secure input is detected.
     func secureInputInterrupted() {
+        recordingIsActive = false
         physicalEvents.interrupt()
         process(.secureInputInterrupted)
+        for subscriber in handlers.values {
+            deliver(.secureInputBegan, to: subscriber.handler)
+        }
+    }
+
+    /// Extends secure-input observation through latched recording, where gesture arbitration has
+    /// returned to idle but microphone capture is still active.
+    func setRecordingActive(_ active: Bool) {
+        recordingIsActive = active
+        updateSecureInputWatchdog()
     }
 
     private func remove(_ id: UUID) {
@@ -211,7 +223,7 @@ final class FnEventObserver {
     }
 
     private func updateSecureInputWatchdog() {
-        let interacting = arbitrator.state != .idle
+        let interacting = arbitrator.state != .idle || recordingIsActive
         if !interacting {
             secureInputWatchdog?.invalidate()
             secureInputWatchdog = nil
@@ -238,6 +250,7 @@ final class FnEventObserver {
         tap = nil
         physicalEvents.interrupt()
         arbitrator = TriggerArbitrator()
+        recordingIsActive = false
     }
 
     deinit {
