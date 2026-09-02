@@ -1,5 +1,7 @@
 import Foundation
 
+enum VoiceOutputMode: String, Codable, CaseIterable, Equatable, Sendable { case pasteImmediately, clipboardOnly }
+
 enum SettingSource: String, Equatable, Sendable { case builtIn, local, configFile }
 
 struct ResolvedSetting<Value: Equatable & Sendable>: Equatable, Sendable {
@@ -38,8 +40,11 @@ struct SettingsValues: Equatable, Sendable {
     var windowMoverEnabled: Bool? = nil
     var windowMoverShortcut: ShortcutDTO? = nil
     var voiceEnabled: Bool? = nil
-    var voiceShortcut: ShortcutDTO? = nil
+    var holdToTalkShortcut: ShortcutDTO? = nil
+    var toggleRecordingShortcut: ShortcutDTO? = nil
+    var cancelShortcut: ShortcutDTO? = nil
     var pasteLatestTranscriptShortcut: ShortcutDTO? = nil
+    var outputMode: VoiceOutputMode? = nil
     var autoPaste: Bool? = nil
     var historyEnabled: Bool? = nil
     var historyRetentionDays: Int? = nil
@@ -56,13 +61,15 @@ struct BuiltInSettings: Equatable, Sendable {
     var windowMoverEnabled = true
     var windowMoverShortcut: ShortcutDTO = .key(key: "space", modifiers: ["option"])
     var voiceEnabled = true
-    var voiceShortcut: ShortcutDTO = .modifierHold("fn")
+    var holdToTalkShortcut: ShortcutDTO = .modifierHold("fn")
+    var toggleRecordingShortcut: ShortcutDTO = .key(key: "space", modifiers: ["control", "option"])
+    var cancelShortcut: ShortcutDTO = .key(key: "escape", modifiers: [])
     var pasteLatestTranscriptShortcut: ShortcutDTO = .key(key: "v", modifiers: ["control", "command"])
-    var autoPaste = true
+    var outputMode: VoiceOutputMode = .pasteImmediately
     var historyEnabled = true
     var historyRetentionDays = 30
     var historyMaxEntries = 500
-    var locale = "en-US"
+    var locale = "system"
     var fnHoldThresholdMs = 150
     var maxSessionSeconds = 300
     var inputDevicePriority: [InputDeviceDTO] = []
@@ -75,9 +82,12 @@ struct EffectiveSettings: Equatable, Sendable {
     let windowMoverEnabled: ResolvedSetting<Bool>
     let windowMoverShortcut: ResolvedSetting<ShortcutDTO>
     let voiceEnabled: ResolvedSetting<Bool>
-    let voiceShortcut: ResolvedSetting<ShortcutDTO>
+    let holdToTalkShortcut: ResolvedSetting<ShortcutDTO>
+    let toggleRecordingShortcut: ResolvedSetting<ShortcutDTO>
+    let cancelShortcut: ResolvedSetting<ShortcutDTO>
     let pasteLatestTranscriptShortcut: ResolvedSetting<ShortcutDTO>
-    let autoPaste: ResolvedSetting<Bool>
+    let outputMode: ResolvedSetting<VoiceOutputMode>
+    var autoPaste: ResolvedSetting<Bool> { .init(value: outputMode.value == .pasteImmediately, source: outputMode.source) }
     let historyEnabled: ResolvedSetting<Bool>
     let historyRetentionDays: ResolvedSetting<Int>
     let historyMaxEntries: ResolvedSetting<Int>
@@ -88,7 +98,7 @@ struct EffectiveSettings: Equatable, Sendable {
     let fallbackToSystemDefault: ResolvedSetting<Bool>
 
     enum Key: String, CaseIterable, Sendable {
-        case windowMoverEnabled, windowMoverShortcut, voiceEnabled, voiceShortcut, pasteLatestTranscriptShortcut, autoPaste
+        case windowMoverEnabled, windowMoverShortcut, voiceEnabled, holdToTalkShortcut, toggleRecordingShortcut, cancelShortcut, pasteLatestTranscriptShortcut, outputMode, autoPaste
         case historyEnabled, historyRetentionDays, historyMaxEntries, locale, fnHoldThresholdMs, maxSessionSeconds
         case inputDevicePriority, fallbackToSystemDefault
     }
@@ -103,9 +113,11 @@ struct EffectiveSettings: Equatable, Sendable {
             windowMoverEnabled: pick(config?.windowMover.enabled, local.windowMoverEnabled, builtIn.windowMoverEnabled),
             windowMoverShortcut: pick(config?.windowMover.shortcut, local.windowMoverShortcut, builtIn.windowMoverShortcut),
             voiceEnabled: pick(config?.voice.enabled, local.voiceEnabled, builtIn.voiceEnabled),
-            voiceShortcut: pick(config?.voice.shortcut, local.voiceShortcut, builtIn.voiceShortcut),
+            holdToTalkShortcut: pick(config?.voice.holdToTalkShortcut ?? config?.voice.shortcut, local.holdToTalkShortcut, builtIn.holdToTalkShortcut),
+            toggleRecordingShortcut: pick(config?.voice.toggleRecordingShortcut, local.toggleRecordingShortcut, builtIn.toggleRecordingShortcut),
+            cancelShortcut: pick(config?.voice.cancelShortcut, local.cancelShortcut, builtIn.cancelShortcut),
             pasteLatestTranscriptShortcut: pick(config?.voice.pasteLatestTranscriptShortcut, local.pasteLatestTranscriptShortcut, builtIn.pasteLatestTranscriptShortcut),
-            autoPaste: pick(config?.voice.autoPaste, local.autoPaste, builtIn.autoPaste),
+            outputMode: pick(config?.voice.outputMode ?? config?.voice.autoPaste.map { $0 ? .pasteImmediately : .clipboardOnly }, local.outputMode ?? local.autoPaste.map { $0 ? .pasteImmediately : .clipboardOnly }, builtIn.outputMode),
             historyEnabled: pick(config?.voice.history?.enabled, local.historyEnabled, builtIn.historyEnabled),
             historyRetentionDays: pick(config?.voice.history?.retentionDays, local.historyRetentionDays, builtIn.historyRetentionDays),
             historyMaxEntries: pick(config?.voice.history?.maxEntries, local.historyMaxEntries, builtIn.historyMaxEntries),
@@ -122,9 +134,11 @@ struct EffectiveSettings: Equatable, Sendable {
         if windowMoverEnabled != old.windowMoverEnabled { result.insert(.windowMoverEnabled) }
         if windowMoverShortcut != old.windowMoverShortcut { result.insert(.windowMoverShortcut) }
         if voiceEnabled != old.voiceEnabled { result.insert(.voiceEnabled) }
-        if voiceShortcut != old.voiceShortcut { result.insert(.voiceShortcut) }
+        if holdToTalkShortcut != old.holdToTalkShortcut { result.insert(.holdToTalkShortcut) }
+        if toggleRecordingShortcut != old.toggleRecordingShortcut { result.insert(.toggleRecordingShortcut) }
+        if cancelShortcut != old.cancelShortcut { result.insert(.cancelShortcut) }
         if pasteLatestTranscriptShortcut != old.pasteLatestTranscriptShortcut { result.insert(.pasteLatestTranscriptShortcut) }
-        if autoPaste != old.autoPaste { result.insert(.autoPaste) }
+        if outputMode != old.outputMode { result.insert(.autoPaste) }
         if historyEnabled != old.historyEnabled { result.insert(.historyEnabled) }
         if historyRetentionDays != old.historyRetentionDays { result.insert(.historyRetentionDays) }
         if historyMaxEntries != old.historyMaxEntries { result.insert(.historyMaxEntries) }

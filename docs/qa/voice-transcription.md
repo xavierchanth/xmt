@@ -53,3 +53,7 @@ This checklist defines the deferred manual exercise for Voice behavior that cann
 - Disable history through the configuration file, then delete the database and relaunch: verify the menu shows only `Transcript history is off`, no `Show All Transcripts...` is offered, and no `history.sqlite3` is recreated while the app runs.
 - Inspect `history.sqlite3` and its directory with `ls -l` and verify owner-only modes; tighten retention days or maximum entries in settings and verify the excess entries disappear at once rather than at the next transcript.
 - Restore the original permissions, keyboard layout, audio defaults, and retained/recovery files after the exercise.
+
+## Voice UX v2 non-hardware coverage
+
+Pure and coordinator tests exercise binding decoding, legacy aliases, effective conflict rejection, reducer event ordering, clipboard-first output, secure-input suppression, and overlay presentation state. Build verification does not constitute live microphone, TCC, HID, focus, Apple asset-download, locale-change, or Accessibility validation; those remain manual tests on macOS 26 hardware.

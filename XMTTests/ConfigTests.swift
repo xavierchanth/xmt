@@ -275,4 +275,22 @@ final class ConfigTests: XCTestCase {
         let finalEvents = await gate.snapshot()
         XCTAssertEqual(finalEvents, ["start-true", "end-true", "start-false", "end-false"])
     }
+    func testVoiceV2DefaultsAndLegacyMigration() throws {
+        let defaults = EffectiveSettings.resolve(config: nil)
+        XCTAssertEqual(defaults.holdToTalkShortcut.value, .modifierHold("fn"))
+        XCTAssertEqual(defaults.cancelShortcut.value, .key(key: "escape", modifiers: []))
+        XCTAssertEqual(defaults.outputMode.value, .pasteImmediately)
+        XCTAssertEqual(defaults.locale.value, "system")
+        let migrated = EffectiveSettings.resolve(config: try decode(#"{"version":1,"voice":{"shortcut":{"type":"modifierHold","modifier":"fn"},"autoPaste":false}}"#))
+        XCTAssertEqual(migrated.holdToTalkShortcut.value, .modifierHold("fn"))
+        XCTAssertEqual(migrated.outputMode.value, .clipboardOnly)
+    }
+
+    func testThreeVoiceBindingsRejectConflictAtomically() async throws {
+        let json = #"{"version":1,"voice":{"toggleRecordingShortcut":{"key":"escape"},"cancelShortcut":{"key":"escape"}}}"#
+        let loader = ConfigReloader(local: .init(), read: { _ in Data(json.utf8) })
+        do { _ = try await loader.reload(); XCTFail("expected conflict") }
+        catch { XCTAssertNotNil(error as? ConfigDiagnostic) }
+    }
+
 }

@@ -65,12 +65,19 @@ actor ConfigReloader {
         }
 
         let next = EffectiveSettings.resolve(config: candidate, local: local, builtIn: builtIn)
-        guard next.windowMoverShortcut.value != next.pasteLatestTranscriptShortcut.value else {
-            let diagnostic = ConfigDiagnostic.invalidValue(
-                path: "windowMover.shortcut",
-                reason: "conflicts with voice.pasteLatestTranscriptShortcut")
-            lastDiagnostic = diagnostic
-            throw diagnostic
+        let bindings: [(String, ShortcutDTO)] = [
+            ("windowMover.shortcut", next.windowMoverShortcut.value),
+            ("voice.holdToTalkShortcut", next.holdToTalkShortcut.value),
+            ("voice.toggleRecordingShortcut", next.toggleRecordingShortcut.value),
+            ("voice.cancelShortcut", next.cancelShortcut.value),
+            ("voice.pasteLatestTranscriptShortcut", next.pasteLatestTranscriptShortcut.value)
+        ]
+        for left in bindings.indices {
+            for right in bindings.indices where right > left && bindings[left].1.conflicts(with: bindings[right].1) {
+                let diagnostic = ConfigDiagnostic.invalidValue(path: bindings[left].0, reason: "conflicts with \(bindings[right].0)")
+                lastDiagnostic = diagnostic
+                throw diagnostic
+            }
         }
         let result = ConfigLoadResult(effective: next, changedKeys: next.changedKeys(from: effective))
         effective = next

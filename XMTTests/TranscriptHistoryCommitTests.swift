@@ -82,6 +82,7 @@ import XCTest
         _ = try await committer.commit("secure", settings: secure, targetPID: nil)
 
         XCTAssertFalse(events.contains { $0.hasPrefix("history:") })
+        XCTAssertEqual(events.filter { $0 == "clipboard" }.count, 1, "secure interruption must not publish clipboard text")
     }
 
     /// A crash between the history append and the recovery deletion leaves the recovery artifact, so

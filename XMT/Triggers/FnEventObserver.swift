@@ -11,6 +11,9 @@ struct FnEventMapping: Equatable {
 struct FnPhysicalEventMapper {
     private(set) var fnIsDown = false
     private(set) var hasConsumedSpaceDown = false
+    let allowsFnSpaceToggle: Bool
+
+    init(allowsFnSpaceToggle: Bool = true) { self.allowsFnSpaceToggle = allowsFnSpaceToggle }
 
     mutating func fnChanged(isDown: Bool) -> FnEventMapping {
         guard isDown != fnIsDown else { return .init(input: nil, consumesEvent: false) }
@@ -20,7 +23,7 @@ struct FnPhysicalEventMapper {
 
     mutating func keyDown(code: Int64, isRepeat: Bool) -> FnEventMapping {
         guard fnIsDown else { return .init(input: nil, consumesEvent: false) }
-        guard code == 49 else {
+        guard allowsFnSpaceToggle, code == 49 else {
             return .init(input: isRepeat ? nil : .otherKeyDown, consumesEvent: false)
         }
         let input: TriggerInput? = hasConsumedSpaceDown ? nil : .spaceDown
@@ -80,17 +83,20 @@ final class FnEventObserver {
     }
 
     private let threshold: TimeInterval
+    private let allowsFnSpaceToggle: Bool
     private var handlers: [UUID: Subscriber] = [:]
     private var arbitrator = TriggerArbitrator()
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
     private var timer: Timer?
     private var secureInputWatchdog: Timer?
-    private var physicalEvents = FnPhysicalEventMapper()
+    private var physicalEvents: FnPhysicalEventMapper
     private var recordingIsActive = false
 
-    init(holdThreshold: TimeInterval = 0.35) {
+    init(holdThreshold: TimeInterval = 0.35, allowsFnSpaceToggle: Bool = true) {
         threshold = holdThreshold
+        self.allowsFnSpaceToggle = allowsFnSpaceToggle
+        physicalEvents = FnPhysicalEventMapper(allowsFnSpaceToggle: allowsFnSpaceToggle)
     }
 
     func observe(_ handler: @escaping Handler) throws -> Observation {

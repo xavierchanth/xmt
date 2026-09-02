@@ -19,7 +19,7 @@ The module is a main-actor singleton owned by the app delegate. It is compiled i
 - At `applicationWillTerminate`, the module stops: the event tap observation is cancelled, the maximum-duration timer is invalidated, capture is drained toward recovery, and arming, analysis, finalization, and retry tasks are cancelled. Any live transcriber is cancelled through its own reservation token, and stale task generations cannot commit after stop. A usable interrupted capture is promoted to pending recovery; an existing pending recording remains pending.
 - Enabling the module installs the Fn event tap and enables the paste-latest shortcut; disabling it performs the same stop as termination and disables both triggers. Neither requires restarting XMT.
 
-The persisted enabled setting defaults to **enabled**, as do auto-paste, transcript history, and system-default fallback. History retention defaults to 30 days and 500 entries. The default locale is `en-US` and the default device-priority list is empty. Retention values bound the durable history store described under [durable history storage](#durable-history-storage).
+The persisted enabled setting defaults to **enabled**, as do paste-immediately output, transcript history, and system-default fallback. History retention defaults to 30 days and 500 entries. The default locale is System Language (`Locale.current`, resolved to an equivalent supported speech locale without an English fallback) and the default device-priority list is empty. Retention values bound the durable history store described under [durable history storage](#durable-history-storage).
 
 ### Status values
 
@@ -75,7 +75,7 @@ XMT requests nothing at launch. The declared usage descriptions cover Accessibil
 
 - **Input Monitoring and Accessibility** are required for the active Fn tap because it consumes Fn-Space. The module preflights both before creating the tap and reports the missing grant rather than prompting from a trigger.
 - **Microphone** is required to arm a session. Arming checks the live `AVCaptureDevice` authorization for audio; if it is not authorized, the session is refused with `Microphone access is required` and no prompt is shown from the trigger path.
-- **Accessibility** is also required for both synthetic paste actions: auto-paste and paste latest.
+- **Accessibility** is also required for both synthetic paste actions: paste-immediately output and paste latest.
 
 `Request Required Access` in Voice settings is the contextual request path: it asks for microphone, Input Monitoring, Accessibility, and, when still undetermined, Bluetooth access. Gesture-triggered device selection never initiates the Bluetooth prompt. When the required keyboard grants are available, the module clears its degraded state and starts observing.
 
@@ -87,7 +87,7 @@ Assets are managed through `AssetInventory`:
 
 - Settings shows an on-demand asset status — not checked, unsupported, missing, downloading, installed, or a failure message. Status is read when the Voice tab appears and on the `Check` button; nothing polls.
 - `Download` performs an explicit installation request and reports its outcome. A second download while one is running returns the downloading status rather than starting another.
-- Arming reserves the locale before creating the transcriber. If the reservation is refused, the session is refused with `Speech assets are not installed`. The reservation is released after commit, after failure, and on stop.
+- Arming resolves the requested or current system locale, records the actual supported locale, and checks `AssetInventory.status(forModules:)`. Only `.installed` proceeds; `.supported` is missing/downloadable, `.downloading` waits for a later retry, and unsupported locales are refused. Assets are not reserved or released per session.
 
 Audio buffers are converted to the analyzer's best available format by a single stream converter that preserves input order and flushes converter delay before ending analyzer input. Partial results update the published partial transcript; finalized segments are joined with a single separating space.
 
@@ -137,7 +137,7 @@ When a session fails after capture has started, its audio is promoted to the pen
 - **Retry Recording** re-analyzes the pending audio file with a fresh analyzer at the recording's own locale and commits the result.
 - **Delete Recording** removes the pending pair and returns to idle.
 
-A retried transcript has no captured target application, so XMT skips auto-paste for retries and leaves the transcript on the clipboard.
+A retried transcript has no captured target application, so XMT skips paste-immediately output for retries and leaves the transcript on the clipboard.
 
 ## Transcript commit
 
@@ -147,7 +147,7 @@ Commit is ordered so the transcript survives every later failure. It is covered 
 2. The clipboard is cleared and set to the transcript. A clipboard failure aborts the commit before anything else happens.
 3. If **transcript history** is enabled, the transcript is appended to the durable history store and retention is applied in the same transaction. Failure aborts before recovery deletion and paste.
 4. Recovery artifacts for the session are deleted. This deletion is the commit point.
-5. Only then, if **auto-paste** is enabled and a trustworthy target application was captured, a logical Command-V is posted.
+5. Only then, if **paste-immediately output** is enabled and a trustworthy target application was captured, a logical Command-V is posted.
 
 The module also keeps the transcript in memory as the last transcript. When history resolves enabled, registration loads the newest retained database row, so Paste Latest works across relaunch. With history disabled, a transcript committed during the current run remains available only in memory. The clipboard is never restored or wiped afterwards.
 
@@ -173,11 +173,11 @@ The former one-slot `last-transcript.txt` cache is imported at registration when
 
 Auto-paste posts a synthetic Command-V key-down and key-up to the process that was frontmost **when the session armed**, excluding XMT itself. It resolves the physical key that produces an unmodified `v` in the current keyboard layout rather than assuming a US layout. It never writes Accessibility values.
 
-When no target process was captured — including retries and sessions armed while XMT itself was frontmost — XMT skips auto-paste and leaves the transcript on the clipboard. When a target exists, paste can still fail without discarding anything if Accessibility trust is absent, the keyboard layout cannot be read, or the events cannot be created. A paste failure sets the paste-failed status with the error description for three seconds and then returns to idle.
+When no target process was captured — including retries and sessions armed while XMT itself was frontmost — XMT skips paste-immediately output and leaves the transcript on the clipboard. When a target exists, paste can still fail without discarding anything if Accessibility trust is absent, the keyboard layout cannot be read, or the events cannot be created. A paste failure sets the paste-failed status with the error description for three seconds and then returns to idle.
 
 ### Paste latest transcript
 
-The ordinary `KeyboardShortcuts` shortcut named `pasteLatestTranscript` defaults to Control-Command-V. On key-up it captures the application currently frontmost, excluding XMT, writes the completed last transcript to the clipboard, and asks the same keyboard-layout-aware paste service to post Command-V to that captured PID. This action is independent of auto-paste: it does not change that setting, enter the recording reducer, commit or retain text, delete recovery artifacts, or create a history entry. It remains safe during a recording because it uses only the previous completed transcript and publishes feedback separately from session status.
+The ordinary `KeyboardShortcuts` shortcut named `pasteLatestTranscript` defaults to Control-Command-V. On key-up it captures the application currently frontmost, excluding XMT, writes the completed last transcript to the clipboard, and asks the same keyboard-layout-aware paste service to post Command-V to that captured PID. This action is independent of paste-immediately output: it does not change that setting, enter the recording reducer, commit or retain text, delete recovery artifacts, or create a history entry. It remains safe during a recording because it uses only the previous completed transcript and publishes feedback separately from session status.
 
 With no transcript, it changes neither clipboard nor target and reports `No transcript to paste` for two seconds. With no trustworthy target, it still leaves the transcript on the clipboard and reports `No target app; transcript copied`. Clipboard and paste failures likewise receive concise two-second feedback, and a delivery failure never restores or clears the clipboard. Disabling Voice disables the shortcut while leaving its handler installed inertly.
 
@@ -197,9 +197,9 @@ The menu bar menu shows Voice state only when there is something to say: recordi
 
 The `Voice` tab in Settings contains:
 
-- the enable toggle, with the gesture hint for hold-Fn and Fn-Space;
+- the enable toggle and independent Hold to Talk, Toggle Recording, and Cancel recorders; Fn is an optional hold binding, ordinary hold chords preserve key-down/key-up, toggle alternates start/stop, and Cancel defaults to Escape;
 - speech-asset status with check and download actions, the contextual access request, and the shared Accessibility status row naming completed-transcript and paste-latest delivery as its consumers;
-- output settings — paste completed transcript, locale, copy last transcript, and the paste-latest shortcut recorder;
+- output settings — an explicit Paste immediately or Clipboard only picker, System Language plus supported locale choices, copy last transcript, and the paste-latest shortcut recorder;
 - transcript-history controls for enabled, retention days, and maximum entries;
 - the ordered input-device priority list with add, reorder, and remove actions, plus the separate system-default fallback toggle;
 - recovery actions, shown only while a recording is pending or failed;
@@ -220,6 +220,14 @@ With effective transcript history disabled, every surface is inert. The menu sho
 Paste from a history surface uses the application that was frontmost immediately before the surface took key focus, captured as a PID with its bundle identifier. Before any event is posted, that capture is re-verified: a target that is XMT itself, older than five minutes, no longer running, or whose PID now belongs to a different bundle identifier is refused. In every refusal — and in every posting failure — the transcript has already been written to the clipboard and is never removed from it, so the user can always paste manually. A blank transcript is neither copied nor pasted, and overlapping paste requests are dropped rather than queued.
 
 Reading, deleting, and clearing go through a repository over the durable history store. A storage failure leaves the surfaces populated and shows a diagnostic instead of pretending the action succeeded. A failure opening the process-wide store is cached for the remainder of that process; explicit UI reload does not retry it, avoiding repeated disk work, and relaunch is the retry boundary.
+
+## Recording overlay and cancellation
+
+Arming, recording, finalizing, and failure use one reused compact non-activating panel on the screen active when shown. It exposes phase, recording-only elapsed time, partial transcript, output mode, Stop, and Cancel with accessibility labels. The panel does not activate XMT or poll while idle; its elapsed timer exists only in recording.
+
+Cancel is accepted only during an arming or active interaction. It cancels every suspension-capable task, stops capture and analysis, removes temporary active audio, clears partial text and the captured target, and returns idle without clipboard, paste, or history effects. Secure-input interruption likewise marks the session private before finalization, causing commit to emit neither output nor history. Repeats are suppressed by the shortcut provider, overlapping starts are dropped by the reducer, and disabling or reconfiguration tears down handlers before applying replacements.
+
+Clipboard-only and paste-immediately are explicit output modes. Both write the clipboard first. Paste-immediately re-verifies the captured target at effect time; refusal or posting failure leaves clipboard text available. History remains controlled independently.
 
 ## Related documentation
 

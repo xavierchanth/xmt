@@ -92,3 +92,7 @@ Settings is one window with one tab per concern, built lazily and shared across 
 - [Window Mover specification](../specification/window-mover.md) — normative behavior of a module running inside this shell.
 - [Voice Transcription specification](../specification/voice-transcription.md) — normative behavior of the module that exercises the Fn trigger provider and per-action resources.
 - [Roadmap](../roadmap/README.md) — which parts of this shell exist and which are outstanding.
+
+### Nonactivating action overlay
+
+The shell may own one lazily created, reusable AppKit panel for action-scoped status and controls. Modules supply semantic presentation state; the panel remains nonactivating, exposes native accessible controls, and is hidden on completion or disable. Presentation is event-driven. An elapsed timer is permitted only while an action is recording, never while hidden or idle.

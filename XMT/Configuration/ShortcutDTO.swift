@@ -42,6 +42,16 @@ enum ShortcutDTO: Equatable, Sendable {
         return .key(key: keyName, modifiers: known.compactMap { shortcut.modifiers.contains($0.1) ? $0.0 : nil })
     }
 
+    func conflicts(with other: ShortcutDTO) -> Bool {
+        switch (self, other) {
+        case let (.modifierHold(left), .modifierHold(right)):
+            return left.lowercased() == right.lowercased()
+        case (.key, .key):
+            return (try? keyboardShortcut()) == (try? other.keyboardShortcut())
+        default: return false
+        }
+    }
+
     func validate() throws {
         switch self {
         case .key:

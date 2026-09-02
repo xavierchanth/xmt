@@ -48,6 +48,13 @@ struct TranscriptCommitter {
     /// been durably applied. Paste is intentionally subsequent and cannot invalidate that commit.
     func commit(_ transcript: String, settings: Settings, targetPID: pid_t?) async throws -> Result {
         try Task.checkCancellation()
+        // A secure-input interruption is a privacy cancellation: clean recovery without
+        // publishing transcript text to clipboard, history, paste, or process-visible output.
+        if settings.secureInputActive {
+            do { try await dependencies.deleteRecovery() }
+            catch { throw CommitError.recoveryCleanupFailed(error) }
+            return Result(pasteError: nil)
+        }
         try dependencies.setClipboard(transcript)
         try Task.checkCancellation()
         // `last-transcript.txt` is legacy migration input only. New commits use SQLite history (or

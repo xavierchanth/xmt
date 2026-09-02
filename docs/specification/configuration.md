@@ -30,13 +30,13 @@ The document is a JSON object with a required integer `version`. The only suppor
     "enabled": true,
     "shortcut": { "type": "modifierHold", "modifier": "fn" },
     "pasteLatestTranscriptShortcut": { "type": "key", "key": "v", "modifiers": ["control", "command"] },
-    "autoPaste": true,
+    "outputMode": "pasteImmediately",
     "history": {
       "enabled": true,
       "retentionDays": 30,
       "maxEntries": 500
     },
-    "locale": "en-US",
+    "locale": "system",
     "fnHoldThresholdMs": 150,
     "maxSessionSeconds": 300,
     "inputDevicePriority": [{ "name": "Studio Microphone", "uid": "BuiltInMicrophoneDevice" }],
@@ -52,7 +52,7 @@ Field meanings are owned by the modules: [Voice Transcription](voice-transcripti
 A shortcut is one of two shapes, distinguished by `type`:
 
 - `key` — a `key` name plus an optional `modifiers` array drawn from `command`, `control`, `option`, and `shift`. Key names cover digits, letters, `f1` through `f20`, and named keys such as `space`, `return`, `tab`, `escape`, `delete`, `forwarddelete`, the arrows, `home`, `end`, `pageup`, `pagedown`, and the punctuation keys. Names are case-insensitive.
-- `modifierHold` — the modifier name `fn` or its alias `function`. Voice Transcription v1 is the only module accepting this shape.
+- `modifierHold` — the modifier name `fn` or its alias `function`. Only Voice hold-to-talk accepts this shape, and only for Fn.
 
 When `type` is omitted, a document containing `modifier` is read as a modifier hold and anything else as a key shortcut. A modifier hold is deliberately not representable as a key shortcut with optional bits.
 
@@ -61,7 +61,7 @@ When `type` is omitted, a document containing `modifier` is read as a modifier h
 Decoding is all-or-nothing: a document is decoded, version-checked, and fully validated before any value is published. Diagnostics distinguish an unreadable file, malformed JSON with the failing coding path, an unsupported version, and an invalid value with its path and reason. The validated constraints are:
 
 - `windowMover.shortcut` MUST be a key shortcut — a modifier hold is rejected for Window Mover — and MUST convert to a real key and modifier set.
-- `voice.shortcut` MUST be a modifier hold naming `fn` or `function`; key shortcuts and other modifiers are rejected.
+- `voice.holdToTalkShortcut` accepts an ordinary key chord or an Fn modifier hold. `voice.toggleRecordingShortcut` and `voice.cancelShortcut` require key chords. The former `voice.shortcut` decodes as a compatibility alias for hold-to-talk.
 - `voice.pasteLatestTranscriptShortcut` MUST be a key shortcut that converts to a real key and modifier set; modifier holds are rejected.
 - `voice.history.retentionDays` and `voice.history.maxEntries` MUST each be at least 1.
 - `voice.keepLastTranscript` is a decode-only compatibility alias for `voice.history.enabled` for one release. Supplying both keys rejects the complete candidate, even when their Boolean values agree; encoding emits only the canonical `history` object.
@@ -76,13 +76,13 @@ An empty `inputDevicePriority` array is a valid explicit value and is distinct f
 
 Effective settings resolve per key, from lowest to highest precedence:
 
-1. **Built-in defaults.** Window Mover enabled with Option-Space; Voice enabled with Fn gestures; paste latest transcript with Control-Command-V; auto-paste on; transcript history enabled with 30 retention days and at most 500 entries; locale `en-US`; Fn hold threshold 150 ms; maximum session 300 seconds; empty device priority; system-default fallback on.
+1. **Built-in defaults.** Window Mover enabled with Option-Space; Voice enabled with Fn gestures; paste latest transcript with Control-Command-V; output mode `pasteImmediately`; transcript history enabled with 30 retention days and at most 500 entries; locale `system`; Fn hold threshold 150 ms; maximum session 300 seconds; empty device priority; system-default fallback on.
 2. **Persisted local values** written by the settings UI.
 3. **Values explicitly present in the configuration file.**
 
 Resolution is per key, not per section: omitting a key leaves the persisted value in force rather than resetting it, and removing the file returns every key to defaults plus persisted values. Each resolved value carries its source, so a change of source alone counts as a change. `XMTTests/ConfigTests.swift` covers the precedence matrix, per-key independence, and removal.
 
-The Window Mover and paste-latest shortcuts may be managed by the file. For each, XMT preserves the prior recorder value when management begins and restores it when the key is removed. Voice Transcription v1 accepts only an Fn modifier-hold value for `voice.shortcut`; that fixed gesture setting is separate from the ordinary configurable `voice.pasteLatestTranscriptShortcut` key.
+All Voice bindings, Window Mover, and paste-latest shortcuts may be managed by the file. For each, XMT preserves the prior recorder value when management begins and restores it when the key is removed. The three Voice action bindings are independent. Effective duplicate bindings across Voice, Window Mover, and Paste Latest reject the complete snapshot before handlers change.
 
 The former local `voice.keepLastTranscript` preference is migrated once to `voice.history.enabled` before defaults are registered. Existing canonical data wins if both keys exist, the legacy key is removed, and repeating the migration changes nothing.
 
@@ -90,7 +90,7 @@ The former local `voice.keepLastTranscript` preference is migrated once to `voic
 
 A value supplied by the configuration file is **managed**. Managed values are applied immediately and are not written back to persisted settings, so removing the file restores what the user had configured.
 
-The settings UI disables the control for a managed value rather than presenting a write that would not take effect: the Voice enable toggle, paste-latest shortcut recorder, auto-paste, each of the history enabled/retention/maximum controls, locale, the device priority list and its add action, and the system-default fallback toggle; and in Window Mover, the enable toggle and the shortcut recorder. Managed ordinary shortcuts are pushed into the shortcut store directly.
+The settings UI disables the control for a managed value rather than presenting a write that would not take effect: the Voice enable toggle, all three Voice binding recorders, paste-latest shortcut recorder, output mode, each of the history enabled/retention/maximum controls, locale, the device priority list and its add action, and the system-default fallback toggle; and in Window Mover, the enable toggle and the shortcut recorder. Managed ordinary shortcuts are pushed into the shortcut store directly.
 
 Applying a snapshot also applies module lifecycle: a Voice module that resolves to enabled recovers from any degraded state and starts observing, and one that resolves to disabled performs a full stop.
 

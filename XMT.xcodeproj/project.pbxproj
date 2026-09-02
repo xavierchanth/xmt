@@ -49,6 +49,7 @@
 		B000018 /* TranscriptCommitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100018 /* TranscriptCommitter.swift */; };
 		B000019 /* PasteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100019 /* PasteService.swift */; };
 		B000020 /* VoiceTranscriptionModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100020 /* VoiceTranscriptionModule.swift */; };
+		F000001 /* VoiceRecordingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = F100001 /* VoiceRecordingOverlay.swift */; };
 		B000021 /* VoiceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100021 /* VoiceSettingsView.swift */; };
 		B000022 /* DevicePriorityListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100022 /* DevicePriorityListView.swift */; };
 		B000023 /* TriggerArbitratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100023 /* TriggerArbitratorTests.swift */; };
@@ -159,6 +160,7 @@
 		B100018 /* TranscriptCommitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptCommitter.swift; sourceTree = "<group>"; };
 		B100019 /* PasteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteService.swift; sourceTree = "<group>"; };
 		B100020 /* VoiceTranscriptionModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTranscriptionModule.swift; sourceTree = "<group>"; };
+		F100001 /* VoiceRecordingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecordingOverlay.swift; sourceTree = "<group>"; };
 		B100021 /* VoiceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSettingsView.swift; sourceTree = "<group>"; };
 		B100022 /* DevicePriorityListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePriorityListView.swift; sourceTree = "<group>"; };
 		B100023 /* TriggerArbitratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriggerArbitratorTests.swift; sourceTree = "<group>"; };
@@ -404,6 +406,7 @@
 				B400005 /* Session */,
 				B400006 /* Output */,
 				B100020 /* VoiceTranscriptionModule.swift */,
+				F100001 /* VoiceRecordingOverlay.swift */,
 			);
 			path = VoiceTranscription;
 			sourceTree = "<group>";
@@ -638,6 +641,7 @@
 				B000018 /* TranscriptCommitter.swift in Sources */,
 				B000019 /* PasteService.swift in Sources */,
 				B000020 /* VoiceTranscriptionModule.swift in Sources */,
+				F000001 /* VoiceRecordingOverlay.swift in Sources */,
 				C000001 /* KeyboardSafetyLifecycle.swift in Sources */,
 				B000021 /* VoiceSettingsView.swift in Sources */,
 				B000022 /* DevicePriorityListView.swift in Sources */,
