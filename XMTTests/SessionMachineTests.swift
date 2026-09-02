@@ -104,12 +104,29 @@ final class SessionMachineTests: XCTestCase {
         for mode in [VoiceSessionMachine.Mode.pushToTalk, .latched] {
             let s = session(); var arming = VoiceSessionMachine()
             _ = arming.handle(mode == .pushToTalk ? .pushToTalkBegan(s) : .toggle(s))
-            XCTAssertEqual(arming.handle(.interrupted), .accepted([.cancelArm(s)]))
+            XCTAssertEqual(arming.handle(.interrupted), .accepted([.discard(s)]))
 
             var recording = VoiceSessionMachine()
             _ = recording.handle(mode == .pushToTalk ? .pushToTalkBegan(s) : .toggle(s))
             _ = recording.handle(.armed(mode, s))
-            XCTAssertEqual(recording.handle(.interrupted), .accepted([.stop(s)]))
+            XCTAssertEqual(recording.handle(.interrupted), .accepted([.discard(s)]))
         }
     }
+    func testPartialUpdatesRequireLifecycleAndRecordingSessionIdentity() {
+        let expected = UUID()
+        XCTAssertTrue(VoicePartialUpdatePolicy.allows(capturedLifecycle: 4, currentLifecycle: 4,
+                                                       expectedSession: expected, currentRecordingSession: expected))
+        XCTAssertFalse(VoicePartialUpdatePolicy.allows(capturedLifecycle: 3, currentLifecycle: 4,
+                                                        expectedSession: expected, currentRecordingSession: expected))
+        XCTAssertFalse(VoicePartialUpdatePolicy.allows(capturedLifecycle: 4, currentLifecycle: 4,
+                                                        expectedSession: expected, currentRecordingSession: UUID()))
+        XCTAssertFalse(VoicePartialUpdatePolicy.allows(capturedLifecycle: 4, currentLifecycle: 4,
+                                                        expectedSession: expected, currentRecordingSession: nil))
+    }
+
+    func testPrivacyCancellationNeverPromotesRecoveryAtLifecycleStop() {
+        XCTAssertFalse(VoiceTeardownPolicy.shouldPromoteRecovery(for: .privacyCancellation))
+        XCTAssertTrue(VoiceTeardownPolicy.shouldPromoteRecovery(for: .lifecycleStop))
+    }
+
 }

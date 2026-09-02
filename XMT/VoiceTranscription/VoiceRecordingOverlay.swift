@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 struct VoiceOverlayPresentation: Equatable {
-    enum Phase: Equatable { case hidden, arming, recording, finalizing, failure(String) }
+    enum Phase: Equatable { case hidden, arming, recording, finalizing }
     var phase: Phase
     var partialTranscript: String
     var outputMode: VoiceOutputMode
@@ -56,7 +56,7 @@ final class VoiceRecordingOverlayController: ObservableObject {
 private struct VoiceRecordingOverlayView: View {
     @ObservedObject var controller: VoiceRecordingOverlayController
     private var phase: String {
-        switch controller.presentation.phase { case .hidden: return ""; case .arming: return "Preparing…"; case .recording: return "Recording"; case .finalizing: return "Finalizing…"; case .failure(let text): return text }
+        switch controller.presentation.phase { case .hidden: return ""; case .arming: return "Preparing…"; case .recording: return "Recording"; case .finalizing: return "Finalizing…" }
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {

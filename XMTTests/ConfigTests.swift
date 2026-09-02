@@ -325,4 +325,13 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(VoiceOverlayPolicy.controls(for: .finalizing).cancel, false)
     }
 
+    func testUnboundDiagnosticForActionsThatRequireBindings() {
+        XCTAssertThrowsError(try decode(#"{"version":1,"windowMover":{"shortcut":{"type":"unbound"}}}"#)) {
+            XCTAssertEqual($0 as? ConfigDiagnostic, .invalidValue(path: "windowMover.shortcut", reason: "must be a key shortcut; unbound is not supported"))
+        }
+        XCTAssertThrowsError(try decode(#"{"version":1,"voice":{"pasteLatestTranscriptShortcut":{"type":"unbound"}}}"#)) {
+            XCTAssertEqual($0 as? ConfigDiagnostic, .invalidValue(path: "voice.pasteLatestTranscriptShortcut", reason: "must be a key shortcut; unbound is not supported"))
+        }
+    }
+
 }

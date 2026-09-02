@@ -32,7 +32,7 @@ struct VoiceSessionMachine: Equatable {
         case degrade(DegradedReason)
         case resetDegraded
     }
-    enum Command: Equatable { case arm(Mode, Session); case cancelArm(Session); case stop(Session); case commit(Session); case retry(Pending); case deletePending(Pending) }
+    enum Command: Equatable { case arm(Mode, Session); case cancelArm(Session); case discard(Session); case stop(Session); case commit(Session); case retry(Pending); case deletePending(Pending) }
     enum Outcome: Equatable { case accepted([Command]); case dropped; case refused(DegradedReason) }
 
     private(set) var state: State = .idle
@@ -60,7 +60,7 @@ struct VoiceSessionMachine: Equatable {
         case (.arming(_, let expected), .armingRefused(let supplied, let reason)) where expected == supplied:
             state = .idle; return .refused(reason)
         case (.arming(_, let active), .interrupted):
-            state = .idle; return .accepted([.cancelArm(active)])
+            state = .idle; return .accepted([.discard(active)])
         case (.recording(.pushToTalk, let active), .toggle):
             state = .recording(.latched, active); return .accepted([])
         case (.recording(.pushToTalk, let active), .pushToTalkEnded):
@@ -70,7 +70,7 @@ struct VoiceSessionMachine: Equatable {
         case (.recording(.latched, let active), .toggle):
             state = .finalizing(active); return .accepted([.stop(active)])
         case (.recording(_, let active), .interrupted):
-            state = .finalizing(active); return .accepted([.stop(active)])
+            state = .idle; return .accepted([.discard(active)])
         case (.finalizing(let active), .finalized(let supplied)) where active == supplied:
             state = .committing(active); return .accepted([.commit(active)])
         case (.committing, .committed):

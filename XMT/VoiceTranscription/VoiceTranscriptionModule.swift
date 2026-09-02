@@ -56,7 +56,6 @@ final class VoiceTranscriptionModule: ObservableObject {
     private var cancellationCleanupTask: Task<Void, Never>?
     private var armGeneration: UInt64 = 0
     private var lifecycleGeneration: UInt64 = 0
-    private var secureInputSessions: Set<UUID> = []
     private var maxTimer: Timer?
     private var pasteTarget: CapturedPasteTarget?
     private let store = PendingRecordingStore()
@@ -154,6 +153,8 @@ final class VoiceTranscriptionModule: ObservableObject {
         observer?.setRecordingActive(false)
         observation?.cancel(); observation = nil; observer = nil; observerThresholdMs = nil; observerHoldBinding = nil
         maxTimer?.invalidate(); maxTimer = nil
+        assetProgressObservation?.invalidate(); assetProgressObservation = nil
+        let cancellationWasInFlight = cancellationCleanupTask != nil
         let activeCapture = capture
         capture = nil
         armTask?.cancel(); armTask = nil
@@ -163,14 +164,17 @@ final class VoiceTranscriptionModule: ObservableObject {
         let sessionTranscriber = transcriber
         transcriber = nil
         if sessionTranscriber != nil { Task { await sessionTranscriber?.cancel() } }
-        secureInputSessions.removeAll()
         partialTranscript = ""
         if let activeCapture, captureTeardownTask == nil {
             captureTeardownTask = Task { [weak self] in
                 guard let self else { return }
                 await activeCapture.stopAndWait()
-                let pending = ((try? store.loadPending()) ?? nil)
-                    ?? (try? store.promoteActive(failureReason: "module stopped"))
+                let pending: PendingRecordingStore.Pending?
+                if VoiceTeardownPolicy.shouldPromoteRecovery(for: cancellationWasInFlight ? .privacyCancellation : .lifecycleStop) {
+                    pending = ((try? store.loadPending()) ?? nil) ?? (try? store.promoteActive(failureReason: "module stopped"))
+                } else {
+                    try? store.clearActive(); pending = nil
+                }
                 if let pending {
                     machine = VoiceSessionMachine()
                     _ = machine.handle(.recovered(.init(id: pending.metadata.sessionID, audioURL: pending.audioURL)))
@@ -204,6 +208,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     func refreshAssets() {
+        assetProgressObservation?.invalidate(); assetProgressObservation = nil
         assetStatusGeneration &+= 1
         let generation = assetStatusGeneration
         let locale = requestedLocale
@@ -214,6 +219,7 @@ final class VoiceTranscriptionModule: ObservableObject {
         }
     }
     func downloadAssets() {
+        assetProgressObservation?.invalidate(); assetProgressObservation = nil
         assetStatusGeneration &+= 1
         let generation = assetStatusGeneration
         let locale = requestedLocale
@@ -300,15 +306,19 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     func cancelVoiceInteraction() {
-        let active: Bool
-        switch machine.state { case .arming, .recording: active = true; default: active = false }
-        guard active, cancellationCleanupTask == nil else { return }
+        guard cancellationCleanupTask == nil else { return }
+        interpret(machine.handle(.interrupted))
+    }
+
+    private func discardVoiceInteraction(showFeedback: Bool) {
+        guard cancellationCleanupTask == nil else { return }
         lifecycleGeneration &+= 1; armGeneration &+= 1
         let arming = armTask; arming?.cancel()
         finalizationTask?.cancel(); finalizationTask = nil
         analysisTask?.cancel(); analysisTask = nil; maxTimer?.invalidate(); maxTimer = nil
-        observer?.setRecordingActive(false); secureInputSessions.removeAll(); pasteTarget = nil; partialTranscript = ""
-        machine = VoiceSessionMachine(); status = isEnabled ? .idle : .disabled
+        observer?.setRecordingActive(false); pasteTarget = nil; partialTranscript = ""
+        status = isEnabled ? .idle : .disabled
+        if showFeedback { showTemporaryFeedback("Recording cancelled") }
         cancellationCleanupTask = Task { [weak self] in
             guard let self else { return }
             await arming?.value
@@ -454,10 +464,8 @@ final class VoiceTranscriptionModule: ObservableObject {
         case .pushToTalkEnded: interpret(machine.handle(.pushToTalkEnded))
         case .toggleRequested: begin(mode: .latched)
         case .secureInputBegan:
-            if case .arming(_, let session) = machine.state { secureInputSessions.insert(session.id) }
-            if case .recording(_, let session) = machine.state { secureInputSessions.insert(session.id) }
             observer?.setRecordingActive(false)
-            cancelVoiceInteraction()
+            interpret(machine.handle(.interrupted))
         }
     }
 
@@ -472,6 +480,7 @@ final class VoiceTranscriptionModule: ObservableObject {
             switch command {
             case .arm(let mode, let session): arm(mode, session)
             case .cancelArm(let session): cancelArming(session)
+            case .discard: discardVoiceInteraction(showFeedback: true)
             case .stop(let session): finish(session)
             case .commit: break
             case .retry: break
@@ -484,7 +493,6 @@ final class VoiceTranscriptionModule: ObservableObject {
         armGeneration &+= 1
         armTask?.cancel()
         armTask = nil
-        secureInputSessions.remove(session.id)
         if isEnabled { status = .idle }
     }
 
@@ -534,7 +542,10 @@ final class VoiceTranscriptionModule: ObservableObject {
                 status = .recording; armTask = nil
                 analysisTask = Task { [weak self, capture] in
                     do { try await transcriber.start(buffers: stream.buffers) { update in Task { @MainActor in
-                        guard let self, generation == self.lifecycleGeneration, case .recording = self.status else { return }
+                        guard let self else { return }
+                        let currentSession: UUID? = { if case .recording(_, let active) = self.machine.state { return active.id }; return nil }()
+                        guard VoicePartialUpdatePolicy.allows(capturedLifecycle: lifecycle, currentLifecycle: self.lifecycleGeneration,
+                                                              expectedSession: session.id, currentRecordingSession: currentSession) else { return }
                         self.partialTranscript = update.text
                     } }; _ = capture; return nil }
                     catch { _ = capture; return error }
@@ -637,31 +648,23 @@ final class VoiceTranscriptionModule: ObservableObject {
             case .active: try store.clearActive()
             case .pending: try store.deletePending(); try store.clearActive()
             }
-            secureInputSessions.remove(sessionID)
             partialTranscript = ""; _ = machine.handle(.committed); status = .noSpeech
             transcriber = nil
             Task { try? await Task.sleep(for: .seconds(2)); if status == .noSpeech { status = .idle } }
             reconcileObservation()
             return
         }
-        let privacyCancelled = secureInputSessions.contains(sessionID)
-        let shouldAutoPaste = outputMode == .pasteImmediately && !privacyCancelled
+        let shouldAutoPaste = outputMode == .pasteImmediately
         let result = try await TranscriptCommitter().commit(
             clean,
             settings: .init(autoPaste: false,
                             recordHistory: historyEnabled, sessionID: sessionID,
                             localeIdentifier: localeIdentifier,
                             historySource: { if case .pending = recovery { return .recovery }; return .live }(),
-                            secureInputActive: secureInputSessions.contains(sessionID),
                             historyRetention: historyRetentionPolicy),
             targetPID: verifiedTarget
         )
         guard generation == lifecycleGeneration, !Task.isCancelled else { throw CancellationError() }
-        if privacyCancelled {
-            secureInputSessions.remove(sessionID); partialTranscript = ""; pasteTarget = nil
-            _ = machine.handle(.committed); status = .idle; transcriber = nil; reconcileObservation()
-            return
-        }
         var pasteError = result.pasteError
         if shouldAutoPaste {
             switch CapturedTargetVerifier(dependencies: .live).verify(target) {
@@ -673,7 +676,6 @@ final class VoiceTranscriptionModule: ObservableObject {
             }
         }
         guard generation == lifecycleGeneration, !Task.isCancelled else { throw CancellationError() }
-        secureInputSessions.remove(sessionID)
         lastTranscript = clean
         if historyEnabled { await TranscriptHistoryViewModel.shared.reload() }
         partialTranscript = ""; _ = machine.handle(.committed)
@@ -854,12 +856,14 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     private func updateOverlay() {
+        let interaction: VoiceInteractionPhase
+        switch status { case .arming: interaction = .arming; case .recording: interaction = .recording; case .finalizing: interaction = .finalizing; default: interaction = .idle }
         let phase: VoiceOverlayPresentation.Phase
-        switch status {
+        switch VoiceOverlayPolicy.presentation(for: interaction) {
+        case .hidden: phase = .hidden
         case .arming: phase = .arming
         case .recording: phase = .recording
         case .finalizing: phase = .finalizing
-        default: phase = .hidden
         }
         VoiceRecordingOverlayController.shared.update(.init(phase: phase, partialTranscript: partialTranscript, outputMode: outputMode))
     }
@@ -893,5 +897,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     private func persist(_ key: String, _ value: Any) { if !applying { UserDefaults.standard.set(value, forKey: key) } }
     private func persistAndReconfigure(_ key: String, _ value: Bool) { persist(key, value); if !applying { value ? recoverDegradedAndObserve() : stop() } }
     private func saveDevices() { if !applying, let data = try? JSONEncoder().encode(devicePriority) { UserDefaults.standard.set(data, forKey: "voice.devices") } }
-    private func describe(_ value: VoiceAssetManager.Status) -> String { String(describing: value) }
+    private func describe(_ value: VoiceAssetManager.Status) -> String {
+        switch value { case .unsupported: return "Unsupported language"; case .missing: return "Download required"; case .downloading: return "Downloading"; case .installed: return "Installed"; case .failure(let message): return "Download failed: \(message)" }
+    }
 }

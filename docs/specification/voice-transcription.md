@@ -61,13 +61,13 @@ The arbitrator is a pure reducer with four states — idle, Fn pending, push-to-
 | Fn pending | other key down | chord pass-through | none |
 | push-to-talk active | Fn up | idle | push-to-talk ended |
 | push-to-talk active | Space down | push-to-talk active | toggle requested |
-| any active state | tap disabled or secure input | idle | push-to-talk ended, if one was active |
+| any active state | tap disabled or secure input | idle | discard active interaction |
 
 A threshold that elapses after Fn is already released MUST NOT start push-to-talk.
 
 ### Secure input and tap interruption
 
-While macOS reports secure event input — a password field, for example — the tap consumes nothing and starts no gesture. The observer interrupts arming and both push-to-talk and latched recording; a secure-input-interrupted transcript is excluded from durable history and automatic paste. A watchdog checks every 100 ms only while a gesture or recording is active and is invalidated when neither is active, so the module runs no timer while idle. If macOS disables the tap by timeout or user input, the observer interrupts the gesture and re-enables the tap.
+While macOS reports secure event input — a password field, for example — the tap consumes nothing and starts no gesture. The observer interrupts arming and both push-to-talk and latched recording; secure input sends the reducer interruption event, which transitions arming or recording directly to idle with a discard command. Capture teardown is serialized and active recovery is deleted, so no transcript, clipboard output, history, last-transcript value, paste, or pending recovery is produced. A watchdog checks every 100 ms only while a gesture or recording is active and is invalidated when neither is active, so the module runs no timer while idle. If macOS disables the tap by timeout or user input, the observer interrupts the gesture and re-enables the tap.
 
 ## Permissions
 
@@ -225,7 +225,7 @@ Reading, deleting, and clearing go through a repository over the durable history
 
 Arming, recording, and finalizing use one reused compact non-activating panel on the screen active when shown. It exposes phase, recording-only elapsed time, partial transcript, and output mode. Cancel appears only while arming or recording; Stop appears only while recording. Finalizing has no controls because publication may already have crossed its irreversible commit point. The nonactivating panel is anchored once per interaction and does not deliberately make XMT frontmost or poll while idle; live keyboard, pointer, and VoiceOver focus behavior remains subject to the manual QA matrix; its elapsed timer exists only in recording.
 
-Cancel is accepted only during arming or recording; its global shortcut is disabled at every other time, so bare or common keys are not swallowed while Voice is idle. It cancels every suspension-capable task, stops capture and analysis, removes temporary active audio, clears partial text and the captured target, serializes cleanup behind arming teardown, and returns idle without clipboard, paste, history, last-transcript, or recoverable-audio effects. Secure-input interruption likewise marks the session private before finalization, causing commit to emit neither output nor history. Repeats are suppressed by the shortcut provider, overlapping starts are dropped by the reducer, and disabling or reconfiguration tears down handlers before applying replacements.
+Cancel is accepted only during arming or recording; its global shortcut is disabled at every other time, so bare or common keys are not swallowed while Voice is idle. It cancels every suspension-capable task, stops capture and analysis, removes temporary active audio, clears partial text and the captured target, serializes cleanup behind arming teardown, and returns idle without clipboard, paste, history, last-transcript, or recoverable-audio effects. Secure-input interruption uses the same reducer-owned discard command and never enters finalization or commit. Repeats are suppressed by the shortcut provider, overlapping starts are dropped by the reducer, and disabling or reconfiguration tears down handlers before applying replacements.
 
 Clipboard-only and paste-immediately are explicit output modes. Both write the clipboard first. Paste-immediately re-verifies the captured target at effect time; refusal or posting failure leaves clipboard text available. History remains controlled independently.
 

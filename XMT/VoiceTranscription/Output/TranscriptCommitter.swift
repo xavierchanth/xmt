@@ -12,7 +12,6 @@ struct TranscriptCommitter {
         var sessionID: UUID = UUID()
         var localeIdentifier: String = ""
         var historySource: TranscriptSource = .live
-        var secureInputActive: Bool = false
         var historyRetention: TranscriptRetentionPolicy = .default
     }
 
@@ -48,13 +47,6 @@ struct TranscriptCommitter {
     /// been durably applied. Paste is intentionally subsequent and cannot invalidate that commit.
     func commit(_ transcript: String, settings: Settings, targetPID: pid_t?) async throws -> Result {
         try Task.checkCancellation()
-        // A secure-input interruption is a privacy cancellation: clean recovery without
-        // publishing transcript text to clipboard, history, paste, or process-visible output.
-        if settings.secureInputActive {
-            do { try await dependencies.deleteRecovery() }
-            catch { throw CommitError.recoveryCleanupFailed(error) }
-            return Result(pasteError: nil)
-        }
         try dependencies.setClipboard(transcript)
         try Task.checkCancellation()
         // `last-transcript.txt` is legacy migration input only. New commits use SQLite history (or
@@ -69,7 +61,7 @@ struct TranscriptCommitter {
             localeIdentifier: settings.localeIdentifier,
             source: settings.historySource,
             historyEnabled: settings.recordHistory,
-            secureInputActive: settings.secureInputActive,
+            secureInputActive: false,
             targetApplicationPID: targetPID)).entry
         if let entry {
             do { try await dependencies.appendHistory(entry, settings.historyRetention) }

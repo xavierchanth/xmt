@@ -17,6 +17,18 @@ struct VoiceShortcutActivationPolicy: Equatable, Sendable {
     }
 }
 
+struct VoicePartialUpdatePolicy {
+    static func allows(capturedLifecycle: UInt64, currentLifecycle: UInt64,
+                       expectedSession: UUID, currentRecordingSession: UUID?) -> Bool {
+        capturedLifecycle == currentLifecycle && expectedSession == currentRecordingSession
+    }
+}
+
+enum VoiceTeardownReason: Equatable, Sendable { case lifecycleStop, privacyCancellation }
+struct VoiceTeardownPolicy {
+    static func shouldPromoteRecovery(for reason: VoiceTeardownReason) -> Bool { reason == .lifecycleStop }
+}
+
 struct VoiceOverlayPolicy: Equatable, Sendable {
     enum Presentation: Equatable, Sendable { case hidden, arming, recording, finalizing }
     static func presentation(for phase: VoiceInteractionPhase) -> Presentation {
