@@ -61,7 +61,9 @@ The arbitrator is a pure reducer with four states — idle, Fn pending, push-to-
 | Fn pending | other key down | chord pass-through | none |
 | push-to-talk active | Fn up | idle | push-to-talk ended |
 | push-to-talk active | Space down | push-to-talk active | toggle requested |
-| any active state | tap disabled or secure input | idle | discard active interaction |
+| Fn pending | tap disabled | idle | none |
+| push-to-talk active | tap disabled | idle | push-to-talk ended |
+| any active state | secure input | idle | discard active interaction |
 
 A threshold that elapses after Fn is already released MUST NOT start push-to-talk.
 
