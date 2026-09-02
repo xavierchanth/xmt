@@ -18,10 +18,11 @@ final class VoiceRecordingOverlayController: ObservableObject {
     private var panel: NSPanel?
     private var timer: Timer?
     private var startedAt: Date?
+    private var isPresented = false
 
     func update(_ value: VoiceOverlayPresentation) {
         presentation = value
-        if value.isVisible { show() } else { hide() }
+        if value.isVisible { if !isPresented { show(); isPresented = true } } else { hide(); isPresented = false }
         if value.showsElapsed { startElapsedIfNeeded() } else { stopElapsed() }
     }
 
@@ -61,7 +62,16 @@ private struct VoiceRecordingOverlayView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack { Text(phase).font(.headline); Spacer(); if controller.presentation.showsElapsed { Text(Duration.seconds(controller.elapsed).formatted(.time(pattern: .minuteSecond))) } }
             Text(controller.presentation.partialTranscript.isEmpty ? "Listening for speech…" : controller.presentation.partialTranscript).lineLimit(2).accessibilityLabel("Partial transcript")
-            HStack { Text(controller.presentation.outputMode == .pasteImmediately ? "Clipboard, then paste" : "Clipboard only").foregroundStyle(.secondary); Spacer(); Button("Stop") { VoiceTranscriptionModule.shared.stopRecording() }; Button("Cancel", role: .cancel) { VoiceTranscriptionModule.shared.cancelVoiceInteraction() }.keyboardShortcut(.cancelAction) }
+            HStack {
+                Text(controller.presentation.outputMode == .pasteImmediately ? "Clipboard, then paste" : "Clipboard only").foregroundStyle(.secondary)
+                Spacer()
+                if controller.presentation.phase == .recording {
+                    Button("Stop") { VoiceTranscriptionModule.shared.stopRecording() }.accessibilityHint("Finish and publish this recording")
+                    Button("Cancel", role: .cancel) { VoiceTranscriptionModule.shared.cancelVoiceInteraction() }.accessibilityHint("Discard this recording without output")
+                } else if controller.presentation.phase == .arming {
+                    Button("Cancel", role: .cancel) { VoiceTranscriptionModule.shared.cancelVoiceInteraction() }.accessibilityHint("Cancel before recording starts")
+                }
+            }
         }.padding(14).frame(width: 390, height: 132).accessibilityElement(children: .contain)
     }
 }

@@ -4,6 +4,7 @@ import KeyboardShortcuts
 /// The two trigger shapes supported by the configuration format. A modifier hold
 /// is deliberately not representable as a keyboard shortcut with optional bits.
 enum ShortcutDTO: Equatable, Sendable {
+    case unbound
     case key(key: String, modifiers: [String])
     case modifierHold(String)
 
@@ -44,16 +45,19 @@ enum ShortcutDTO: Equatable, Sendable {
 
     func conflicts(with other: ShortcutDTO) -> Bool {
         switch (self, other) {
+        case (.unbound, _), (_, .unbound): return false
         case let (.modifierHold(left), .modifierHold(right)):
             return left.lowercased() == right.lowercased()
         case (.key, .key):
-            return (try? keyboardShortcut()) == (try? other.keyboardShortcut())
+            guard let left = try? keyboardShortcut(), let right = try? other.keyboardShortcut() else { return false }
+            return left == right
         default: return false
         }
     }
 
     func validate() throws {
         switch self {
+        case .unbound: break
         case .key:
             _ = try keyboardShortcut()
         case let .modifierHold(name):
@@ -89,12 +93,13 @@ enum ShortcutDTO: Equatable, Sendable {
 
 extension ShortcutDTO: Codable {
     private enum CodingKeys: String, CodingKey { case type, key, modifiers, modifier }
-    private enum Kind: String, Codable { case key, modifierHold }
+    private enum Kind: String, Codable { case unbound, key, modifierHold }
 
     init(from decoder: Decoder) throws {
         let box = try decoder.container(keyedBy: CodingKeys.self)
         let kind = try box.decodeIfPresent(Kind.self, forKey: .type)
-        if kind == .modifierHold || (kind == nil && box.contains(.modifier)) {
+        if kind == .unbound { self = .unbound }
+        else if kind == .modifierHold || (kind == nil && box.contains(.modifier)) {
             self = .modifierHold(try box.decode(String.self, forKey: .modifier))
         } else {
             self = .key(key: try box.decode(String.self, forKey: .key),
@@ -105,6 +110,7 @@ extension ShortcutDTO: Codable {
     func encode(to encoder: Encoder) throws {
         var box = encoder.container(keyedBy: CodingKeys.self)
         switch self {
+        case .unbound: try box.encode(Kind.unbound, forKey: .type)
         case let .key(key, modifiers):
             try box.encode(Kind.key, forKey: .type); try box.encode(key, forKey: .key); try box.encode(modifiers, forKey: .modifiers)
         case let .modifierHold(modifier):

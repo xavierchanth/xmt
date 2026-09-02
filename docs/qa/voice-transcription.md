@@ -56,4 +56,11 @@ This checklist defines the deferred manual exercise for Voice behavior that cann
 
 ## Voice UX v2 non-hardware coverage
 
-Pure and coordinator tests exercise binding decoding, legacy aliases, effective conflict rejection, reducer event ordering, clipboard-first output, secure-input suppression, and overlay presentation state. Build verification does not constitute live microphone, TCC, HID, focus, Apple asset-download, locale-change, or Accessibility validation; those remain manual tests on macOS 26 hardware.
+Pure and coordinator tests exercise binding decoding, legacy aliases, effective conflict rejection, reducer event ordering, clipboard-first output, secure-input suppression, trigger activation and overlay presentation policies. AppKit overlay focus behavior is not unit-tested. Build verification does not constitute live microphone, TCC, HID, focus, Apple asset-download, locale-change, or Accessibility validation; those remain manual tests on macOS 26 hardware.
+
+### Voice UX v2 interaction checks
+
+- Verify Cancel is not registered while idle or finalizing, including a configured bare Escape, and that clearing each recorder leaves that action explicitly unbound across reload.
+- Verify managed hold/toggle/cancel values restore each prior local value—including unbound and Fn—when management is removed.
+- Verify the overlay anchors once, never appears for permission/degraded idle errors, and exposes only Cancel while arming, Stop plus Cancel while recording, and no controls while finalizing.
+- With pointer and VoiceOver separately, invoke overlay actions and verify the target application does not become frontmost. This focus behavior is a required manual observation, not inferred from the nonactivating panel style.

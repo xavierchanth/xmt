@@ -83,6 +83,7 @@ import XCTest
 
         XCTAssertFalse(events.contains { $0.hasPrefix("history:") })
         XCTAssertEqual(events.filter { $0 == "clipboard" }.count, 1, "secure interruption must not publish clipboard text")
+        XCTAssertEqual(events.last, "delete-audio", "privacy cancellation cleans recovery without output")
     }
 
     /// A crash between the history append and the recovery deletion leaves the recovery artifact, so

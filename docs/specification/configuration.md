@@ -82,7 +82,7 @@ Effective settings resolve per key, from lowest to highest precedence:
 
 Resolution is per key, not per section: omitting a key leaves the persisted value in force rather than resetting it, and removing the file returns every key to defaults plus persisted values. Each resolved value carries its source, so a change of source alone counts as a change. `XMTTests/ConfigTests.swift` covers the precedence matrix, per-key independence, and removal.
 
-All Voice bindings, Window Mover, and paste-latest shortcuts may be managed by the file. For each, XMT preserves the prior recorder value when management begins and restores it when the key is removed. The three Voice action bindings are independent. Effective duplicate bindings across Voice, Window Mover, and Paste Latest reject the complete snapshot before handlers change.
+All Voice bindings, Window Mover, and paste-latest shortcuts may be managed by the file. For each, XMT preserves the prior recorder value when management begins and restores it when the key is removed. The three Voice action bindings are independent and each accepts `{ "type": "unbound" }`; an explicit unbound local or managed value never falls through to a default. Effective duplicate bindings across Voice, Window Mover, and Paste Latest reject the complete snapshot before handlers change.
 
 The former local `voice.keepLastTranscript` preference is migrated once to `voice.history.enabled` before defaults are registered. Existing canonical data wins if both keys exist, the legacy key is removed, and repeating the migration changes nothing.
 

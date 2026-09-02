@@ -197,7 +197,7 @@ The menu bar menu shows Voice state only when there is something to say: recordi
 
 The `Voice` tab in Settings contains:
 
-- the enable toggle and independent Hold to Talk, Toggle Recording, and Cancel recorders; Fn is an optional hold binding, ordinary hold chords preserve key-down/key-up, toggle alternates start/stop, and Cancel defaults to Escape;
+- the enable toggle and independent Hold to Talk, Toggle Recording, and Cancel recorders; Fn is an optional hold binding, ordinary hold chords preserve key-down/key-up, toggle alternates start/stop, and Cancel defaults to Control-Option-Escape and is registered only while arming or recording;
 - speech-asset status with check and download actions, the contextual access request, and the shared Accessibility status row naming completed-transcript and paste-latest delivery as its consumers;
 - output settings — an explicit Paste immediately or Clipboard only picker, System Language plus supported locale choices, copy last transcript, and the paste-latest shortcut recorder;
 - transcript-history controls for enabled, retention days, and maximum entries;
@@ -223,9 +223,9 @@ Reading, deleting, and clearing go through a repository over the durable history
 
 ## Recording overlay and cancellation
 
-Arming, recording, finalizing, and failure use one reused compact non-activating panel on the screen active when shown. It exposes phase, recording-only elapsed time, partial transcript, output mode, Stop, and Cancel with accessibility labels. The panel does not activate XMT or poll while idle; its elapsed timer exists only in recording.
+Arming, recording, and finalizing use one reused compact non-activating panel on the screen active when shown. It exposes phase, recording-only elapsed time, partial transcript, and output mode. Cancel appears only while arming or recording; Stop appears only while recording. Finalizing has no controls because publication may already have crossed its irreversible commit point. The nonactivating panel is anchored once per interaction and does not deliberately make XMT frontmost or poll while idle; live keyboard, pointer, and VoiceOver focus behavior remains subject to the manual QA matrix; its elapsed timer exists only in recording.
 
-Cancel is accepted only during an arming or active interaction. It cancels every suspension-capable task, stops capture and analysis, removes temporary active audio, clears partial text and the captured target, and returns idle without clipboard, paste, or history effects. Secure-input interruption likewise marks the session private before finalization, causing commit to emit neither output nor history. Repeats are suppressed by the shortcut provider, overlapping starts are dropped by the reducer, and disabling or reconfiguration tears down handlers before applying replacements.
+Cancel is accepted only during arming or recording; its global shortcut is disabled at every other time, so bare or common keys are not swallowed while Voice is idle. It cancels every suspension-capable task, stops capture and analysis, removes temporary active audio, clears partial text and the captured target, serializes cleanup behind arming teardown, and returns idle without clipboard, paste, history, last-transcript, or recoverable-audio effects. Secure-input interruption likewise marks the session private before finalization, causing commit to emit neither output nor history. Repeats are suppressed by the shortcut provider, overlapping starts are dropped by the reducer, and disabling or reconfiguration tears down handlers before applying replacements.
 
 Clipboard-only and paste-immediately are explicit output modes. Both write the clipboard first. Paste-immediately re-verifies the captured target at effect time; refusal or posting failure leaves clipboard text available. History remains controlled independently.
 

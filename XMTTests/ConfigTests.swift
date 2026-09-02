@@ -180,7 +180,7 @@ final class ConfigTests: XCTestCase {
         }
         _ = try await loader.reload(); box.removed = true
         let result = try await loader.reload()
-        XCTAssertEqual(result.changedKeys, [.voiceEnabled, .autoPaste])
+        XCTAssertEqual(result.changedKeys, [.voiceEnabled, .autoPaste, .outputMode])
         XCTAssertTrue(result.effective.voiceEnabled.value); XCTAssertEqual(result.effective.voiceEnabled.source, .local)
         XCTAssertTrue(result.effective.autoPaste.value); XCTAssertEqual(result.effective.autoPaste.source, .builtIn)
     }
@@ -278,7 +278,7 @@ final class ConfigTests: XCTestCase {
     func testVoiceV2DefaultsAndLegacyMigration() throws {
         let defaults = EffectiveSettings.resolve(config: nil)
         XCTAssertEqual(defaults.holdToTalkShortcut.value, .modifierHold("fn"))
-        XCTAssertEqual(defaults.cancelShortcut.value, .key(key: "escape", modifiers: []))
+        XCTAssertEqual(defaults.cancelShortcut.value, .key(key: "escape", modifiers: ["control", "option"]))
         XCTAssertEqual(defaults.outputMode.value, .pasteImmediately)
         XCTAssertEqual(defaults.locale.value, "system")
         let migrated = EffectiveSettings.resolve(config: try decode(#"{"version":1,"voice":{"shortcut":{"type":"modifierHold","modifier":"fn"},"autoPaste":false}}"#))
@@ -291,6 +291,38 @@ final class ConfigTests: XCTestCase {
         let loader = ConfigReloader(local: .init(), read: { _ in Data(json.utf8) })
         do { _ = try await loader.reload(); XCTFail("expected conflict") }
         catch { XCTAssertNotNil(error as? ConfigDiagnostic) }
+    }
+
+    func testExplicitUnboundOverridesDefaultAndInvalidBindingsNeverConflict() async throws {
+        var local = SettingsValues(); local.holdToTalkShortcut = .unbound; local.toggleRecordingShortcut = .unbound; local.cancelShortcut = .unbound
+        let effective = EffectiveSettings.resolve(config: nil, local: local)
+        XCTAssertEqual(effective.holdToTalkShortcut.value, .unbound)
+        XCTAssertEqual(effective.toggleRecordingShortcut.value, .unbound)
+        XCTAssertEqual(effective.cancelShortcut.value, .unbound)
+        XCTAssertFalse(ShortcutDTO.key(key: "not-a-key", modifiers: []).conflicts(with: .key(key: "also-invalid", modifiers: [])))
+    }
+
+    func testConflictDiagnosticLeavesEffectiveSnapshotUnchanged() async throws {
+        let loader = ConfigReloader(local: .init(), read: { _ in Data(#"{"version":1,"voice":{"toggleRecordingShortcut":{"key":"x","modifiers":["command"]},"cancelShortcut":{"key":"x","modifiers":["command"]}}}"#.utf8) })
+        let before = await loader.effective
+        do { _ = try await loader.reload(); XCTFail("expected conflict") }
+        catch {
+            XCTAssertEqual(error as? ConfigDiagnostic, .invalidValue(path: "voice.cancelShortcut", reason: "conflicts with voice.toggleRecordingShortcut"))
+            let after = await loader.effective; XCTAssertEqual(after, before)
+        }
+    }
+
+    func testVoiceShortcutRegistrationAndOverlayPolicies() {
+        XCTAssertEqual(VoiceShortcutActivationPolicy.decide(moduleEnabled: true, phase: .idle),
+                       .init(holdEnabled: true, toggleEnabled: true, cancelEnabled: false))
+        XCTAssertTrue(VoiceShortcutActivationPolicy.decide(moduleEnabled: true, phase: .arming).cancelEnabled)
+        XCTAssertFalse(VoiceShortcutActivationPolicy.decide(moduleEnabled: true, phase: .finalizing).cancelEnabled)
+        XCTAssertEqual(VoiceShortcutActivationPolicy.decide(moduleEnabled: false, phase: .recording),
+                       .init(holdEnabled: false, toggleEnabled: false, cancelEnabled: false))
+        XCTAssertEqual(VoiceOverlayPolicy.presentation(for: .idle), .hidden)
+        XCTAssertEqual(VoiceOverlayPolicy.presentation(for: .finalizing), .finalizing)
+        XCTAssertEqual(VoiceOverlayPolicy.controls(for: .arming).cancel, true)
+        XCTAssertEqual(VoiceOverlayPolicy.controls(for: .finalizing).cancel, false)
     }
 
 }

@@ -2,6 +2,31 @@ import Foundation
 
 enum VoiceOutputMode: String, Codable, CaseIterable, Equatable, Sendable { case pasteImmediately, clipboardOnly }
 
+enum VoiceInteractionPhase: Equatable, Sendable { case unavailable, idle, arming, recording, finalizing }
+
+struct VoiceShortcutActivationPolicy: Equatable, Sendable {
+    let holdEnabled: Bool
+    let toggleEnabled: Bool
+    let cancelEnabled: Bool
+
+    static func decide(moduleEnabled: Bool, phase: VoiceInteractionPhase) -> Self {
+        guard moduleEnabled else { return .init(holdEnabled: false, toggleEnabled: false, cancelEnabled: false) }
+        let recordingTriggerEnabled = phase == .idle || phase == .arming || phase == .recording
+        return .init(holdEnabled: recordingTriggerEnabled, toggleEnabled: recordingTriggerEnabled,
+                     cancelEnabled: phase == .arming || phase == .recording)
+    }
+}
+
+struct VoiceOverlayPolicy: Equatable, Sendable {
+    enum Presentation: Equatable, Sendable { case hidden, arming, recording, finalizing }
+    static func presentation(for phase: VoiceInteractionPhase) -> Presentation {
+        switch phase { case .unavailable, .idle: return .hidden; case .arming: return .arming; case .recording: return .recording; case .finalizing: return .finalizing }
+    }
+    static func controls(for phase: VoiceInteractionPhase) -> (stop: Bool, cancel: Bool) {
+        (phase == .recording, phase == .arming || phase == .recording)
+    }
+}
+
 enum SettingSource: String, Equatable, Sendable { case builtIn, local, configFile }
 
 struct ResolvedSetting<Value: Equatable & Sendable>: Equatable, Sendable {
@@ -63,7 +88,7 @@ struct BuiltInSettings: Equatable, Sendable {
     var voiceEnabled = true
     var holdToTalkShortcut: ShortcutDTO = .modifierHold("fn")
     var toggleRecordingShortcut: ShortcutDTO = .key(key: "space", modifiers: ["control", "option"])
-    var cancelShortcut: ShortcutDTO = .key(key: "escape", modifiers: [])
+    var cancelShortcut: ShortcutDTO = .key(key: "escape", modifiers: ["control", "option"])
     var pasteLatestTranscriptShortcut: ShortcutDTO = .key(key: "v", modifiers: ["control", "command"])
     var outputMode: VoiceOutputMode = .pasteImmediately
     var historyEnabled = true
@@ -138,7 +163,7 @@ struct EffectiveSettings: Equatable, Sendable {
         if toggleRecordingShortcut != old.toggleRecordingShortcut { result.insert(.toggleRecordingShortcut) }
         if cancelShortcut != old.cancelShortcut { result.insert(.cancelShortcut) }
         if pasteLatestTranscriptShortcut != old.pasteLatestTranscriptShortcut { result.insert(.pasteLatestTranscriptShortcut) }
-        if outputMode != old.outputMode { result.insert(.autoPaste) }
+        if outputMode != old.outputMode { result.insert(.outputMode); result.insert(.autoPaste) }
         if historyEnabled != old.historyEnabled { result.insert(.historyEnabled) }
         if historyRetentionDays != old.historyRetentionDays { result.insert(.historyRetentionDays) }
         if historyMaxEntries != old.historyMaxEntries { result.insert(.historyMaxEntries) }
