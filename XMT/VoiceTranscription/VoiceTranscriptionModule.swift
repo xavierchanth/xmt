@@ -76,6 +76,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     private var assetStatusGeneration: UInt64 = 0
     private var assetProgressObservation: NSKeyValueObservation?
     private var isPastingLatest = false
+    private var bindingCommitTail: Task<String?, Never>?
     private var historyLatestObserver: NSObjectProtocol?
     private static let pasteLatestShortcutBackupActiveKey = "voice.pasteLatestShortcutBackupActive"
     private static let pasteLatestShortcutBackupDataKey = "voice.pasteLatestShortcutBackupData"
@@ -200,8 +201,6 @@ final class VoiceTranscriptionModule: ObservableObject {
     func refreshDevices() {
         availableDevices = (try? DeviceTable().inputDevices())?.filter(\.hasInput) ?? []
     }
-
-    var effectiveHoldUsesFn: Bool { if case .modifierHold = effective.holdToTalkShortcut.value { return true }; return false }
 
     func refreshLocalesAndAssets() {
         Task { supportedLocaleIdentifiers = await assets.supportedLocales().map(\.identifier).sorted(); refreshAssets() }
@@ -342,33 +341,47 @@ final class VoiceTranscriptionModule: ObservableObject {
         switch action { case .holdToTalk: return effective.holdToTalkShortcut.value; case .toggleRecording: return effective.toggleRecordingShortcut.value; case .cancel: return effective.cancelShortcut.value }
     }
 
-    /// Validates before touching KeyboardShortcuts, so capture never transiently registers a rejected chord.
-    func commitVoiceBinding(_ dto: ShortcutDTO, action: VoiceBindingAction) -> String? {
+    /// Stages and validates through ConfigReloader before any persisted or live registration changes.
+    /// The tail makes rapid captures linearizable; each candidate observes the prior successful commit.
+    func commitVoiceBinding(_ dto: ShortcutDTO, action: VoiceBindingAction) async -> String? {
+        let previous = bindingCommitTail
+        let operation = Task { @MainActor [weak self] () -> String? in
+            _ = await previous?.value
+            guard let self else { return "Voice settings are unavailable." }
+            return await self.performVoiceBindingCommit(dto, action: action)
+        }
+        bindingCommitTail = operation
+        return await operation.value
+    }
+
+    private func performVoiceBindingCommit(_ dto: ShortcutDTO, action: VoiceBindingAction) async -> String? {
+        let managed: Bool
+        switch action { case .holdToTalk: managed = effective.holdToTalkShortcut.isManaged; case .toggleRecording: managed = effective.toggleRecordingShortcut.isManaged; case .cancel: managed = effective.cancelShortcut.isManaged }
+        guard !managed else { return "This binding is managed by configuration." }
         if let issue = VoiceBindingPolicy.validate(dto, for: action) {
             return issue == .unsafeUnmodifiedKey
-                ? "Hold and Toggle require a modifier so normal typing is not intercepted."
+                ? "Hold and Toggle require Control, Option, or Command; Shift alone is unsafe."
                 : "Fn modifier-only is available only for Hold to Talk."
         }
-        let ownName: KeyboardShortcuts.Name
-        switch action { case .holdToTalk: ownName = .voiceHoldToTalk; case .toggleRecording: ownName = .voiceToggleRecording; case .cancel: ownName = .voiceCancel }
-        let candidates: [(String, ShortcutDTO)] = [
-            ("Window Mover", effective.windowMoverShortcut.value),
-            ("Paste Latest", effective.pasteLatestTranscriptShortcut.value),
-            ("Hold to Talk", effective.holdToTalkShortcut.value),
-            ("Toggle Recording", effective.toggleRecordingShortcut.value),
-            ("Cancel", effective.cancelShortcut.value)
-        ]
-        let ownLabel = action == .holdToTalk ? "Hold to Talk" : action == .toggleRecording ? "Toggle Recording" : "Cancel"
-        if let conflict = candidates.first(where: { $0.0 != ownLabel && dto.conflicts(with: $0.1) }) {
-            return "Conflicts with \(conflict.0)."
+        guard let reloader else { return "Configuration is not ready." }
+        var staged = currentLocalSettings()
+        switch action { case .holdToTalk: staged.holdToTalkShortcut = dto; case .toggleRecording: staged.toggleRecordingShortcut = dto; case .cancel: staged.cancelShortcut = dto }
+        let result: ConfigLoadResult
+        do {
+            result = try await reloader.stageAndReload(local: staged, requiringUnmanaged: action)
+        } catch let diagnostic as ConfigDiagnostic {
+            configDiagnostic = String(describing: diagnostic); return configDiagnostic
+        } catch {
+            configDiagnostic = "Could not validate the binding."; return configDiagnostic
         }
-        let key = Self.voiceBindingKey(ownName)
+        let accepted: ResolvedSetting<ShortcutDTO>
+        switch action { case .holdToTalk: accepted = result.effective.holdToTalkShortcut; case .toggleRecording: accepted = result.effective.toggleRecordingShortcut; case .cancel: accepted = result.effective.cancelShortcut }
+        guard !accepted.isManaged, accepted.value == dto else { return "This binding became managed before the change completed." }
+        let name: KeyboardShortcuts.Name
+        switch action { case .holdToTalk: name = .voiceHoldToTalk; unmanagedHoldShortcut = dto; case .toggleRecording: name = .voiceToggleRecording; unmanagedToggleShortcut = dto; case .cancel: name = .voiceCancel; unmanagedCancelShortcut = dto }
+        let key = Self.voiceBindingKey(name)
         UserDefaults.standard.set(true, forKey: "voice.binding.\(key).explicit")
-        KeyboardShortcuts.setShortcut(try? dto.keyboardShortcut(), for: ownName)
-        if action == .holdToTalk { unmanagedHoldShortcut = dto }
-        else if action == .toggleRecording { unmanagedToggleShortcut = dto }
-        else { unmanagedCancelShortcut = dto }
-        reloadConfig()
+        configDiagnostic = nil
         return nil
     }
 

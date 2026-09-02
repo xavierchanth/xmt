@@ -43,13 +43,26 @@ actor ConfigReloader {
         let operation = Task { [weak self] () throws -> ConfigLoadResult in
             await previous?.value
             guard let self else { throw CancellationError() }
-            return try await self.performReload()
+            return try await self.performReload(using: self.local, commitLocal: false, requiringUnmanaged: nil)
         }
         reloadTail = Task { _ = try? await operation.value }
         return try await operation.value
     }
 
-    private func performReload() async throws -> ConfigLoadResult {
+    /// Validates a proposed local snapshot against the current file and publishes both only on success.
+    /// Failed staging leaves the prior local baseline, effective snapshot, callbacks, and live handlers untouched.
+    func stageAndReload(local staged: SettingsValues, requiringUnmanaged action: VoiceBindingAction? = nil) async throws -> ConfigLoadResult {
+        let previous = reloadTail
+        let operation = Task { [weak self] () throws -> ConfigLoadResult in
+            await previous?.value
+            guard let self else { throw CancellationError() }
+            return try await self.performReload(using: staged, commitLocal: true, requiringUnmanaged: action)
+        }
+        reloadTail = Task { _ = try? await operation.value }
+        return try await operation.value
+    }
+
+    private func performReload(using localCandidate: SettingsValues, commitLocal: Bool, requiringUnmanaged action: VoiceBindingAction?) async throws -> ConfigLoadResult {
         let candidate: ConfigFile?
         do {
             candidate = try ConfigFile.decode(read(url))
@@ -64,7 +77,16 @@ actor ConfigReloader {
             throw diagnostic
         }
 
-        let next = EffectiveSettings.resolve(config: candidate, local: local, builtIn: builtIn)
+        let next = EffectiveSettings.resolve(config: candidate, local: localCandidate, builtIn: builtIn)
+        if let action {
+            let resolved: ResolvedSetting<ShortcutDTO>
+            switch action { case .holdToTalk: resolved = next.holdToTalkShortcut; case .toggleRecording: resolved = next.toggleRecordingShortcut; case .cancel: resolved = next.cancelShortcut }
+            if resolved.isManaged {
+                let path = action == .holdToTalk ? "voice.holdToTalkShortcut" : action == .toggleRecording ? "voice.toggleRecordingShortcut" : "voice.cancelShortcut"
+                let diagnostic = ConfigDiagnostic.invalidValue(path: path, reason: "is managed by configuration")
+                lastDiagnostic = diagnostic; throw diagnostic
+            }
+        }
         let voiceBindings: [(String, ShortcutDTO, VoiceBindingAction)] = [
             ("voice.holdToTalkShortcut", next.holdToTalkShortcut.value, .holdToTalk),
             ("voice.toggleRecordingShortcut", next.toggleRecordingShortcut.value, .toggleRecording),
@@ -72,7 +94,7 @@ actor ConfigReloader {
         ]
         for (path, binding, action) in voiceBindings {
             if let issue = VoiceBindingPolicy.validate(binding, for: action) {
-                let reason = issue == .modifierOnlyRequiresHold ? "Fn modifier-only is supported only for hold-to-talk" : "an unmodified key is unsafe for this action"
+                let reason = issue == .modifierOnlyRequiresHold ? "Fn modifier-only is supported only for hold-to-talk" : "requires Control, Option, or Command; Shift alone is unsafe"
                 let diagnostic = ConfigDiagnostic.invalidValue(path: path, reason: reason)
                 lastDiagnostic = diagnostic; throw diagnostic
             }
@@ -92,6 +114,7 @@ actor ConfigReloader {
             }
         }
         let result = ConfigLoadResult(effective: next, changedKeys: next.changedKeys(from: effective))
+        if commitLocal { local = localCandidate }
         effective = next
         lastDiagnostic = nil
         for callback in applyCallbacks { await callback(result) }

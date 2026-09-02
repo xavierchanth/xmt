@@ -343,23 +343,82 @@ final class ConfigTests: XCTestCase {
         XCTAssertNil(VoiceBindingPolicy.validate(controlEscape, for: .cancel))
         XCTAssertEqual(VoiceBindingPolicy.validate(escape, for: .holdToTalk), .unsafeUnmodifiedKey)
         XCTAssertEqual(VoiceBindingPolicy.validate(.key(key: "a", modifiers: []), for: .toggleRecording), .unsafeUnmodifiedKey)
+        XCTAssertEqual(VoiceBindingPolicy.validate(.key(key: "escape", modifiers: ["shift"]), for: .holdToTalk), .unsafeUnmodifiedKey)
+        XCTAssertEqual(VoiceBindingPolicy.validate(.key(key: "a", modifiers: ["shift"]), for: .toggleRecording), .unsafeUnmodifiedKey)
         XCTAssertNil(VoiceBindingPolicy.validate(.modifierHold("fn"), for: .holdToTalk))
         XCTAssertEqual(VoiceBindingPolicy.validate(.modifierHold("fn"), for: .cancel), .modifierOnlyRequiresHold)
         XCTAssertEqual(ShortcutDTO.fromKeyboardShortcut(try controlEscape.keyboardShortcut()), controlEscape)
 
         var model = VoiceBindingRecorderModel()
-        model.receive(.begin); model.receive(.captured(escape))
-        XCTAssertEqual(model.committed, escape); XCTAssertEqual(model.state, .idle)
-        model.receive(.begin); model.receive(.cancel)
-        XCTAssertEqual(model.committed, escape, "explicit Cancel preserves the prior commit")
-        model.receive(.clear); XCTAssertEqual(model.committed, .unbound)
-        model.receive(.selectFn); XCTAssertEqual(model.committed, .modifierHold("fn"))
+        model.receive(.begin(.holdToTalk)); model.receive(.captured(.holdToTalk, escape))
+        XCTAssertEqual(model.pendingCommit?.binding, escape); XCTAssertNil(model.activeAction)
+        model.receive(.begin(.holdToTalk)); model.receive(.begin(.cancel))
+        XCTAssertEqual(model.activeAction, .cancel, "starting one row replaces the prior capture")
+        model.receive(.cancel(.holdToTalk)); XCTAssertEqual(model.activeAction, .cancel, "a stale row cannot cancel the active row")
+        model.receive(.cancel(.cancel)); XCTAssertNil(model.activeAction)
+        model.receive(.clear(.toggleRecording)); XCTAssertEqual(model.pendingCommit?.binding, .unbound)
+        model.receive(.selectFn); XCTAssertEqual(model.pendingCommit?.action, .holdToTalk)
+        XCTAssertEqual(model.pendingCommit?.binding, .modifierHold("fn"))
     }
 
     func testVoiceBindingPolicyAndConflictValidation() {
         let controlEscape = ShortcutDTO.key(key: "escape", modifiers: ["control"])
         XCTAssertTrue(controlEscape.conflicts(with: .key(key: "escape", modifiers: ["CONTROL"])))
         XCTAssertFalse(controlEscape.conflicts(with: .key(key: "escape", modifiers: [])))
+    }
+
+    func testStagedLocalBindingFailureDoesNotChangeBaselineOrEffective() async throws {
+        let missing: @Sendable (URL) throws -> Data = { _ in throw CocoaError(.fileReadNoSuchFile) }
+        var local = SettingsValues(); local.holdToTalkShortcut = .key(key: "h", modifiers: ["control"])
+        let loader = ConfigReloader(local: local, read: missing)
+        let accepted = try await loader.reload()
+        var staged = local
+        staged.holdToTalkShortcut = .key(key: "space", modifiers: ["control", "option"])
+        do { _ = try await loader.stageAndReload(local: staged); XCTFail("expected default toggle conflict") } catch {}
+        let afterFailure = await loader.effective; XCTAssertEqual(afterFailure, accepted.effective)
+        let reloaded = try await loader.reload()
+        XCTAssertEqual(reloaded.effective.holdToTalkShortcut.value, .key(key: "h", modifiers: ["control"]))
+    }
+
+    func testShiftOnlyVoiceBindingsRejectInConfigAndEffectiveReload() async {
+        XCTAssertThrowsError(try decode(#"{"version":1,"voice":{"holdToTalkShortcut":{"key":"h","modifiers":["shift"]}}}"#)) {
+            XCTAssertEqual($0 as? ConfigDiagnostic, .invalidValue(path: "voice.holdToTalkShortcut", reason: "requires Control, Option, or Command; Shift alone is unsafe"))
+        }
+        var local = SettingsValues(); local.toggleRecordingShortcut = .key(key: "t", modifiers: ["shift"])
+        let loader = ConfigReloader(local: local, read: { _ in throw CocoaError(.fileReadNoSuchFile) })
+        do { _ = try await loader.reload(); XCTFail("expected safety rejection") }
+        catch { XCTAssertEqual(error as? ConfigDiagnostic, .invalidValue(path: "voice.toggleRecordingShortcut", reason: "requires Control, Option, or Command; Shift alone is unsafe")) }
+    }
+
+    func testStagingAgainstNewlyUnreadableConfigIsAtomic() async throws {
+        final class Box: @unchecked Sendable { var unreadable = false }
+        let box = Box()
+        let loader = ConfigReloader(local: .init(), read: { _ in
+            if box.unreadable { throw CocoaError(.fileReadNoPermission) }
+            throw CocoaError(.fileReadNoSuchFile)
+        })
+        let initial = try await loader.reload(); box.unreadable = true
+        var staged = SettingsValues(); staged.cancelShortcut = .key(key: "escape", modifiers: [])
+        do { _ = try await loader.stageAndReload(local: staged); XCTFail("expected unreadable config") } catch {}
+        let after = await loader.effective
+        XCTAssertEqual(after, initial.effective)
+    }
+
+    func testManagedBindingStageIsRejectedWithoutLaunderingLocalBaseline() async throws {
+        final class Box: @unchecked Sendable { var managed = true }
+        let box = Box()
+        var local = SettingsValues(); local.holdToTalkShortcut = .key(key: "h", modifiers: ["control"])
+        let loader = ConfigReloader(local: local, read: { _ in
+            if box.managed { return Data(#"{"version":1,"voice":{"holdToTalkShortcut":{"key":"m","modifiers":["command"]}}}"#.utf8) }
+            throw CocoaError(.fileReadNoSuchFile)
+        })
+        _ = try await loader.reload()
+        var staged = local; staged.holdToTalkShortcut = .key(key: "n", modifiers: ["option"])
+        do { _ = try await loader.stageAndReload(local: staged, requiringUnmanaged: .holdToTalk); XCTFail("expected managed rejection") }
+        catch { XCTAssertEqual(error as? ConfigDiagnostic, .invalidValue(path: "voice.holdToTalkShortcut", reason: "is managed by configuration")) }
+        box.managed = false
+        let restored = try await loader.reload()
+        XCTAssertEqual(restored.effective.holdToTalkShortcut.value, .key(key: "h", modifiers: ["control"]))
     }
 
 }

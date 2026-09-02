@@ -183,7 +183,7 @@ struct ConfigFile: Codable, Equatable, Sendable {
             guard let shortcut else { continue }
             if case let .modifierHold(name) = shortcut, !["fn", "function"].contains(name.lowercased()) { throw ConfigDiagnostic.invalidValue(path: path, reason: "only Fn is supported as a modifier hold") }
             if let issue = VoiceBindingPolicy.validate(shortcut, for: action) {
-                let reason = issue == .modifierOnlyRequiresHold ? "Fn modifier-only is supported only for hold-to-talk" : "an unmodified key is unsafe for this action"
+                let reason = issue == .modifierOnlyRequiresHold ? "Fn modifier-only is supported only for hold-to-talk" : "requires Control, Option, or Command; Shift alone is unsafe"
                 throw ConfigDiagnostic.invalidValue(path: path, reason: reason)
             }
             do { try shortcut.validate() } catch { throw ConfigDiagnostic.invalidValue(path: path, reason: String(describing: error)) }

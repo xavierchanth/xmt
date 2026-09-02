@@ -10,23 +10,31 @@ struct VoiceBindingPolicy {
         case .unbound: return nil
         case .modifierHold: return action == .holdToTalk ? nil : .modifierOnlyRequiresHold
         case .key(_, let modifiers):
-            return action != .cancel && modifiers.isEmpty ? .unsafeUnmodifiedKey : nil
+            let safe = Set(modifiers.map { $0.lowercased() }).isDisjoint(with: ["control", "option", "command"]) == false
+            return action != .cancel && !safe ? .unsafeUnmodifiedKey : nil
         }
     }
 }
 
 struct VoiceBindingRecorderModel: Equatable, Sendable {
-    enum State: Equatable, Sendable { case idle, recording }
-    enum Input: Equatable, Sendable { case begin, captured(ShortcutDTO), cancel, clear, selectFn }
-    private(set) var state: State = .idle
-    private(set) var committed: ShortcutDTO?
+    enum Input: Equatable, Sendable {
+        case begin(VoiceBindingAction), captured(VoiceBindingAction, ShortcutDTO)
+        case cancel(VoiceBindingAction), clear(VoiceBindingAction), selectFn
+    }
+    private(set) var activeAction: VoiceBindingAction?
+    private(set) var pendingCommit: (action: VoiceBindingAction, binding: ShortcutDTO)?
+    static func == (left: Self, right: Self) -> Bool {
+        left.activeAction == right.activeAction && left.pendingCommit?.action == right.pendingCommit?.action && left.pendingCommit?.binding == right.pendingCommit?.binding
+    }
     mutating func receive(_ input: Input) {
+        pendingCommit = nil
         switch input {
-        case .begin: state = .recording
-        case .captured(let value) where state == .recording: committed = value; state = .idle
-        case .cancel where state == .recording: state = .idle
-        case .clear: committed = .unbound; state = .idle
-        case .selectFn: committed = .modifierHold("fn"); state = .idle
+        case .begin(let action): activeAction = action // replaces/cancels any other row
+        case .captured(let action, let value) where activeAction == action:
+            pendingCommit = (action, value); activeAction = nil
+        case .cancel(let action) where activeAction == action: activeAction = nil
+        case .clear(let action): activeAction = nil; pendingCommit = (action, .unbound)
+        case .selectFn: activeAction = nil; pendingCommit = (.holdToTalk, .modifierHold("fn"))
         default: break
         }
     }

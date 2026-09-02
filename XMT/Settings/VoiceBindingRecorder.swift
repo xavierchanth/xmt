@@ -8,10 +8,13 @@ struct VoiceBindingRecorder: View {
     let action: VoiceBindingAction
     let value: ShortcutDTO
     let isManaged: Bool
-    let commit: (ShortcutDTO) -> String?
+    let isRecording: Bool
+    let begin: () -> Void
+    let cancel: () -> Void
+    let commit: (ShortcutDTO) async -> String?
 
-    @State private var isRecording = false
     @State private var diagnostic: String?
+    @State private var isCommitting = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -19,30 +22,38 @@ struct VoiceBindingRecorder: View {
                 HStack {
                     Text(Self.display(value)).monospacedDigit().accessibilityLabel("Current binding: \(Self.display(value))")
                     if isRecording {
-                        KeyDownCaptureView { shortcut in
-                            var model = VoiceBindingRecorderModel(); model.receive(.begin); model.receive(.captured(shortcut))
-                            diagnostic = commit(model.committed ?? shortcut)
-                            if diagnostic == nil { isRecording = false }
-                        }
+                        KeyDownCaptureView(captured: { captured($0) }, unsupported: {
+                            diagnostic = "That key cannot be used as a global shortcut."
+                        })
                         .frame(width: 1, height: 1)
+                        .accessibilityLabel("Shortcut capture")
                         Text("Press a key chord…").foregroundStyle(.secondary)
-                        Button("Cancel") { var model = VoiceBindingRecorderModel(); model.receive(.begin); model.receive(.cancel); isRecording = false }
+                        Button("Cancel") { cancel() }
                             .accessibilityHint("Stop editing without changing the binding")
                     } else {
                         if action == .holdToTalk {
-                            Button("Fn") { diagnostic = commit(.modifierHold("fn")) }
+                            Button("Fn") { submit(.modifierHold("fn")) }
                                 .accessibilityHint("Use the Function modifier by itself")
                         }
-                        Button("Record") { diagnostic = nil; isRecording = true }
+                        Button("Record") { diagnostic = nil; begin() }
                             .accessibilityHint("Capture the next key down, including Escape")
-                        Button("Clear") { diagnostic = commit(.unbound) }
+                        Button("Clear") { submit(.unbound) }
                             .accessibilityHint("Unbind this action")
                     }
                 }
             }
             if let diagnostic { Text(diagnostic).font(.caption).foregroundStyle(.red).accessibilityLabel("Binding error: \(diagnostic)") }
         }
-        .disabled(isManaged)
+        .disabled(isManaged || isCommitting)
+    }
+
+    private func captured(_ shortcut: ShortcutDTO) { submit(shortcut) }
+    private func submit(_ shortcut: ShortcutDTO) {
+        isCommitting = true
+        Task { @MainActor in
+            diagnostic = await commit(shortcut)
+            isCommitting = false
+        }
     }
 
     static func display(_ value: ShortcutDTO) -> String {
@@ -58,28 +69,31 @@ struct VoiceBindingRecorder: View {
 
 private struct KeyDownCaptureView: NSViewRepresentable {
     let captured: (ShortcutDTO) -> Void
-    func makeCoordinator() -> Coordinator { Coordinator(captured) }
+    let unsupported: () -> Void
+    func makeCoordinator() -> Coordinator { Coordinator(captured: captured, unsupported: unsupported) }
     func makeNSView(context: Context) -> CaptureView {
-        let view = CaptureView(); view.handler = context.coordinator.handle
-        DispatchQueue.main.async { view.window?.makeFirstResponder(view) }
-        return view
+        let view = CaptureView(); view.handler = context.coordinator.handle; return view
     }
-    func updateNSView(_ view: CaptureView, context: Context) {
-        view.handler = context.coordinator.handle
-        DispatchQueue.main.async { view.window?.makeFirstResponder(view) }
-    }
+    func updateNSView(_ view: CaptureView, context: Context) { view.handler = context.coordinator.handle }
     final class Coordinator {
         let captured: (ShortcutDTO) -> Void
-        init(_ captured: @escaping (ShortcutDTO) -> Void) { self.captured = captured }
+        let unsupported: () -> Void
+        init(captured: @escaping (ShortcutDTO) -> Void, unsupported: @escaping () -> Void) { self.captured = captured; self.unsupported = unsupported }
         func handle(_ event: NSEvent) {
-            guard !event.isARepeat, let shortcut = KeyboardShortcuts.Shortcut(event: event),
-                  let dto = ShortcutDTO.fromKeyboardShortcut(shortcut) else { return }
+            guard !event.isARepeat else { return }
+            guard let shortcut = KeyboardShortcuts.Shortcut(event: event), let dto = ShortcutDTO.fromKeyboardShortcut(shortcut) else {
+                unsupported(); return
+            }
             captured(dto)
         }
     }
     final class CaptureView: NSView {
         var handler: ((NSEvent) -> Void)?
         override var acceptsFirstResponder: Bool { true }
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let window { window.makeFirstResponder(self) }
+        }
         override func keyDown(with event: NSEvent) { handler?(event) }
     }
 }
