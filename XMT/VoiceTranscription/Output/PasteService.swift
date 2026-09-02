@@ -5,7 +5,7 @@ import Foundation
 
 @MainActor protocol PasteServicing { func paste(text: String, targetPID: pid_t?) async throws }
 
-enum PasteError: Error { case accessibilityNotTrusted, noTargetApplication, keyboardLayoutUnavailable, eventCreationFailed }
+enum PasteError: Error { case accessibilityNotTrusted, noTargetApplication, secureInputActive, keyboardLayoutUnavailable, eventCreationFailed }
 
 /// One-shot output action for the retained transcript. It intentionally has no dependency on
 /// recording state, auto-paste settings, transcript commit, or recovery storage.
@@ -72,6 +72,7 @@ struct PasteService: PasteServicing {
     @MainActor func paste(text: String, targetPID: pid_t?) async throws {
         guard AXIsProcessTrusted() else { throw PasteError.accessibilityNotTrusted }
         guard let pid = targetPID else { throw PasteError.noTargetApplication }
+        guard !IsSecureEventInputEnabled() else { throw PasteError.secureInputActive }
         guard let keyCode = Self.logicalVKeyCode() else { throw PasteError.keyboardLayoutUnavailable }
         guard let down = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true),
               let up = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else { throw PasteError.eventCreationFailed }

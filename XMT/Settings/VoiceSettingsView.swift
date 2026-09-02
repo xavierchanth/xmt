@@ -22,7 +22,8 @@ struct VoiceSettingsView: View {
                 Button("Copy Last Transcript") { module.copyLastTranscript() }.disabled(module.lastTranscript.isEmpty)
                 KeyboardShortcuts.Recorder(
                     "Paste latest transcript:",
-                    name: .pasteLatestTranscript
+                    name: .pasteLatestTranscript,
+                    onChange: { module.userChangedPasteLatestShortcut($0) }
                 )
                 .disabled(module.managedKeys.contains(.pasteLatestTranscriptShortcut))
             }

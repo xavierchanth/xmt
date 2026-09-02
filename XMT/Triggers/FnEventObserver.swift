@@ -107,10 +107,11 @@ final class FnEventObserver {
     func secureInputInterrupted() {
         recordingIsActive = false
         physicalEvents.interrupt()
-        process(.secureInputInterrupted)
+        // Mark the session sensitive before the arbitrator queues its stop event.
         for subscriber in handlers.values {
             deliver(.secureInputBegan, to: subscriber.handler)
         }
+        process(.secureInputInterrupted)
     }
 
     /// Extends secure-input observation through latched recording, where gesture arbitration has

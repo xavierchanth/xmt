@@ -58,7 +58,7 @@ actor VoiceAssetManager {
         // Keep ownership recorded across the suspension so another caller cannot reserve a new
         // locale that a stale release would then accidentally relinquish.
         let released = await AssetInventory.release(reservedLocale: token.locale)
-        if released, reservation?.id == token.id { reservation = nil }
+        if reservation?.id == token.id { reservation = nil }
         return released
     }
 }

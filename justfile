@@ -23,27 +23,47 @@ build:
 install: build
     #!/usr/bin/env bash
     set -euo pipefail
-    if pgrep -x XMT >/dev/null; then
-        osascript -e 'tell application id "com.xavierchanth.xmt" to quit' 2>/dev/null || pkill -TERM -x XMT || true
-        for _ in {1..50}; do pgrep -x XMT >/dev/null || break; sleep 0.1; done
-        if pgrep -x XMT >/dev/null; then pkill -KILL -x XMT; fi
-        for _ in {1..20}; do pgrep -x XMT >/dev/null || break; sleep 0.1; done
-        if pgrep -x XMT >/dev/null; then echo "XMT did not terminate" >&2; exit 1; fi
+    destination="{{install_path}}"
+    executable="$destination/Contents/MacOS/XMT"
+    staged_root="$(mktemp -d /Applications/.xmt-install.XXXXXX)"
+    staged="$staged_root/XMT.app"
+    backup=""
+    cleanup() {
+        status=$?
+        if (( status != 0 )) && [[ -n "$backup" && -e "$backup" ]]; then
+            rm -rf "$destination"
+            mv "$backup" "$destination"
+        fi
+        rm -rf "$staged_root"
+        [[ -z "$backup" || ! -e "$backup" ]] || rm -rf "$backup"
+        exit "$status"
+    }
+    trap cleanup EXIT
+    installed_pids() { pgrep -f "^${executable}$" || true; }
+    if [[ -n "$(installed_pids)" ]]; then
+        osascript -e 'tell application id "com.xavierchanth.xmt" to quit' 2>/dev/null || true
+        for _ in {1..50}; do [[ -n "$(installed_pids)" ]] || break; sleep 0.1; done
+        if [[ -n "$(installed_pids)" ]]; then
+            while read -r pid; do [[ -z "$pid" ]] || kill -TERM "$pid"; done < <(installed_pids)
+        fi
+        for _ in {1..20}; do [[ -n "$(installed_pids)" ]] || break; sleep 0.1; done
+        [[ -z "$(installed_pids)" ]] || { echo "installed XMT did not terminate" >&2; exit 1; }
     fi
-    staged="/Applications/.XMT.app.new.$$"
-    backup="/Applications/.XMT.app.old.$$"
     ditto "{{app}}" "$staged"
     codesign --verify --deep --strict "$staged"
-    if [[ -e "{{install_path}}" ]]; then mv "{{install_path}}" "$backup"; fi
-    if ! mv "$staged" "{{install_path}}"; then
-        if [[ -e "$backup" ]]; then mv "$backup" "{{install_path}}"; fi
-        exit 1
+    if [[ -e "$destination" ]]; then
+        backup="/Applications/.xmt-backup.$$"
+        mv "$destination" "$backup"
     fi
-    if [[ -e "$backup" ]]; then rm -rf "$backup"; fi
-    open -n "{{install_path}}"
-    for _ in {1..50}; do pgrep -x XMT >/dev/null && exit 0; sleep 0.1; done
-    echo "XMT did not remain running after launch" >&2
-    exit 1
+    mv "$staged" "$destination"
+    open -n "$destination"
+    pid=""
+    for _ in {1..50}; do pid="$(installed_pids | head -1)"; [[ -z "$pid" ]] || break; sleep 0.1; done
+    [[ -n "$pid" ]] || { echo "XMT did not launch from $destination" >&2; exit 1; }
+    sleep 1
+    kill -0 "$pid" 2>/dev/null || { echo "XMT did not remain running after launch" >&2; exit 1; }
+    [[ "$(ps -p "$pid" -o command= | xargs)" == "$executable" ]] || { echo "unexpected XMT executable path" >&2; exit 1; }
+    if [[ -n "$backup" ]]; then rm -rf "$backup"; backup=""; fi
 
 # Build and launch a fresh instance without installing.
 run: build

@@ -25,7 +25,8 @@ struct WindowMoverSettingsView: View {
                 if module.isEnabled {
                     KeyboardShortcuts.Recorder(
                         "Move window to next screen:",
-                        name: .moveToNextScreen
+                        name: .moveToNextScreen,
+                        onChange: { VoiceTranscriptionModule.shared.userChangedWindowMoverShortcut($0) }
                     )
                     .disabled(module.isShortcutManaged)
                 } else {
