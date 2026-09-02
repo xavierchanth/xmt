@@ -50,6 +50,7 @@
 		B000019 /* PasteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100019 /* PasteService.swift */; };
 		B000020 /* VoiceTranscriptionModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100020 /* VoiceTranscriptionModule.swift */; };
 		F000001 /* VoiceRecordingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = F100001 /* VoiceRecordingOverlay.swift */; };
+		F000002 /* VoiceBindingRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F100002 /* VoiceBindingRecorder.swift */; };
 		B000021 /* VoiceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100021 /* VoiceSettingsView.swift */; };
 		B000022 /* DevicePriorityListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100022 /* DevicePriorityListView.swift */; };
 		B000023 /* TriggerArbitratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100023 /* TriggerArbitratorTests.swift */; };
@@ -161,6 +162,7 @@
 		B100019 /* PasteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteService.swift; sourceTree = "<group>"; };
 		B100020 /* VoiceTranscriptionModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTranscriptionModule.swift; sourceTree = "<group>"; };
 		F100001 /* VoiceRecordingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecordingOverlay.swift; sourceTree = "<group>"; };
+		F100002 /* VoiceBindingRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceBindingRecorder.swift; sourceTree = "<group>"; };
 		B100021 /* VoiceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSettingsView.swift; sourceTree = "<group>"; };
 		B100022 /* DevicePriorityListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePriorityListView.swift; sourceTree = "<group>"; };
 		B100023 /* TriggerArbitratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriggerArbitratorTests.swift; sourceTree = "<group>"; };
@@ -297,6 +299,7 @@
 				AA100023 /* SettingsWindowController.swift */,
 				AA100024 /* AccessibilityStatusView.swift */,
 				B100021 /* VoiceSettingsView.swift */,
+				F100002 /* VoiceBindingRecorder.swift */,
 				B100022 /* DevicePriorityListView.swift */,
 			);
 			path = Settings;
@@ -644,6 +647,7 @@
 				F000001 /* VoiceRecordingOverlay.swift in Sources */,
 				C000001 /* KeyboardSafetyLifecycle.swift in Sources */,
 				B000021 /* VoiceSettingsView.swift in Sources */,
+				F000002 /* VoiceBindingRecorder.swift in Sources */,
 				B000022 /* DevicePriorityListView.swift in Sources */,
 				EE00001 /* KeyboardDomain.swift in Sources */,
 				EE00002 /* KeyboardConfiguration.swift in Sources */,

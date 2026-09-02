@@ -334,4 +334,32 @@ final class ConfigTests: XCTestCase {
         }
     }
 
+    func testVoiceRecorderEscapeFnClearAndCancelModel() throws {
+        let escape = ShortcutDTO.key(key: "escape", modifiers: [])
+        let controlEscape = ShortcutDTO.key(key: "escape", modifiers: ["control"])
+        XCTAssertNil(VoiceBindingPolicy.validate(escape, for: .cancel))
+        XCTAssertNil(VoiceBindingPolicy.validate(controlEscape, for: .holdToTalk))
+        XCTAssertNil(VoiceBindingPolicy.validate(controlEscape, for: .toggleRecording))
+        XCTAssertNil(VoiceBindingPolicy.validate(controlEscape, for: .cancel))
+        XCTAssertEqual(VoiceBindingPolicy.validate(escape, for: .holdToTalk), .unsafeUnmodifiedKey)
+        XCTAssertEqual(VoiceBindingPolicy.validate(.key(key: "a", modifiers: []), for: .toggleRecording), .unsafeUnmodifiedKey)
+        XCTAssertNil(VoiceBindingPolicy.validate(.modifierHold("fn"), for: .holdToTalk))
+        XCTAssertEqual(VoiceBindingPolicy.validate(.modifierHold("fn"), for: .cancel), .modifierOnlyRequiresHold)
+        XCTAssertEqual(ShortcutDTO.fromKeyboardShortcut(try controlEscape.keyboardShortcut()), controlEscape)
+
+        var model = VoiceBindingRecorderModel()
+        model.receive(.begin); model.receive(.captured(escape))
+        XCTAssertEqual(model.committed, escape); XCTAssertEqual(model.state, .idle)
+        model.receive(.begin); model.receive(.cancel)
+        XCTAssertEqual(model.committed, escape, "explicit Cancel preserves the prior commit")
+        model.receive(.clear); XCTAssertEqual(model.committed, .unbound)
+        model.receive(.selectFn); XCTAssertEqual(model.committed, .modifierHold("fn"))
+    }
+
+    func testVoiceBindingPolicyAndConflictValidation() {
+        let controlEscape = ShortcutDTO.key(key: "escape", modifiers: ["control"])
+        XCTAssertTrue(controlEscape.conflicts(with: .key(key: "escape", modifiers: ["CONTROL"])))
+        XCTAssertFalse(controlEscape.conflicts(with: .key(key: "escape", modifiers: [])))
+    }
+
 }

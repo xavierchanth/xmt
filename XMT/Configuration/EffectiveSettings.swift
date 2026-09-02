@@ -2,6 +2,36 @@ import Foundation
 
 enum VoiceOutputMode: String, Codable, CaseIterable, Equatable, Sendable { case pasteImmediately, clipboardOnly }
 
+enum VoiceBindingAction: String, Equatable, Sendable { case holdToTalk, toggleRecording, cancel }
+enum VoiceBindingPolicyError: Error, Equatable, Sendable { case modifierOnlyRequiresHold; case unsafeUnmodifiedKey }
+struct VoiceBindingPolicy {
+    static func validate(_ binding: ShortcutDTO, for action: VoiceBindingAction) -> VoiceBindingPolicyError? {
+        switch binding {
+        case .unbound: return nil
+        case .modifierHold: return action == .holdToTalk ? nil : .modifierOnlyRequiresHold
+        case .key(_, let modifiers):
+            return action != .cancel && modifiers.isEmpty ? .unsafeUnmodifiedKey : nil
+        }
+    }
+}
+
+struct VoiceBindingRecorderModel: Equatable, Sendable {
+    enum State: Equatable, Sendable { case idle, recording }
+    enum Input: Equatable, Sendable { case begin, captured(ShortcutDTO), cancel, clear, selectFn }
+    private(set) var state: State = .idle
+    private(set) var committed: ShortcutDTO?
+    mutating func receive(_ input: Input) {
+        switch input {
+        case .begin: state = .recording
+        case .captured(let value) where state == .recording: committed = value; state = .idle
+        case .cancel where state == .recording: state = .idle
+        case .clear: committed = .unbound; state = .idle
+        case .selectFn: committed = .modifierHold("fn"); state = .idle
+        default: break
+        }
+    }
+}
+
 enum VoiceInteractionPhase: Equatable, Sendable { case unavailable, idle, arming, recording, finalizing }
 
 struct VoiceShortcutActivationPolicy: Equatable, Sendable {

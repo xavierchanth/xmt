@@ -13,13 +13,17 @@ struct VoiceSettingsView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section("Voice bindings") {
-                KeyboardShortcuts.Recorder("Hold to talk:", name: .voiceHoldToTalk, onChange: { module.userChangedVoiceShortcut($0, name: .voiceHoldToTalk) })
-                    .disabled(module.managedKeys.contains(.holdToTalkShortcut))
-                KeyboardShortcuts.Recorder("Toggle recording:", name: .voiceToggleRecording, onChange: { module.userChangedVoiceShortcut($0, name: .voiceToggleRecording) })
-                    .disabled(module.managedKeys.contains(.toggleRecordingShortcut))
-                KeyboardShortcuts.Recorder("Cancel:", name: .voiceCancel, onChange: { module.userChangedVoiceShortcut($0, name: .voiceCancel) })
-                    .disabled(module.managedKeys.contains(.cancelShortcut))
-                if module.effectiveHoldUsesFn { Text("Hold to talk: Fn").foregroundStyle(.secondary) }
+                VoiceBindingRecorder(title: "Hold to talk", action: .holdToTalk,
+                    value: module.effectiveVoiceBinding(for: .holdToTalk), isManaged: module.managedKeys.contains(.holdToTalkShortcut),
+                    commit: { module.commitVoiceBinding($0, action: .holdToTalk) })
+                VoiceBindingRecorder(title: "Toggle recording", action: .toggleRecording,
+                    value: module.effectiveVoiceBinding(for: .toggleRecording), isManaged: module.managedKeys.contains(.toggleRecordingShortcut),
+                    commit: { module.commitVoiceBinding($0, action: .toggleRecording) })
+                VoiceBindingRecorder(title: "Cancel", action: .cancel,
+                    value: module.effectiveVoiceBinding(for: .cancel), isManaged: module.managedKeys.contains(.cancelShortcut),
+                    commit: { module.commitVoiceBinding($0, action: .cancel) })
+                Text("Escape is bindable. Use the visible Cancel button to stop recording a shortcut.")
+                    .font(.footnote).foregroundStyle(.secondary)
             }
             Section("Permissions and speech assets") {
                 HStack { Text("Speech assets: \(module.assetStatus)"); Spacer(); Button("Check") { module.refreshAssets() }; Button("Download") { module.downloadAssets() } }

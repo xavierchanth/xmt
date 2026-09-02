@@ -199,7 +199,7 @@ The menu bar menu shows Voice state only when there is something to say: recordi
 
 The `Voice` tab in Settings contains:
 
-- the enable toggle and independent Hold to Talk, Toggle Recording, and Cancel recorders; Fn is an optional hold binding, ordinary hold chords preserve key-down/key-up, toggle alternates start/stop, and Cancel defaults to Control-Option-Escape and is registered only while arming or recording;
+- the enable toggle and independent XMT-owned Hold to Talk, Toggle Recording, and Cancel capture controls; Hold to Talk explicitly offers Fn, Record chord, and Clear, while Toggle and Cancel offer Record chord and Clear. Capture accepts key-down for bare Escape and Control-Escape; editing ends only through the visible Cancel control. Fn modifier-only is accepted only for Hold to Talk. Unmodified Hold or Toggle keys are rejected inline because they would intercept ordinary typing while idle. Ordinary hold chords preserve key-down/key-up, toggle alternates start/stop, and Cancel defaults to Control-Option-Escape and is registered only while arming or recording;
 - speech-asset status with check and download actions, the contextual access request, and the shared Accessibility status row naming completed-transcript and paste-latest delivery as its consumers;
 - output settings — an explicit Paste immediately or Clipboard only picker, System Language plus supported locale choices, copy last transcript, and the paste-latest shortcut recorder;
 - transcript-history controls for enabled, retention days, and maximum entries;

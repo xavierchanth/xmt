@@ -338,18 +338,38 @@ final class VoiceTranscriptionModule: ObservableObject {
 
     func reloadConfig() { Task { await loadConfig() } }
 
-    func userChangedVoiceShortcut(_ shortcut: KeyboardShortcuts.Shortcut?, name: KeyboardShortcuts.Name) {
-        let key = Self.voiceBindingKey(name)
+    func effectiveVoiceBinding(for action: VoiceBindingAction) -> ShortcutDTO {
+        switch action { case .holdToTalk: return effective.holdToTalkShortcut.value; case .toggleRecording: return effective.toggleRecordingShortcut.value; case .cancel: return effective.cancelShortcut.value }
+    }
+
+    /// Validates before touching KeyboardShortcuts, so capture never transiently registers a rejected chord.
+    func commitVoiceBinding(_ dto: ShortcutDTO, action: VoiceBindingAction) -> String? {
+        if let issue = VoiceBindingPolicy.validate(dto, for: action) {
+            return issue == .unsafeUnmodifiedKey
+                ? "Hold and Toggle require a modifier so normal typing is not intercepted."
+                : "Fn modifier-only is available only for Hold to Talk."
+        }
+        let ownName: KeyboardShortcuts.Name
+        switch action { case .holdToTalk: ownName = .voiceHoldToTalk; case .toggleRecording: ownName = .voiceToggleRecording; case .cancel: ownName = .voiceCancel }
+        let candidates: [(String, ShortcutDTO)] = [
+            ("Window Mover", effective.windowMoverShortcut.value),
+            ("Paste Latest", effective.pasteLatestTranscriptShortcut.value),
+            ("Hold to Talk", effective.holdToTalkShortcut.value),
+            ("Toggle Recording", effective.toggleRecordingShortcut.value),
+            ("Cancel", effective.cancelShortcut.value)
+        ]
+        let ownLabel = action == .holdToTalk ? "Hold to Talk" : action == .toggleRecording ? "Toggle Recording" : "Cancel"
+        if let conflict = candidates.first(where: { $0.0 != ownLabel && dto.conflicts(with: $0.1) }) {
+            return "Conflicts with \(conflict.0)."
+        }
+        let key = Self.voiceBindingKey(ownName)
         UserDefaults.standard.set(true, forKey: "voice.binding.\(key).explicit")
-        let dto = shortcut.flatMap(ShortcutDTO.fromKeyboardShortcut) ?? .unbound
-        if name == .voiceHoldToTalk { unmanagedHoldShortcut = dto }
-        else if name == .voiceToggleRecording { unmanagedToggleShortcut = dto }
-        else if name == .voiceCancel { unmanagedCancelShortcut = dto }
-        guard let shortcut else { reloadConfig(); return }
-        let conflicts = [.moveToNextScreen, .pasteLatestTranscript, .voiceHoldToTalk, .voiceToggleRecording, .voiceCancel]
-            .filter { $0 != name }.contains { KeyboardShortcuts.getShortcut(for: $0) == shortcut }
-        if conflicts { KeyboardShortcuts.setShortcut(nil, for: name); configDiagnostic = "Shortcut conflicts with another action" }
+        KeyboardShortcuts.setShortcut(try? dto.keyboardShortcut(), for: ownName)
+        if action == .holdToTalk { unmanagedHoldShortcut = dto }
+        else if action == .toggleRecording { unmanagedToggleShortcut = dto }
+        else { unmanagedCancelShortcut = dto }
         reloadConfig()
+        return nil
     }
 
     func userChangedPasteLatestShortcut(_ shortcut: KeyboardShortcuts.Shortcut?) {

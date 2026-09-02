@@ -65,6 +65,18 @@ actor ConfigReloader {
         }
 
         let next = EffectiveSettings.resolve(config: candidate, local: local, builtIn: builtIn)
+        let voiceBindings: [(String, ShortcutDTO, VoiceBindingAction)] = [
+            ("voice.holdToTalkShortcut", next.holdToTalkShortcut.value, .holdToTalk),
+            ("voice.toggleRecordingShortcut", next.toggleRecordingShortcut.value, .toggleRecording),
+            ("voice.cancelShortcut", next.cancelShortcut.value, .cancel)
+        ]
+        for (path, binding, action) in voiceBindings {
+            if let issue = VoiceBindingPolicy.validate(binding, for: action) {
+                let reason = issue == .modifierOnlyRequiresHold ? "Fn modifier-only is supported only for hold-to-talk" : "an unmodified key is unsafe for this action"
+                let diagnostic = ConfigDiagnostic.invalidValue(path: path, reason: reason)
+                lastDiagnostic = diagnostic; throw diagnostic
+            }
+        }
         let bindings: [(String, ShortcutDTO)] = [
             ("windowMover.shortcut", next.windowMoverShortcut.value),
             ("voice.holdToTalkShortcut", next.holdToTalkShortcut.value),

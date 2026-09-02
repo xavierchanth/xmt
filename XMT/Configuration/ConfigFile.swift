@@ -174,15 +174,18 @@ struct ConfigFile: Codable, Equatable, Sendable {
         if voice.shortcut != nil && voice.holdToTalkShortcut != nil {
             throw ConfigDiagnostic.invalidValue(path: "voice.shortcut", reason: "conflicts with voice.holdToTalkShortcut")
         }
-        let bindings: [(String, ShortcutDTO?, Bool)] = [
-            ("voice.holdToTalkShortcut", voice.holdToTalkShortcut ?? voice.shortcut, true),
-            ("voice.toggleRecordingShortcut", voice.toggleRecordingShortcut, false),
-            ("voice.cancelShortcut", voice.cancelShortcut, false)
+        let bindings: [(String, ShortcutDTO?, VoiceBindingAction)] = [
+            ("voice.holdToTalkShortcut", voice.holdToTalkShortcut ?? voice.shortcut, .holdToTalk),
+            ("voice.toggleRecordingShortcut", voice.toggleRecordingShortcut, .toggleRecording),
+            ("voice.cancelShortcut", voice.cancelShortcut, .cancel)
         ]
-        for (path, shortcut, allowsFn) in bindings {
+        for (path, shortcut, action) in bindings {
             guard let shortcut else { continue }
-            if case .modifierHold = shortcut, !allowsFn { throw ConfigDiagnostic.invalidValue(path: path, reason: "must be a key shortcut") }
             if case let .modifierHold(name) = shortcut, !["fn", "function"].contains(name.lowercased()) { throw ConfigDiagnostic.invalidValue(path: path, reason: "only Fn is supported as a modifier hold") }
+            if let issue = VoiceBindingPolicy.validate(shortcut, for: action) {
+                let reason = issue == .modifierOnlyRequiresHold ? "Fn modifier-only is supported only for hold-to-talk" : "an unmodified key is unsafe for this action"
+                throw ConfigDiagnostic.invalidValue(path: path, reason: reason)
+            }
             do { try shortcut.validate() } catch { throw ConfigDiagnostic.invalidValue(path: path, reason: String(describing: error)) }
         }
         let configured = bindings.compactMap { item -> (String, ShortcutDTO)? in item.1.map { (item.0, $0) } }
