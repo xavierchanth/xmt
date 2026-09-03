@@ -193,7 +193,7 @@ final class ConfigTests: XCTestCase {
             XCTFail("expected shortcut conflict")
         } catch {
             XCTAssertEqual(error as? ConfigDiagnostic,
-                           .invalidValue(path: "windowMover.shortcut", reason: "conflicts with voice.pasteLatestTranscriptShortcut"))
+                           .invalidValue(path: "voice.pasteLatestTranscriptShortcut", reason: "conflicts with windowMover.shortcut"))
         }
     }
 
