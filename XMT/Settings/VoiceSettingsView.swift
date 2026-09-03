@@ -4,6 +4,8 @@ import SwiftUI
 struct VoiceSettingsView: View {
     @ObservedObject private var module = VoiceTranscriptionModule.shared
     @State private var bindingRecorder = VoiceBindingRecorderModel()
+    @State private var captureToken: VoiceBindingCaptureLease.Token?
+    @State private var busyAction: VoiceBindingAction?
 
     var body: some View {
         Form {
@@ -47,22 +49,39 @@ struct VoiceSettingsView: View {
             Section("Input priority") { DevicePriorityListView(module: module, priorityManaged: module.managedKeys.contains(.inputDevicePriority), fallbackManaged: module.managedKeys.contains(.fallbackToSystemDefault)) }
             if module.status == .pending { Section("Recovery") { Button("Retry Recording") { module.retryPending() }; Button("Delete Recording", role: .destructive) { module.deletePending() } } }
             Section("Configuration") { HStack { Button("Reload Configuration") { module.reloadConfig() }; if let diagnostic = module.configDiagnostic { Text(diagnostic).foregroundStyle(.red) } } }
-        }.formStyle(.grouped).onAppear { module.refreshDevices(); module.refreshLocalesAndAssets() }
+        }.formStyle(.grouped)
+            .onAppear { module.refreshDevices(); module.refreshLocalesAndAssets() }
+            .onDisappear {
+                module.cancelVoiceBindingCapture()
+                captureToken = nil; busyAction = nil
+                if let action = bindingRecorder.activeAction { bindingRecorder.receive(.cancel(action)) }
+            }
     }
 
     private func bindingRow(_ title: String, action: VoiceBindingAction, managed: EffectiveSettings.Key) -> some View {
         VoiceBindingRecorder(title: title, action: action, value: module.effectiveVoiceBinding(for: action),
             isManaged: module.managedKeys.contains(managed), isRecording: bindingRecorder.activeAction == action,
-            begin: { module.setVoiceBindingCaptureActive(true); bindingRecorder.receive(.begin(action)) },
-            cancel: { bindingRecorder.receive(.cancel(action)); module.setVoiceBindingCaptureActive(false) },
+            isOtherBindingBusy: busyAction != nil && busyAction != action,
+            begin: {
+                captureToken = module.acquireVoiceBindingCapture(); busyAction = action
+                bindingRecorder.receive(.begin(action))
+            },
+            cancel: {
+                bindingRecorder.receive(.cancel(action))
+                if let token = captureToken { module.releaseVoiceBindingCapture(token) }
+                captureToken = nil; busyAction = nil
+            },
             commit: { binding in
+                let token = captureToken ?? module.acquireVoiceBindingCapture()
+                captureToken = token; busyAction = action
                 switch binding {
                 case .unbound: bindingRecorder.receive(.clear(action))
                 case .modifierHold where action == .holdToTalk: bindingRecorder.receive(.selectFn)
                 default: bindingRecorder.receive(.captured(action, binding))
                 }
                 let diagnostic = await module.commitVoiceBinding(binding, action: action)
-                module.setVoiceBindingCaptureActive(false)
+                module.releaseVoiceBindingCapture(token)
+                if captureToken == token { captureToken = nil; busyAction = nil }
                 return diagnostic
             })
     }

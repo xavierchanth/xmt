@@ -3,6 +3,25 @@ import Foundation
 enum VoiceOutputMode: String, Codable, CaseIterable, Equatable, Sendable { case pasteImmediately, clipboardOnly }
 
 enum VoiceBindingAction: String, Equatable, Sendable { case holdToTalk, toggleRecording, cancel }
+
+/// Single-owner lease used to keep live triggers disabled throughout capture and commit.
+/// Replacing a lease makes every completion carrying the old token harmless.
+struct VoiceBindingCaptureLease: Equatable, Sendable {
+    struct Token: Equatable, Hashable, Sendable { fileprivate let id: UUID }
+    private(set) var token: Token?
+    var isActive: Bool { token != nil }
+
+    mutating func acquire() -> Token {
+        let next = Token(id: UUID()); token = next; return next
+    }
+    @discardableResult mutating func release(_ candidate: Token) -> Bool {
+        guard token == candidate else { return false }
+        token = nil; return true
+    }
+    @discardableResult mutating func cancelAll() -> Bool {
+        let changed = token != nil; token = nil; return changed
+    }
+}
 enum VoiceBindingPolicyError: Error, Equatable, Sendable { case modifierOnlyRequiresHold; case unsafeUnmodifiedKey }
 struct VoiceBindingPolicy {
     static func validate(_ binding: ShortcutDTO, for action: VoiceBindingAction) -> VoiceBindingPolicyError? {
@@ -14,6 +33,16 @@ struct VoiceBindingPolicy {
             let safe = Set(modifiers.map { $0.lowercased() }).isDisjoint(with: ["control", "option", "command"]) == false
             return action != .cancel && !safe ? .unsafeUnmodifiedKey : nil
         }
+    }
+}
+
+struct VoiceBindingPersistence {
+    /// Migrates the former KeyboardShortcuts storage. An explicit marker with no
+    /// library shortcut represented explicit unbound; it must never become Fn.
+    static func localValue(explicit: Bool, canonicalData: Data?, legacyValue: ShortcutDTO?) -> ShortcutDTO? {
+        guard explicit else { return nil }
+        if let canonicalData, let decoded = try? JSONDecoder().decode(ShortcutDTO.self, from: canonicalData) { return decoded }
+        return legacyValue ?? .unbound
     }
 }
 

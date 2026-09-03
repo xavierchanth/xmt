@@ -79,7 +79,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     private var assetProgressObservation: NSKeyValueObservation?
     private var isPastingLatest = false
     private var bindingCommitTail: Task<String?, Never>?
-    private var bindingCaptureActive = false
+    private var bindingCaptureLease = VoiceBindingCaptureLease()
     private var historyLatestObserver: NSObjectProtocol?
     private static let pasteLatestShortcutBackupActiveKey = "voice.pasteLatestShortcutBackupActive"
     private static let pasteLatestShortcutBackupDataKey = "voice.pasteLatestShortcutBackupData"
@@ -340,16 +340,26 @@ final class VoiceTranscriptionModule: ObservableObject {
 
     func reloadConfig() { Task { await loadConfig() } }
 
-    func setVoiceBindingCaptureActive(_ active: Bool) {
-        guard bindingCaptureActive != active else { return }
-        bindingCaptureActive = active
-        if active {
-            observation?.cancel(); observation = nil; observer = nil
-            KeyboardShortcuts.disable(.voiceHoldToTalk); KeyboardShortcuts.disable(.voiceToggleRecording); KeyboardShortcuts.disable(.voiceCancel)
-        } else {
-            observerThresholdMs = nil; observerHoldBinding = nil; observerToggleBinding = nil; observerCancelBinding = nil
-            recoverDegradedAndObserve()
-        }
+    func acquireVoiceBindingCapture() -> VoiceBindingCaptureLease.Token {
+        let token = bindingCaptureLease.acquire()
+        observation?.cancel(); observation = nil; observer = nil
+        KeyboardShortcuts.disable(.voiceHoldToTalk); KeyboardShortcuts.disable(.voiceToggleRecording); KeyboardShortcuts.disable(.voiceCancel)
+        return token
+    }
+
+    func releaseVoiceBindingCapture(_ token: VoiceBindingCaptureLease.Token) {
+        guard bindingCaptureLease.release(token) else { return }
+        restoreRoutingAfterBindingCapture()
+    }
+
+    func cancelVoiceBindingCapture() {
+        guard bindingCaptureLease.cancelAll() else { return }
+        restoreRoutingAfterBindingCapture()
+    }
+
+    private func restoreRoutingAfterBindingCapture() {
+        observerThresholdMs = nil; observerHoldBinding = nil; observerToggleBinding = nil; observerCancelBinding = nil
+        recoverDegradedAndObserve()
     }
 
     func effectiveVoiceBinding(for action: VoiceBindingAction) -> ShortcutDTO {
@@ -493,7 +503,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     private func startObserving() {
-        guard !bindingCaptureActive else { return }
+        guard !bindingCaptureLease.isActive else { return }
         guard isEnabled, observation == nil else { if isEnabled, status == .disabled { status = .idle }; return }
         let bareHold: Bool = { if case .modifierHold = effective.holdToTalkShortcut.value { return true }; return false }()
         var chords: [Int64: FnChordAction] = [:]
@@ -851,17 +861,18 @@ final class VoiceTranscriptionModule: ObservableObject {
         if defaults.bool(forKey: "voice.binding.\(key).backupActive") {
             return defaults.data(forKey: dataKey).flatMap { try? JSONDecoder().decode(ShortcutDTO.self, from: $0) }
         }
-        guard defaults.bool(forKey: "voice.binding.\(key).explicit") else { return nil }
-        if let data = defaults.data(forKey: "voice.binding.\(key).value"), let value = try? JSONDecoder().decode(ShortcutDTO.self, from: data) { return value }
-        // One-release migration from the former KeyboardShortcuts-owned storage.
-        let migrated = KeyboardShortcuts.getShortcut(for: name).flatMap(ShortcutDTO.fromKeyboardShortcut)
-            ?? (key == "hold" ? .modifierHold("fn") : .unbound)
-        if let data = try? JSONEncoder().encode(migrated) { defaults.set(data, forKey: "voice.binding.\(key).value") }
+        let explicit = defaults.bool(forKey: "voice.binding.\(key).explicit")
+        let legacy = KeyboardShortcuts.getShortcut(for: name).flatMap(ShortcutDTO.fromKeyboardShortcut)
+        guard let migrated = VoiceBindingPersistence.localValue(
+            explicit: explicit, canonicalData: defaults.data(forKey: "voice.binding.\(key).value"), legacyValue: legacy
+        ) else { return nil }
+        if defaults.data(forKey: "voice.binding.\(key).value") == nil,
+           let data = try? JSONEncoder().encode(migrated) { defaults.set(data, forKey: "voice.binding.\(key).value") }
         return migrated
     }
 
     private func reconcileShortcutActivation() {
-        if bindingCaptureActive {
+        if bindingCaptureLease.isActive {
             KeyboardShortcuts.disable(.voiceHoldToTalk); KeyboardShortcuts.disable(.voiceToggleRecording); KeyboardShortcuts.disable(.voiceCancel)
             return
         }

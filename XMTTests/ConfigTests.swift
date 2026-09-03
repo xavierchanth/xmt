@@ -335,6 +335,46 @@ final class ConfigTests: XCTestCase {
         }
     }
 
+    func testCaptureLeaseRejectsStaleReleaseAndDisappearanceCancelsOwner() {
+        var lease = VoiceBindingCaptureLease()
+        let rowA = lease.acquire()
+        let rowB = lease.acquire()
+        XCTAssertTrue(lease.isActive)
+        XCTAssertFalse(lease.release(rowA), "stale row A completion must not release row B")
+        XCTAssertTrue(lease.isActive)
+        XCTAssertTrue(lease.release(rowB))
+        XCTAssertFalse(lease.isActive)
+        let disappearing = lease.acquire()
+        XCTAssertTrue(lease.cancelAll())
+        XCTAssertFalse(lease.release(disappearing))
+        XCTAssertFalse(lease.cancelAll())
+    }
+
+    func testAllLegacyVoiceBindingsPreserveExplicitUnbound() throws {
+        for action in [VoiceBindingAction.holdToTalk, .toggleRecording, .cancel] {
+            XCTAssertEqual(VoiceBindingPersistence.localValue(explicit: true, canonicalData: nil, legacyValue: nil), .unbound, "failed for \(action)")
+        }
+        XCTAssertNil(VoiceBindingPersistence.localValue(explicit: false, canonicalData: nil, legacyValue: .key(key: "x", modifiers: ["control"])))
+        let fn = ShortcutDTO.fnChord(key: "escape")
+        XCTAssertEqual(VoiceBindingPersistence.localValue(explicit: true, canonicalData: try JSONEncoder().encode(fn), legacyValue: nil), fn)
+    }
+
+    func testManagedVoiceBindingsRestoreAllIndependentLocalValues() throws {
+        var local = SettingsValues()
+        local.holdToTalkShortcut = .unbound
+        local.toggleRecordingShortcut = .key(key: "t", modifiers: ["control"])
+        local.cancelShortcut = .fnChord(key: "f12")
+        let managed = try decode(#"{"version":1,"voice":{"holdToTalkShortcut":{"type":"fnChord","key":"h"},"toggleRecordingShortcut":{"type":"unbound"},"cancelShortcut":{"type":"key","key":"escape","modifiers":["control"]}}}"#)
+        let effectiveManaged = EffectiveSettings.resolve(config: managed, local: local)
+        XCTAssertEqual(effectiveManaged.holdToTalkShortcut.value, .fnChord(key: "h"))
+        XCTAssertEqual(effectiveManaged.toggleRecordingShortcut.value, .unbound)
+        XCTAssertEqual(effectiveManaged.cancelShortcut.value, .key(key: "escape", modifiers: ["control"]))
+        let restored = EffectiveSettings.resolve(config: nil, local: local)
+        XCTAssertEqual(restored.holdToTalkShortcut.value, local.holdToTalkShortcut)
+        XCTAssertEqual(restored.toggleRecordingShortcut.value, local.toggleRecordingShortcut)
+        XCTAssertEqual(restored.cancelShortcut.value, local.cancelShortcut)
+    }
+
     func testVoiceRecorderEscapeFnClearAndCancelModel() throws {
         let escape = ShortcutDTO.key(key: "escape", modifiers: [])
         let controlEscape = ShortcutDTO.key(key: "escape", modifiers: ["control"])

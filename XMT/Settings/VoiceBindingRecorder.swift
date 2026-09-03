@@ -9,6 +9,7 @@ struct VoiceBindingRecorder: View {
     let value: ShortcutDTO
     let isManaged: Bool
     let isRecording: Bool
+    let isOtherBindingBusy: Bool
     let begin: () -> Void
     let cancel: () -> Void
     let commit: (ShortcutDTO) async -> String?
@@ -36,7 +37,7 @@ struct VoiceBindingRecorder: View {
                                 .accessibilityHint("Use the Function modifier by itself")
                         }
                         Button("Record") { diagnostic = nil; begin() }
-                            .accessibilityHint("Capture the next key down, including Escape")
+                            .accessibilityHint("Capture the next key chord; Escape alone cancels")
                         Button("Clear") { submit(.unbound) }
                             .accessibilityHint("Unbind this action")
                     }
@@ -44,7 +45,7 @@ struct VoiceBindingRecorder: View {
             }
             if let diagnostic { Text(diagnostic).font(.caption).foregroundStyle(.red).accessibilityLabel("Binding error: \(diagnostic)") }
         }
-        .disabled(isManaged || isCommitting)
+        .disabled(isManaged || isCommitting || isOtherBindingBusy)
     }
 
     private func captured(_ shortcut: ShortcutDTO) { submit(shortcut) }
