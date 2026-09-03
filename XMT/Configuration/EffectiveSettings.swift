@@ -22,6 +22,34 @@ struct VoiceBindingCaptureLease: Equatable, Sendable {
         let changed = token != nil; token = nil; return changed
     }
 }
+
+/// UI-side transaction paired with the routing lease. A newly inserted placeholder
+/// is provisional until commit; cancellation/failure restores the exact prior list.
+/// Tokens also prevent an old async completion from concluding a newer operation.
+struct VoiceBindingCaptureTransaction: Equatable, Sendable {
+    struct Rollback: Equatable, Sendable { let action: VoiceBindingAction; let bindings: [ShortcutDTO] }
+    private(set) var token: VoiceBindingCaptureLease.Token?
+    private var rollback: Rollback?
+
+    mutating func begin(token: VoiceBindingCaptureLease.Token, rollback: Rollback? = nil) {
+        self.token = token
+        self.rollback = rollback
+    }
+
+    mutating func conclude(token candidate: VoiceBindingCaptureLease.Token, committed: Bool) -> Rollback? {
+        guard token == candidate else { return nil }
+        token = nil
+        defer { rollback = nil }
+        return committed ? nil : rollback
+    }
+
+    mutating func cancelAll() -> Rollback? {
+        guard token != nil else { return nil }
+        token = nil
+        defer { rollback = nil }
+        return rollback
+    }
+}
 enum VoiceBindingPolicyError: Error, Equatable, Sendable { case modifierOnlyRequiresHold; case unsafeUnmodifiedKey }
 struct VoiceBindingPolicy {
     struct LocatedBinding: Equatable, Sendable {

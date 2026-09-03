@@ -5,9 +5,13 @@ struct VoiceSettingsView: View {
     @ObservedObject private var module = VoiceTranscriptionModule.shared
     @State private var lists: [VoiceBindingAction: [ShortcutDTO]] = [:]
     @State private var active: Row?
-    @State private var captureToken: VoiceBindingCaptureLease.Token?
+    @State private var transaction = VoiceBindingCaptureTransaction()
 
-    private struct Row: Equatable { let action: VoiceBindingAction; let index: Int }
+    private struct Row: Equatable {
+        let action: VoiceBindingAction
+        let index: Int
+        let token: VoiceBindingCaptureLease.Token
+    }
 
     var body: some View {
         Form {
@@ -53,25 +57,50 @@ struct VoiceSettingsView: View {
             Section("Input priority") { DevicePriorityListView(module: module, priorityManaged: module.managedKeys.contains(.inputDevicePriority), fallbackManaged: module.managedKeys.contains(.fallbackToSystemDefault)) }
             Section("Configuration") { Button("Reload Configuration") { module.reloadConfig() }; if let diagnostic = module.configDiagnostic { Text(diagnostic).foregroundStyle(.red) } }
         }.formStyle(.grouped).onAppear { module.refreshDevices(); module.refreshLocalesAndAssets(); reloadLists() }
-          .onDisappear { module.cancelVoiceBindingCapture(); active = nil; captureToken = nil }
+          .onDisappear {
+              apply(transaction.cancelAll())
+              module.cancelVoiceBindingCapture()
+              active = nil
+          }
     }
 
     private func bindingRow(action: VoiceBindingAction, index: Int, binding: ShortcutDTO) -> some View {
         VoiceBindingRecorder(title: "Binding \(index + 1)", action: action, value: binding, isManaged: isManaged(action),
-            isRecording: active == Row(action: action, index: index), isOtherBindingBusy: active != nil && active != Row(action: action, index: index),
-            begin: { begin(action, index) }, cancel: { finishCapture() },
+            isRecording: active?.action == action && active?.index == index,
+            isOtherBindingBusy: active != nil && !(active?.action == action && active?.index == index),
+            begin: { begin(action, index) }, cancel: {
+                if let token = active?.token { finishCapture(token, committed: false) }
+            },
             commit: { value in
+                guard let token = active?.token else { return "This capture is no longer active." }
                 var candidate = lists[action] ?? []; candidate[index] = value
                 if value == .unbound { candidate.remove(at: index) }
                 let diagnostic = await module.commitVoiceBindings(candidate, action: action)
                 if diagnostic == nil { lists[action] = candidate }
-                finishCapture(); return diagnostic
+                finishCapture(token, committed: diagnostic == nil)
+                return diagnostic
             }, didCommit: { _ in })
     }
 
-    private func begin(_ action: VoiceBindingAction, _ index: Int) { captureToken = module.acquireVoiceBindingCapture(); active = Row(action: action, index: index) }
-    private func finishCapture() { if let token = captureToken { module.releaseVoiceBindingCapture(token) }; captureToken = nil; active = nil }
-    private func add(_ action: VoiceBindingAction) { var values = lists[action] ?? []; values.append(.unbound); lists[action] = values; begin(action, values.count - 1) }
+    private func begin(_ action: VoiceBindingAction, _ index: Int, rollback: VoiceBindingCaptureTransaction.Rollback? = nil) {
+        let token = module.acquireVoiceBindingCapture()
+        transaction.begin(token: token, rollback: rollback)
+        active = Row(action: action, index: index, token: token)
+    }
+    private func finishCapture(_ token: VoiceBindingCaptureLease.Token, committed: Bool) {
+        guard transaction.token == token else { return }
+        apply(transaction.conclude(token: token, committed: committed))
+        module.releaseVoiceBindingCapture(token)
+        active = nil
+    }
+    private func apply(_ rollback: VoiceBindingCaptureTransaction.Rollback?) {
+        if let rollback { lists[rollback.action] = rollback.bindings }
+    }
+    private func add(_ action: VoiceBindingAction) {
+        let previous = lists[action] ?? []
+        var values = previous; values.append(.unbound); lists[action] = values
+        begin(action, values.count - 1, rollback: .init(action: action, bindings: previous))
+    }
     private func remove(_ action: VoiceBindingAction, _ index: Int) { var values = lists[action] ?? []; values.remove(at: index); commit(values, action) }
     private func move(_ action: VoiceBindingAction, _ index: Int, _ delta: Int) { var values = lists[action] ?? []; values.swapAt(index, index + delta); commit(values, action) }
     private func commit(_ values: [ShortcutDTO], _ action: VoiceBindingAction) { Task { if await module.commitVoiceBindings(values, action: action) == nil { lists[action] = values } } }

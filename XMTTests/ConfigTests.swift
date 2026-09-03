@@ -365,6 +365,31 @@ final class ConfigTests: XCTestCase {
         XCTAssertFalse(lease.cancelAll())
     }
 
+    func testAddCaptureCancelRollsBackPlaceholderAndStaleCompletionCannotTouchNewOperation() {
+        var routingLease = VoiceBindingCaptureLease()
+        var transaction = VoiceBindingCaptureTransaction()
+        let original: [ShortcutDTO] = [.fnChord(key: "h")]
+
+        let addToken = routingLease.acquire()
+        transaction.begin(token: addToken, rollback: .init(action: .holdToTalk, bindings: original))
+        var displayed = original + [.unbound]
+        if let rollback = transaction.conclude(token: addToken, committed: false) {
+            displayed = rollback.bindings
+        }
+        XCTAssertEqual(displayed, original, "cancelling Add must remove its provisional row")
+        XCTAssertTrue(routingLease.release(addToken))
+
+        let oldToken = routingLease.acquire()
+        transaction.begin(token: oldToken)
+        let newToken = routingLease.acquire()
+        transaction.begin(token: newToken, rollback: .init(action: .cancel, bindings: []))
+        XCTAssertNil(transaction.conclude(token: oldToken, committed: true))
+        XCTAssertEqual(transaction.token, newToken, "an old operation completion must not conclude the current transaction")
+        XCTAssertFalse(routingLease.release(oldToken), "an old operation completion must not restore live routing")
+        XCTAssertNotNil(transaction.conclude(token: newToken, committed: false))
+        XCTAssertTrue(routingLease.release(newToken))
+    }
+
     func testCanonicalOrderedBindingArraysAndSingularMigration() throws {
         let file = try decode(#"{"version":1,"voice":{"holdToTalkBindings":[{"type":"fnChord","key":"h"},{"key":"k","modifiers":["control"]}],"toggleRecordingShortcut":{"type":"fnChord","key":"t"}}}"#)
         XCTAssertEqual(file.voice.holdToTalkBindings, [.fnChord(key: "h"), .key(key: "k", modifiers: ["control"])])
