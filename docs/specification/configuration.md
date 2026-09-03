@@ -28,9 +28,9 @@ The document is a JSON object with a required integer `version`. The only suppor
   },
   "voice": {
     "enabled": true,
-    "holdToTalkShortcut": { "type": "modifierHold", "modifier": "fn" },
-    "toggleRecordingShortcut": { "type": "fnChord", "key": "space" },
-    "cancelShortcut": { "type": "fnChord", "key": "escape" },
+    "holdToTalkBindings": [{ "type": "modifierHold", "modifier": "fn" }],
+    "toggleRecordingBindings": [{ "type": "fnChord", "key": "space" }],
+    "cancelBindings": [{ "type": "fnChord", "key": "escape" }],
     "pasteLatestTranscriptShortcut": { "type": "key", "key": "v", "modifiers": ["control", "command"] },
     "outputMode": "pasteImmediately",
     "history": {
@@ -56,7 +56,9 @@ A shortcut is one of four shapes, distinguished by `type`:
 - `key` — a `key` name plus an optional `modifiers` array drawn from `command`, `control`, `option`, and `shift`. Key names cover digits, letters, `f1` through `f20`, and named keys such as `space`, `return`, `tab`, `escape`, `delete`, `forwarddelete`, the arrows, `home`, `end`, `pageup`, `pagedown`, and the punctuation keys. Names are case-insensitive.
 - `modifierHold` — the modifier name `fn` or its alias `function`. Only Voice hold-to-talk accepts this shape, and only for Fn.
 - `fnChord` — a supported `key` name combined with the physical Fn modifier. Voice actions accept this shape.
-- `unbound` — an explicit absence of a binding for any Voice action. For example, setting all three Voice action fields to `{ "type": "unbound" }` corresponds to the empty Voice binding list in Settings; adding a row writes that action's concrete shortcut value.
+- `unbound` — the legacy scalar representation of an absent Voice binding.
+
+The canonical `holdToTalkBindings`, `toggleRecordingBindings`, and `cancelBindings` fields are ordered arrays of these values. An empty array explicitly unbinds that action and does not fall through to local or built-in defaults. For one release, the singular `holdToTalkShortcut`, `toggleRecordingShortcut`, and `cancelShortcut` fields (and the older `shortcut` hold alias) decode as one-item arrays; encoding emits arrays only.
 
 When `type` is omitted, a document containing `modifier` is read as a modifier hold and anything else as a key shortcut. A modifier hold is deliberately not representable as a key shortcut with optional bits.
 
@@ -65,7 +67,7 @@ When `type` is omitted, a document containing `modifier` is read as a modifier h
 Decoding is all-or-nothing: a document is decoded, version-checked, and fully validated before any value is published. Diagnostics distinguish an unreadable file, malformed JSON with the failing coding path, an unsupported version, and an invalid value with its path and reason. The validated constraints are:
 
 - `windowMover.shortcut` MUST be a key shortcut — a modifier hold is rejected for Window Mover — and MUST convert to a real key and modifier set.
-- The three Voice action bindings accept an Fn chord, an ordinary key chord, or unbound; hold-to-talk additionally accepts an Fn modifier hold. Hold and Toggle standard key chords require at least one of Control, Option, or Command. Bare and Shift-only chords are rejected because their always-ready registration could intercept normal typing; Shift may additionally accompany one of those safe modifiers. `voice.cancelShortcut` accepts any key chord, including bare Escape, because it is registered only during arming or recording; it also accepts unbound. Fn modifier-only is rejected for toggle/cancel. The former `voice.shortcut` decodes as a compatibility alias for hold-to-talk.
+- Each Voice action array accepts Fn chords or ordinary key chords; hold-to-talk additionally accepts an Fn modifier hold. Hold and Toggle standard key chords require at least one of Control, Option, or Command. Bare and Shift-only chords are rejected because their always-ready registration could intercept normal typing; Shift may additionally accompany one of those safe modifiers. Cancel accepts any key chord, including bare Escape, because it is registered only during arming or recording. Fn modifier-only is rejected for toggle/cancel. Exact duplicates within an action and conflicts across actions, Window Mover, or Paste Latest reject the entire candidate. Bare Fn hold intentionally remains compatible with Fn chords.
 - `voice.pasteLatestTranscriptShortcut` MUST be a key shortcut that converts to a real key and modifier set; modifier holds are rejected.
 - `voice.history.retentionDays` and `voice.history.maxEntries` MUST each be at least 1.
 - `voice.keepLastTranscript` is a decode-only compatibility alias for `voice.history.enabled` for one release. Supplying both keys rejects the complete candidate, even when their Boolean values agree; encoding emits only the canonical `history` object.

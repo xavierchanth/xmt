@@ -8,7 +8,7 @@ Two modules are built in.
 
 **Window Mover** — a global shortcut (default **Option-Space**) that moves the focused window to the next display, wrapping around, preserving relative geometry, and handling native full-screen windows. Specified in [the Window Mover specification](docs/specification/window-mover.md).
 
-**Voice Transcription** — hold **Fn** to dictate, press **Fn-Space** to latch recording on and off, or press **Fn-Escape** to cancel; the accessible Voice binding list supports adding, editing, removing, and reordering the three actions, and may be empty. Speech is analyzed on device with macOS 26's `SpeechAnalyzer`, the transcript goes to the clipboard and optionally pastes itself into the focused input, and an interrupted recording is kept so it can be retried once. Specified in [the Voice Transcription specification](docs/specification/voice-transcription.md). It is implemented and integrated but **has not yet been validated against real microphone, Speech, or paste behavior**; see [validation gaps](docs/roadmap/README.md#voice-transcription-validation-gaps) before relying on it.
+**Voice Transcription** — hold **Fn** to dictate, press **Fn-Space** to latch recording on and off, or press **Fn-Escape** to cancel; each action owns an ordered, accessible list of zero or more bindings with add, edit, remove, and reorder controls. Speech is analyzed on device with macOS 26's `SpeechAnalyzer`, the transcript goes to the clipboard and optionally pastes itself into the focused input, and an interrupted recording is kept so it can be retried once. Specified in [the Voice Transcription specification](docs/specification/voice-transcription.md). It is implemented and integrated but **has not yet been validated against real microphone, Speech, or paste behavior**; see [validation gaps](docs/roadmap/README.md#voice-transcription-validation-gaps) before relying on it.
 
 Supporting behavior:
 
@@ -56,7 +56,7 @@ Once running, XMT opens Settings and also requests a menu-bar item. macOS 26 can
 
 ## Testing
 
-`XMTTests` contains unit tests for window geometry, trigger arbitration, the voice session reducer, input-device selection and the bounded audio queue, recovery reconciliation, transcript commit ordering, and configuration decoding, precedence, and reload. Run them through the shared `XMT` scheme with `just test`; `just check` runs both tests and documentation checks. Capture, speech analysis, the event tap, and the SwiftUI surfaces are not covered.
+`XMTTests` contains unit tests for window geometry, trigger arbitration and binding ownership, multi-binding routing and list editing, the voice session reducer, input-device selection and the bounded audio queue, recovery reconciliation, transcript commit ordering, and configuration decoding, migration, precedence, and reload. Run them through the shared `XMT` scheme with `just test`; `just check` runs both tests and documentation checks. Capture, speech analysis, the event tap, and the SwiftUI surfaces are not covered.
 
 ## Documentation checks
 
