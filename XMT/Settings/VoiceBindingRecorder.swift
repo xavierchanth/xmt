@@ -82,9 +82,9 @@ private struct KeyDownCaptureView: NSViewRepresentable {
         let captured: (ShortcutDTO) -> Void; let unsupported: () -> Void
         var decoder = VoiceBindingCaptureDecoder()
         init(captured: @escaping (ShortcutDTO) -> Void, unsupported: @escaping () -> Void) { self.captured = captured; self.unsupported = unsupported }
-        func flagsChanged(_ event: NSEvent) { deliver(decoder.flagsChanged(Self.modifiers(event.modifierFlags))) }
+        func flagsChanged(_ event: NSEvent) { deliver(decoder.flagsChanged(Self.modifiers(event))) }
         func keyDown(_ event: NSEvent) {
-            deliver(decoder.keyDown(keyCode: event.keyCode, modifiers: Self.modifiers(event.modifierFlags), isRepeat: event.isARepeat))
+            deliver(decoder.keyDown(keyCode: event.keyCode, modifiers: Self.modifiers(event), isRepeat: event.isARepeat))
         }
         private func deliver(_ output: VoiceBindingCaptureDecoder.Output) {
             switch output {
@@ -93,14 +93,18 @@ private struct KeyDownCaptureView: NSViewRepresentable {
             case .ignored: break
             }
         }
-        private static func modifiers(_ flags: NSEvent.ModifierFlags) -> VoiceBindingCaptureDecoder.Modifiers {
-            let flags = flags.intersection(.deviceIndependentFlagsMask)
+        private static func modifiers(_ event: NSEvent) -> VoiceBindingCaptureDecoder.Modifiers {
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             var decoded: VoiceBindingCaptureDecoder.Modifiers = []
             if flags.contains(.control) { decoded.insert(.control) }
             if flags.contains(.option) { decoded.insert(.option) }
             if flags.contains(.shift) { decoded.insert(.shift) }
             if flags.contains(.command) { decoded.insert(.command) }
-            if flags.contains(.function) { decoded.insert(.function) }
+            // Some keyboards expose Globe/Fn only through the underlying CGEvent.
+            // Both properties are public API; accept either representation.
+            if flags.contains(.function) || event.cgEvent?.flags.contains(.maskSecondaryFn) == true {
+                decoded.insert(.function)
+            }
             return decoded
         }
     }
