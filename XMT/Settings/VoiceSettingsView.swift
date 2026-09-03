@@ -44,7 +44,7 @@ struct VoiceSettingsView: View {
                     showingDefaultBindingConfirmation = true
                 }
                 .disabled(module.hasManagedVoiceBindings || active != nil || isRestoringDefaultBindings)
-                Text("Restores Hold to Talk to Fn, Toggle Recording to Fn–Space, and Cancel to Fn–Escape. Disabled when any Voice binding list is managed by configuration.")
+                Text("Validates and publishes Hold to Talk as Fn, Toggle Recording as Fn–Space, and Cancel as Fn–Escape together. Disabled when any Voice binding list is managed by configuration.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section("Permissions and speech assets") {
@@ -72,7 +72,7 @@ struct VoiceSettingsView: View {
               Button("Restore", role: .destructive) { restoreDefaultBindings() }
                   .disabled(module.hasManagedVoiceBindings)
           } message: {
-              Text("This replaces all three customized Voice binding lists. No other setting is changed.")
+              Text("After validating the complete replacement, XMT publishes all three Voice binding lists together. No other setting is changed. Preferences storage is not a crash-safe transaction.")
           }
           .alert(
               "Couldn’t Restore Default Bindings",

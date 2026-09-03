@@ -346,9 +346,9 @@ final class VoiceTranscriptionModule: ObservableObject {
         !VoiceBindingRestorePolicy.allows(managedKeys: managedKeys)
     }
 
-    /// Restores all three Voice binding lists in the same serialized, validated
-    /// publication. Persistence does not begin until the current config file has
-    /// confirmed that every list is unmanaged and the complete snapshot is valid.
+    /// Restores all three Voice binding lists through one serialized, validated publication.
+    /// Validation failure publishes none of the candidate settings. The preceding UserDefaults
+    /// writes are individual persistence operations, not a crash-transactional commit.
     func restoreDefaultBindings() async -> String? {
         let previous = bindingCommitTail
         let operation = Task { @MainActor [weak self] () -> String? in
