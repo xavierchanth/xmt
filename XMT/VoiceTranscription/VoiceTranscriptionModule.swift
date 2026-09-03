@@ -832,10 +832,18 @@ final class VoiceTranscriptionModule: ObservableObject {
     private func registerStandardBinding(_ name: KeyboardShortcuts.Name, source: VoiceBindingRouter.Source,
                                          action: VoiceBindingRouter.Action) {
         KeyboardShortcuts.onKeyDown(for: name) { [weak self] in
-            Task { @MainActor in guard let self else { return }; self.routeBindingEvents(self.bindingRouter.receive(.down(source, action))) }
+            let generation = MainActor.assumeIsolated { self?.bindingRouter.generation }
+            Task { @MainActor in
+                guard let self, let generation else { return }
+                self.routeBindingEvents(self.bindingRouter.receive(.down(source, action), generation: generation))
+            }
         }
         KeyboardShortcuts.onKeyUp(for: name) { [weak self] in
-            Task { @MainActor in guard let self else { return }; self.routeBindingEvents(self.bindingRouter.receive(.up(source))) }
+            let generation = MainActor.assumeIsolated { self?.bindingRouter.generation }
+            Task { @MainActor in
+                guard let self, let generation else { return }
+                self.routeBindingEvents(self.bindingRouter.receive(.up(source), generation: generation))
+            }
         }
     }
 

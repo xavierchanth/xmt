@@ -16,9 +16,13 @@ struct VoiceBindingRouter: Equatable {
 
     private(set) var pressed: Set<Source> = []
     private(set) var holdOwner: Source?
+    private(set) var generation: UInt64 = 0
 
     /// Key repeat is deliberately collapsed to one request per physical press.
-    mutating func receive(_ input: Input) -> [Event] {
+    /// A supplied generation belongs to the callback that observed the physical event;
+    /// queued callbacks from an older registration configuration are inert.
+    mutating func receive(_ input: Input, generation callbackGeneration: UInt64? = nil) -> [Event] {
+        guard callbackGeneration == nil || callbackGeneration == generation else { return [] }
         switch input {
         case let .down(source, action):
             guard pressed.insert(source).inserted else { return [] }
@@ -45,5 +49,9 @@ struct VoiceBindingRouter: Equatable {
 
     /// Reconfiguration is an interruption boundary. In particular, a release
     /// from an old registration can never terminate a later hold.
-    mutating func reconfigure() -> [Event] { receive(.interrupted) }
+    mutating func reconfigure() -> [Event] {
+        let events = receive(.interrupted)
+        generation &+= 1
+        return events
+    }
 }

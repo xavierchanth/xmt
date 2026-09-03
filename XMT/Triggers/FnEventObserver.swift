@@ -28,12 +28,12 @@ struct FnPhysicalEventMapper {
         guard let action = chords[code] else { return .init(input: isRepeat ? nil : .otherKeyDown, consumesEvent: false) }
         let first = consumedKeys[code] == nil
         consumedKeys[code] = action
-        return .init(input: first && !isRepeat ? .chordDown(action) : nil, consumesEvent: true)
+        return .init(input: first && !isRepeat ? .chordDown(source: code, action: action) : nil, consumesEvent: true)
     }
 
     mutating func keyUp(code: Int64) -> FnEventMapping {
         guard let action = consumedKeys.removeValue(forKey: code) else { return .init(input: nil, consumesEvent: false) }
-        return .init(input: .chordUp(action), consumesEvent: true)
+        return .init(input: .chordUp(source: code, action: action), consumesEvent: true)
     }
 
     mutating func interrupt() { fnIsDown = false; consumedKeys.removeAll() }

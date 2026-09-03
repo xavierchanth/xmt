@@ -100,8 +100,8 @@ final class TriggerArbitratorTests: XCTestCase {
         var mapper = FnPhysicalEventMapper()
         _ = mapper.fnChanged(isDown: true)
         XCTAssertEqual(mapper.keyDown(code: 49, isRepeat: false),
-                       .init(input: .chordDown(.toggle), consumesEvent: true))
-        XCTAssertEqual(mapper.keyUp(code: 49), .init(input: .chordUp(.toggle), consumesEvent: true))
+                       .init(input: .chordDown(source: 49, action: .toggle), consumesEvent: true))
+        XCTAssertEqual(mapper.keyUp(code: 49), .init(input: .chordUp(source: 49, action: .toggle), consumesEvent: true))
     }
 
     func testPhysicalMapperConsumesSpaceUpAfterFnRelease() {
@@ -139,16 +139,16 @@ final class TriggerArbitratorTests: XCTestCase {
     }
 
     func testConfiguredDefaultChordsCoexistWithBareHold() {
-        assertSequence([.fnDown, .chordDown(.toggle), .chordUp(.toggle), .fnUp], state: .idle, events: [.toggleRequested])
-        assertSequence([.fnDown, .chordDown(.cancel), .chordUp(.cancel), .fnUp], state: .idle, events: [.cancelRequested])
-        assertSequence([.fnDown, .holdThresholdElapsed, .chordDown(.cancel), .fnUp], state: .idle,
+        assertSequence([.fnDown, .chordDown(source: 49, action: .toggle), .chordUp(source: 49, action: .toggle), .fnUp], state: .idle, events: [.toggleRequested])
+        assertSequence([.fnDown, .chordDown(source: 53, action: .cancel), .chordUp(source: 53, action: .cancel), .fnUp], state: .idle, events: [.cancelRequested])
+        assertSequence([.fnDown, .holdThresholdElapsed, .chordDown(source: 53, action: .cancel), .fnUp], state: .idle,
                        events: [.pushToTalkBegan, .cancelRequested, .pushToTalkEnded])
     }
 
     func testChordHoldInitiatingKeyOwnsReleaseWhenFnReleasedFirst() {
-        assertSequence([.fnDown, .chordDown(.hold), .fnUp], state: .chordHoldActive,
+        assertSequence([.fnDown, .chordDown(source: 53, action: .hold), .fnUp], state: .chordHoldActive,
                        events: [.pushToTalkBegan])
-        assertSequence([.fnDown, .chordDown(.hold), .fnUp, .chordUp(.hold)], state: .idle,
+        assertSequence([.fnDown, .chordDown(source: 53, action: .hold), .fnUp, .chordUp(source: 53, action: .hold)], state: .idle,
                        events: [.pushToTalkBegan, .pushToTalkEnded])
     }
 
@@ -175,6 +175,30 @@ final class TriggerArbitratorTests: XCTestCase {
         XCTAssertEqual(router.receive(.up(owner)), [])
     }
 
+    func testFnChordHoldIgnoresEveryNonOwningReleaseInArbitraryOrder() {
+        assertSequence([
+            .fnDown,
+            .chordDown(source: 53, action: .hold),
+            .chordDown(source: 49, action: .hold),
+            .chordUp(source: 49, action: .hold),
+            .chordUp(source: 36, action: .toggle),
+            .fnUp,
+            .chordUp(source: 53, action: .hold)
+        ], state: .idle, events: [.pushToTalkBegan, .pushToTalkEnded])
+    }
+
+    func testBindingRouterGenerationMakesQueuedCallbacksHarmless() {
+        var router = VoiceBindingRouter()
+        let oldGeneration = router.generation
+        let owner = VoiceBindingRouter.Source("slot.0")
+        XCTAssertEqual(router.reconfigure(), [])
+        XCTAssertEqual(router.receive(.down(owner, .hold), generation: oldGeneration), [])
+        XCTAssertEqual(router.receive(.up(owner), generation: oldGeneration), [])
+        XCTAssertNil(router.holdOwner)
+        XCTAssertTrue(router.pressed.isEmpty)
+        XCTAssertEqual(router.receive(.down(owner, .hold), generation: router.generation), [.holdBegan])
+    }
+
     func testBindingRouterInterruptionEndsHoldExactlyOnce() {
         var router = VoiceBindingRouter()
         let source = VoiceBindingRouter.Source("fn.escape")
@@ -186,17 +210,17 @@ final class TriggerArbitratorTests: XCTestCase {
     func testConfiguredFnHoldBalancesOnKeyUpAndInterruption() {
         var mapper = FnPhysicalEventMapper(chords: [53: .hold])
         _ = mapper.fnChanged(isDown: true)
-        XCTAssertEqual(mapper.keyDown(code: 53, isRepeat: false).input, .chordDown(.hold))
+        XCTAssertEqual(mapper.keyDown(code: 53, isRepeat: false).input, .chordDown(source: 53, action: .hold))
         XCTAssertNil(mapper.keyDown(code: 53, isRepeat: true).input)
-        XCTAssertEqual(mapper.keyUp(code: 53).input, .chordUp(.hold))
-        assertSequence([.fnDown, .chordDown(.hold), .chordUp(.hold)], state: .idle,
+        XCTAssertEqual(mapper.keyUp(code: 53).input, .chordUp(source: 53, action: .hold))
+        assertSequence([.fnDown, .chordDown(source: 53, action: .hold), .chordUp(source: 53, action: .hold)], state: .idle,
                        events: [.pushToTalkBegan, .pushToTalkEnded])
-        assertSequence([.fnDown, .chordDown(.hold), .tapDisabled], state: .idle,
+        assertSequence([.fnDown, .chordDown(source: 53, action: .hold), .tapDisabled], state: .idle,
                        events: [.pushToTalkBegan, .pushToTalkEnded])
     }
 
     private let inputs: [TriggerInput] = [
-        .fnDown, .fnUp, .spaceDown, .chordDown(.toggle), .chordUp(.toggle), .otherKeyDown, .holdThresholdElapsed,
+        .fnDown, .fnUp, .spaceDown, .chordDown(source: 49, action: .toggle), .chordUp(source: 49, action: .toggle), .otherKeyDown, .holdThresholdElapsed,
         .tapDisabled, .secureInputInterrupted
     ]
 
