@@ -342,23 +342,44 @@ final class VoiceTranscriptionModule: ObservableObject {
 
     func reloadConfig() { Task { await loadConfig() } }
 
-    /// Restores one complete local snapshot after validating it against the file.
-    /// File-managed local shadows are preserved by ConfigReloader and are never
-    /// replaced merely because their controls are currently hidden.
-    func restoreDefaults() async -> String? {
+    var hasManagedVoiceBindings: Bool {
+        !VoiceBindingRestorePolicy.allows(managedKeys: managedKeys)
+    }
+
+    /// Restores all three Voice binding lists in the same serialized, validated
+    /// publication. Persistence does not begin until the current config file has
+    /// confirmed that every list is unmanaged and the complete snapshot is valid.
+    func restoreDefaultBindings() async -> String? {
+        let previous = bindingCommitTail
+        let operation = Task { @MainActor [weak self] () -> String? in
+            _ = await previous?.value
+            guard let self else { return "Voice settings are unavailable." }
+            return await self.performDefaultBindingRestore()
+        }
+        bindingCommitTail = operation
+        return await operation.value
+    }
+
+    private func performDefaultBindingRestore() async -> String? {
+        guard !hasManagedVoiceBindings else {
+            return "Default bindings cannot be restored while a Voice binding list is managed by configuration."
+        }
         guard let reloader else { return "Configuration is not ready." }
+        let builtIn = BuiltInSettings.standard
+        let staged = currentLocalSettings().restoringDefaultVoiceBindings(builtIn)
         do {
-            _ = try await reloader.restoreDefaults(current: currentLocalSettings()) { @MainActor [weak self] result in
-                guard let self else { throw CancellationError() }
-                try self.persistRestoredLocalSettings(result.local, effective: result.effective)
-            }
+            _ = try await reloader.stageAndReload(
+                local: staged,
+                requiringUnmanaged: VoiceBindingAction.allCases,
+                beforePublish: { @MainActor [weak self] _ in
+                    guard let self else { throw CancellationError() }
+                    try self.persistDefaultVoiceBindings(builtIn)
+                }
+            )
             configDiagnostic = nil
             return nil
-        } catch let diagnostic as ConfigDiagnostic {
-            configDiagnostic = diagnostic.userMessage
-            return diagnostic.userMessage
         } catch {
-            let message = "Could not restore defaults: \(error.localizedDescription)"
+            let message = "Could not restore default bindings: \(String(describing: error))"
             configDiagnostic = message
             return message
         }
@@ -423,9 +444,9 @@ final class VoiceTranscriptionModule: ObservableObject {
         switch action { case .holdToTalk: staged.holdToTalkBindings = bindings; case .toggleRecording: staged.toggleRecordingBindings = bindings; case .cancel: staged.cancelBindings = bindings }
         let result: ConfigLoadResult
         do {
-            result = try await reloader.stageAndReload(local: staged, requiringUnmanaged: action)
+            result = try await reloader.stageAndReload(local: staged, requiringUnmanaged: [action])
         } catch let diagnostic as ConfigDiagnostic {
-            configDiagnostic = diagnostic.userMessage; return configDiagnostic
+            configDiagnostic = String(describing: diagnostic); return configDiagnostic
         } catch {
             configDiagnostic = "Could not validate the binding."; return configDiagnostic
         }
@@ -487,8 +508,7 @@ final class VoiceTranscriptionModule: ObservableObject {
         guard let reloader else { return }
         await reloader.updateLocal(currentLocalSettings())
         do { _ = try await reloader.reload(); configDiagnostic = nil }
-        catch let diagnostic as ConfigDiagnostic { configDiagnostic = diagnostic.userMessage }
-        catch { configDiagnostic = error.localizedDescription }
+        catch { configDiagnostic = String(describing: error) }
     }
 
     private func apply(_ value: EffectiveSettings) {
@@ -811,49 +831,23 @@ final class VoiceTranscriptionModule: ObservableObject {
         interpret(machine.handle(VoiceSessionMachine.maximumStopEvent(mode: mode, session: session)))
     }
 
-    private func persistRestoredLocalSettings(_ local: SettingsValues, effective: EffectiveSettings) throws {
+    private func persistDefaultVoiceBindings(_ builtIn: BuiltInSettings) throws {
         let encoder = JSONEncoder()
-        let deviceData = try local.inputDevicePriority.map { try encoder.encode($0) }
-        let holdData = try local.holdToTalkBindings.map { try encoder.encode($0) }
-        let toggleData = try local.toggleRecordingBindings.map { try encoder.encode($0) }
-        let cancelData = try local.cancelBindings.map { try encoder.encode($0) }
+        // Encode every value before mutating persistence, so encoding failure leaves
+        // all three customized lists intact.
+        let encoded: [(key: String, data: Data)] = [
+            ("hold", try encoder.encode(builtIn.holdToTalkBindings)),
+            ("toggle", try encoder.encode(builtIn.toggleRecordingBindings)),
+            ("cancel", try encoder.encode(builtIn.cancelBindings))
+        ]
         let defaults = UserDefaults.standard
-
-        func set(_ value: Any?, forKey key: String) {
-            if let value { defaults.set(value, forKey: key) }
-            else { defaults.removeObject(forKey: key) }
+        for entry in encoded {
+            defaults.set(true, forKey: "voice.binding.\(entry.key).explicit")
+            defaults.set(entry.data, forKey: "voice.binding.\(entry.key).value")
         }
-        func setBindings(_ values: [ShortcutDTO]?, data: Data?, key: String) {
-            defaults.set(values != nil, forKey: "voice.binding.\(key).explicit")
-            set(data, forKey: "voice.binding.\(key).value")
-        }
-
-        WindowMoverModule.shared.prepareLocalRestore(enabled: local.windowMoverEnabled,
-                                                     shortcut: local.windowMoverShortcut,
-                                                     activateShortcut: !effective.windowMoverShortcut.isManaged)
-        unmanagedWindowMoverShortcut = local.windowMoverShortcut.flatMap { try? $0.keyboardShortcut() }
-        set(local.voiceEnabled, forKey: "voice.enabled")
-        set(local.outputMode?.rawValue, forKey: "voice.outputMode")
-        defaults.removeObject(forKey: "voice.autoPaste")
-        set(local.historyEnabled, forKey: VoiceHistoryPreferences.enabledKey)
-        set(local.historyRetentionDays, forKey: VoiceHistoryPreferences.retentionDaysKey)
-        set(local.historyMaxEntries, forKey: VoiceHistoryPreferences.maxEntriesKey)
-        set(local.locale, forKey: "voice.locale")
-        set(local.fnHoldThresholdMs, forKey: "voice.fnHoldThresholdMs")
-        set(local.maxSessionSeconds, forKey: "voice.maxSessionSeconds")
-        set(deviceData, forKey: "voice.devices")
-        set(local.fallbackToSystemDefault, forKey: "voice.fallback")
-        setBindings(local.holdToTalkBindings, data: holdData, key: "hold")
-        setBindings(local.toggleRecordingBindings, data: toggleData, key: "toggle")
-        setBindings(local.cancelBindings, data: cancelData, key: "cancel")
-        unmanagedHoldBindings = local.holdToTalkBindings
-        unmanagedToggleBindings = local.toggleRecordingBindings
-        unmanagedCancelBindings = local.cancelBindings
-        unmanagedPasteLatestShortcut = local.pasteLatestTranscriptShortcut.flatMap { try? $0.keyboardShortcut() }
-        if !effective.pasteLatestTranscriptShortcut.isManaged,
-           KeyboardShortcuts.getShortcut(for: .pasteLatestTranscript) != unmanagedPasteLatestShortcut {
-            KeyboardShortcuts.setShortcut(unmanagedPasteLatestShortcut, for: .pasteLatestTranscript)
-        }
+        unmanagedHoldBindings = builtIn.holdToTalkBindings
+        unmanagedToggleBindings = builtIn.toggleRecordingBindings
+        unmanagedCancelBindings = builtIn.cancelBindings
     }
 
     private func currentLocalSettings() -> SettingsValues {
@@ -870,8 +864,6 @@ final class VoiceTranscriptionModule: ObservableObject {
                               historyRetentionDays: defaults.integer(forKey: VoiceHistoryPreferences.retentionDaysKey),
                               historyMaxEntries: defaults.integer(forKey: VoiceHistoryPreferences.maxEntriesKey),
                               locale: defaults.string(forKey: "voice.locale") ?? "system",
-                              fnHoldThresholdMs: (defaults.object(forKey: "voice.fnHoldThresholdMs") as? NSNumber)?.intValue,
-                              maxSessionSeconds: (defaults.object(forKey: "voice.maxSessionSeconds") as? NSNumber)?.intValue,
                               inputDevicePriority: persistedDevices,
                               fallbackToSystemDefault: defaults.bool(forKey: "voice.fallback"))
     }
@@ -957,7 +949,7 @@ final class VoiceTranscriptionModule: ObservableObject {
                 defaults.removeObject(forKey: "\(persistenceKey).value")
             }
         }
-        let active = binding.value
+        let active = binding.isManaged ? binding.value : (local ?? binding.value)
         for index in 0..<KeyboardShortcuts.Name.voiceBindingSlotCount {
             let dto = index < active.count ? active[index] : .unbound
             KeyboardShortcuts.setShortcut(try? dto.keyboardShortcut(), for: .voiceBindingSlot(action: action, index: index))
@@ -1018,10 +1010,7 @@ final class VoiceTranscriptionModule: ObservableObject {
             defaults.removeObject(forKey: Self.pasteLatestShortcutBackupDataKey)
             defaults.set(false, forKey: Self.pasteLatestShortcutBackupActiveKey)
         } else {
-            unmanagedPasteLatestShortcut = try? shortcut.value.keyboardShortcut()
-            if KeyboardShortcuts.getShortcut(for: .pasteLatestTranscript) != unmanagedPasteLatestShortcut {
-                KeyboardShortcuts.setShortcut(unmanagedPasteLatestShortcut, for: .pasteLatestTranscript)
-            }
+            unmanagedPasteLatestShortcut = KeyboardShortcuts.getShortcut(for: .pasteLatestTranscript)
         }
     }
 

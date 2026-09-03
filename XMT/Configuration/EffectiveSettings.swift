@@ -2,7 +2,23 @@ import Foundation
 
 enum VoiceOutputMode: String, Codable, CaseIterable, Equatable, Sendable { case pasteImmediately, clipboardOnly }
 
-enum VoiceBindingAction: String, Equatable, Sendable { case holdToTalk, toggleRecording, cancel }
+enum VoiceBindingAction: String, CaseIterable, Equatable, Hashable, Sendable {
+    case holdToTalk, toggleRecording, cancel
+
+    var managedKey: EffectiveSettings.Key {
+        switch self {
+        case .holdToTalk: .holdToTalkShortcut
+        case .toggleRecording: .toggleRecordingShortcut
+        case .cancel: .cancelShortcut
+        }
+    }
+}
+
+struct VoiceBindingRestorePolicy {
+    static func allows(managedKeys: Set<EffectiveSettings.Key>) -> Bool {
+        VoiceBindingAction.allCases.allSatisfy { !managedKeys.contains($0.managedKey) }
+    }
+}
 
 /// Single-owner lease used to keep live triggers disabled throughout capture and commit.
 /// Replacing a lease makes every completion carrying the old token harmless.
@@ -240,6 +256,16 @@ struct SettingsValues: Equatable, Sendable {
     var maxSessionSeconds: Int? = nil
     var inputDevicePriority: [InputDeviceDTO]? = nil
     var fallbackToSystemDefault: Bool? = nil
+
+    /// Replaces exactly the three canonical Voice binding lists, retaining every
+    /// other local value (including read-only migration aliases) byte-for-byte.
+    func restoringDefaultVoiceBindings(_ builtIn: BuiltInSettings = .standard) -> Self {
+        var candidate = self
+        candidate.holdToTalkBindings = builtIn.holdToTalkBindings
+        candidate.toggleRecordingBindings = builtIn.toggleRecordingBindings
+        candidate.cancelBindings = builtIn.cancelBindings
+        return candidate
+    }
 }
 
 /// Compile-time defaults are complete, making resolution total and trap-free.
@@ -265,29 +291,6 @@ struct BuiltInSettings: Equatable, Sendable {
     var fallbackToSystemDefault = true
 
     static let standard = BuiltInSettings()
-
-    /// A complete canonical local snapshot. Keeping this conversion beside the
-    /// defaults prevents a restore action from drifting from resolution defaults.
-    var localSnapshot: SettingsValues {
-        SettingsValues(
-            windowMoverEnabled: windowMoverEnabled,
-            windowMoverShortcut: windowMoverShortcut,
-            voiceEnabled: voiceEnabled,
-            holdToTalkBindings: holdToTalkBindings,
-            toggleRecordingBindings: toggleRecordingBindings,
-            cancelBindings: cancelBindings,
-            pasteLatestTranscriptShortcut: pasteLatestTranscriptShortcut,
-            outputMode: outputMode,
-            historyEnabled: historyEnabled,
-            historyRetentionDays: historyRetentionDays,
-            historyMaxEntries: historyMaxEntries,
-            locale: locale,
-            fnHoldThresholdMs: fnHoldThresholdMs,
-            maxSessionSeconds: maxSessionSeconds,
-            inputDevicePriority: inputDevicePriority,
-            fallbackToSystemDefault: fallbackToSystemDefault
-        )
-    }
 }
 
 struct EffectiveSettings: Equatable, Sendable {
@@ -363,66 +366,5 @@ struct EffectiveSettings: Equatable, Sendable {
         if inputDevicePriority != old.inputDevicePriority { result.insert(.inputDevicePriority) }
         if fallbackToSystemDefault != old.fallbackToSystemDefault { result.insert(.fallbackToSystemDefault) }
         return result
-    }
-}
-
-/// Produces one complete restore candidate without modifying values hidden by
-/// configuration management. The UI separately confirms replacement of visible
-/// custom values; managed local shadows are deliberately preserved for later use.
-struct SettingsRestorePlan: Equatable, Sendable {
-    let candidate: SettingsValues
-    let restoredKeys: Set<EffectiveSettings.Key>
-    let preservedManagedKeys: Set<EffectiveSettings.Key>
-
-    static func make(current: SettingsValues, effective: EffectiveSettings,
-                     builtIn: BuiltInSettings = .standard) -> Self {
-        var candidate = current
-        var restored = Set<EffectiveSettings.Key>()
-        var preserved = Set<EffectiveSettings.Key>()
-
-        func choose<T>(_ key: EffectiveSettings.Key, managed: Bool,
-                       _ current: T?, _ fallback: T) -> T? where T: Equatable {
-            if managed { preserved.insert(key); return current }
-            restored.insert(key); return fallback
-        }
-
-        candidate.windowMoverEnabled = choose(.windowMoverEnabled, managed: effective.windowMoverEnabled.isManaged,
-                                               current.windowMoverEnabled, builtIn.windowMoverEnabled)
-        candidate.windowMoverShortcut = choose(.windowMoverShortcut, managed: effective.windowMoverShortcut.isManaged,
-                                                current.windowMoverShortcut, builtIn.windowMoverShortcut)
-        candidate.voiceEnabled = choose(.voiceEnabled, managed: effective.voiceEnabled.isManaged,
-                                         current.voiceEnabled, builtIn.voiceEnabled)
-        candidate.holdToTalkShortcut = nil
-        candidate.holdToTalkBindings = choose(.holdToTalkShortcut, managed: effective.holdToTalkBindings.isManaged,
-                                               current.holdToTalkBindings ?? current.holdToTalkShortcut.map { [$0] }, builtIn.holdToTalkBindings)
-        candidate.toggleRecordingShortcut = nil
-        candidate.toggleRecordingBindings = choose(.toggleRecordingShortcut, managed: effective.toggleRecordingBindings.isManaged,
-                                                     current.toggleRecordingBindings ?? current.toggleRecordingShortcut.map { [$0] }, builtIn.toggleRecordingBindings)
-        candidate.cancelShortcut = nil
-        candidate.cancelBindings = choose(.cancelShortcut, managed: effective.cancelBindings.isManaged,
-                                           current.cancelBindings ?? current.cancelShortcut.map { [$0] }, builtIn.cancelBindings)
-        candidate.pasteLatestTranscriptShortcut = choose(.pasteLatestTranscriptShortcut, managed: effective.pasteLatestTranscriptShortcut.isManaged,
-                                                          current.pasteLatestTranscriptShortcut, builtIn.pasteLatestTranscriptShortcut)
-        candidate.autoPaste = nil
-        candidate.outputMode = choose(.outputMode, managed: effective.outputMode.isManaged,
-                                      current.outputMode ?? current.autoPaste.map { $0 ? .pasteImmediately : .clipboardOnly }, builtIn.outputMode)
-        if effective.outputMode.isManaged { preserved.insert(.autoPaste) }
-        else { restored.insert(.autoPaste) }
-        candidate.historyEnabled = choose(.historyEnabled, managed: effective.historyEnabled.isManaged,
-                                          current.historyEnabled, builtIn.historyEnabled)
-        candidate.historyRetentionDays = choose(.historyRetentionDays, managed: effective.historyRetentionDays.isManaged,
-                                                current.historyRetentionDays, builtIn.historyRetentionDays)
-        candidate.historyMaxEntries = choose(.historyMaxEntries, managed: effective.historyMaxEntries.isManaged,
-                                             current.historyMaxEntries, builtIn.historyMaxEntries)
-        candidate.locale = choose(.locale, managed: effective.locale.isManaged, current.locale, builtIn.locale)
-        candidate.fnHoldThresholdMs = choose(.fnHoldThresholdMs, managed: effective.fnHoldThresholdMs.isManaged,
-                                             current.fnHoldThresholdMs, builtIn.fnHoldThresholdMs)
-        candidate.maxSessionSeconds = choose(.maxSessionSeconds, managed: effective.maxSessionSeconds.isManaged,
-                                             current.maxSessionSeconds, builtIn.maxSessionSeconds)
-        candidate.inputDevicePriority = choose(.inputDevicePriority, managed: effective.inputDevicePriority.isManaged,
-                                               current.inputDevicePriority, builtIn.inputDevicePriority)
-        candidate.fallbackToSystemDefault = choose(.fallbackToSystemDefault, managed: effective.fallbackToSystemDefault.isManaged,
-                                                   current.fallbackToSystemDefault, builtIn.fallbackToSystemDefault)
-        return .init(candidate: candidate, restoredKeys: restored, preservedManagedKeys: preserved)
     }
 }

@@ -40,7 +40,7 @@ With [`just`](https://github.com/casey/just) installed, build a Release app and 
 just install
 ```
 
-That recipe quits a running copy, replaces `/Applications/XMT.app`, and launches the result. Replacing the app does not remove preferences from an existing installation because macOS retains them for XMT’s bundle identifier. To return Window Mover and Voice to the documented built-ins, use the confirmed **Restore All Defaults…** action in General settings; configuration-managed values and their saved local shadows are preserved. Open `Settings...` from the menu bar icon to configure each module and grant its permissions contextually.
+That recipe quits a running copy, replaces `/Applications/XMT.app`, and launches the result. Existing preferences remain in place across replacement; the Voice settings action **Restore Default Bindings** can restore Fn, Fn-Space, and Fn-Escape together after confirmation. Open `Settings...` from the menu bar icon to configure each module and grant its permissions contextually.
 
 To build and launch without installing:
 

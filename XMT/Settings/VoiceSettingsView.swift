@@ -6,6 +6,9 @@ struct VoiceSettingsView: View {
     @State private var lists: [VoiceBindingAction: [ShortcutDTO]] = [:]
     @State private var active: Row?
     @State private var transaction = VoiceBindingCaptureTransaction()
+    @State private var showingDefaultBindingConfirmation = false
+    @State private var isRestoringDefaultBindings = false
+    @State private var defaultBindingRestoreError: String?
 
     private struct Row: Equatable {
         let action: VoiceBindingAction
@@ -20,7 +23,7 @@ struct VoiceSettingsView: View {
                 Text("Each action can have several standard or Fn bindings.").font(.footnote).foregroundStyle(.secondary)
             }
             Section("Voice bindings") {
-                ForEach(VoiceBindingAction.all, id: \.self) { action in
+                ForEach(VoiceBindingAction.allCases, id: \.self) { action in
                     VStack(alignment: .leading, spacing: 6) {
                         Text(action.title).font(.headline)
                         ForEach(Array((lists[action] ?? []).enumerated()), id: \.offset) { index, binding in
@@ -37,6 +40,12 @@ struct VoiceSettingsView: View {
                     }
                 }
                 Text("Escape, Control–Escape, and Fn–Escape are bindable. Use the on-screen Cancel button to stop capture.").font(.footnote).foregroundStyle(.secondary)
+                Button("Restore Default Bindings", role: .destructive) {
+                    showingDefaultBindingConfirmation = true
+                }
+                .disabled(module.hasManagedVoiceBindings || active != nil || isRestoringDefaultBindings)
+                Text("Restores Hold to Talk to Fn, Toggle Recording to Fn–Space, and Cancel to Fn–Escape. Disabled when any Voice binding list is managed by configuration.")
+                    .font(.footnote).foregroundStyle(.secondary)
             }
             Section("Permissions and speech assets") {
                 HStack { Text("Speech assets: \(module.assetStatus)"); Spacer(); Button("Check") { module.refreshAssets() }; Button("Download") { module.downloadAssets() } }
@@ -58,6 +67,24 @@ struct VoiceSettingsView: View {
             Section("Configuration") { Button("Reload Configuration") { module.reloadConfig() }; if let diagnostic = module.configDiagnostic { Text(diagnostic).foregroundStyle(.red) } }
         }.formStyle(.grouped).onAppear { module.refreshDevices(); module.refreshLocalesAndAssets(); reloadLists() }
           .onChange(of: module.settingsRevision) { reloadLists() }
+          .alert("Restore Default Bindings?", isPresented: $showingDefaultBindingConfirmation) {
+              Button("Cancel", role: .cancel) {}
+              Button("Restore", role: .destructive) { restoreDefaultBindings() }
+                  .disabled(module.hasManagedVoiceBindings)
+          } message: {
+              Text("This replaces all three customized Voice binding lists. No other setting is changed.")
+          }
+          .alert(
+              "Couldn’t Restore Default Bindings",
+              isPresented: Binding(
+                  get: { defaultBindingRestoreError != nil },
+                  set: { if !$0 { defaultBindingRestoreError = nil } }
+              )
+          ) {
+              Button("OK", role: .cancel) {}
+          } message: {
+              Text(defaultBindingRestoreError ?? "The customized bindings were preserved.")
+          }
           .onDisappear {
               apply(transaction.cancelAll())
               module.cancelVoiceBindingCapture()
@@ -105,12 +132,18 @@ struct VoiceSettingsView: View {
     private func remove(_ action: VoiceBindingAction, _ index: Int) { var values = lists[action] ?? []; values.remove(at: index); commit(values, action) }
     private func move(_ action: VoiceBindingAction, _ index: Int, _ delta: Int) { var values = lists[action] ?? []; values.swapAt(index, index + delta); commit(values, action) }
     private func commit(_ values: [ShortcutDTO], _ action: VoiceBindingAction) { Task { if await module.commitVoiceBindings(values, action: action) == nil { lists[action] = values } } }
-    private func reloadLists() { for action in VoiceBindingAction.all { lists[action] = module.effectiveVoiceBindings(for: action) } }
+    private func restoreDefaultBindings() {
+        guard !module.hasManagedVoiceBindings, !isRestoringDefaultBindings else { return }
+        isRestoringDefaultBindings = true
+        Task { @MainActor in
+            defaultBindingRestoreError = await module.restoreDefaultBindings()
+            isRestoringDefaultBindings = false
+        }
+    }
+    private func reloadLists() { for action in VoiceBindingAction.allCases { lists[action] = module.effectiveVoiceBindings(for: action) } }
     private func isManaged(_ action: VoiceBindingAction) -> Bool { module.managedKeys.contains(action.managedKey) }
 }
 
-extension VoiceBindingAction: Hashable {
-    static let all: [Self] = [.holdToTalk, .toggleRecording, .cancel]
+extension VoiceBindingAction {
     var title: String { switch self { case .holdToTalk: "Hold to talk"; case .toggleRecording: "Toggle recording"; case .cancel: "Cancel" } }
-    var managedKey: EffectiveSettings.Key { switch self { case .holdToTalk: .holdToTalkShortcut; case .toggleRecording: .toggleRecordingShortcut; case .cancel: .cancelShortcut } }
 }

@@ -641,179 +641,132 @@ final class ConfigTests: XCTestCase {
         })
         _ = try await loader.reload()
         var staged = local; staged.holdToTalkShortcut = .key(key: "n", modifiers: ["option"])
-        do { _ = try await loader.stageAndReload(local: staged, requiringUnmanaged: .holdToTalk); XCTFail("expected managed rejection") }
+        do { _ = try await loader.stageAndReload(local: staged, requiringUnmanaged: [.holdToTalk]); XCTFail("expected managed rejection") }
         catch { XCTAssertEqual(error as? ConfigDiagnostic, .invalidValue(path: "voice.holdToTalkShortcut", reason: "is managed by configuration")) }
         box.managed = false
         let restored = try await loader.reload()
         XCTAssertEqual(restored.effective.holdToTalkShortcut.value, .key(key: "h", modifiers: ["control"]))
     }
 
-    func testBuiltInLocalSnapshotIsTheExactCompleteFreshDefault() {
-        let builtIn = BuiltInSettings.standard
-        let local = builtIn.localSnapshot
-        let resolved = EffectiveSettings.resolve(config: nil, local: local, builtIn: builtIn)
-
-        XCTAssertEqual(resolved.windowMoverEnabled.value, true)
-        XCTAssertEqual(resolved.windowMoverShortcut.value, .key(key: "space", modifiers: ["option"]))
-        XCTAssertEqual(resolved.voiceEnabled.value, true)
-        XCTAssertEqual(resolved.holdToTalkBindings.value, [.modifierHold("fn")])
-        XCTAssertEqual(resolved.toggleRecordingBindings.value, [.fnChord(key: "space")])
-        XCTAssertEqual(resolved.cancelBindings.value, [.fnChord(key: "escape")])
-        XCTAssertEqual(resolved.pasteLatestTranscriptShortcut.value, .key(key: "v", modifiers: ["control", "command"]))
-        XCTAssertEqual(resolved.outputMode.value, .pasteImmediately)
-        XCTAssertEqual(resolved.historyEnabled.value, true)
-        XCTAssertEqual(resolved.historyRetentionDays.value, 30)
-        XCTAssertEqual(resolved.historyMaxEntries.value, 500)
-        XCTAssertEqual(resolved.locale.value, "system")
-        XCTAssertEqual(resolved.fnHoldThresholdMs.value, 150)
-        XCTAssertEqual(resolved.maxSessionSeconds.value, 300)
-        XCTAssertEqual(resolved.inputDevicePriority.value, [])
-        XCTAssertEqual(resolved.fallbackToSystemDefault.value, true)
-        XCTAssertTrue([resolved.windowMoverEnabled.source, resolved.voiceEnabled.source,
-                       resolved.historyEnabled.source].allSatisfy { $0 == .local })
+    func testDefaultBindingRestorePolicyDisablesForAnyManagedList() {
+        XCTAssertTrue(VoiceBindingRestorePolicy.allows(managedKeys: []))
+        XCTAssertTrue(VoiceBindingRestorePolicy.allows(managedKeys: [.voiceEnabled, .locale]))
+        for action in VoiceBindingAction.allCases {
+            XCTAssertFalse(VoiceBindingRestorePolicy.allows(managedKeys: [action.managedKey]))
+        }
     }
 
-    func testRestorePlanCanonicalizesCustomValuesAndPreservesManagedLocalShadows() throws {
-        var current = SettingsValues()
-        current.windowMoverEnabled = false
-        current.windowMoverShortcut = .key(key: "w", modifiers: ["command"])
-        current.voiceEnabled = false
-        current.holdToTalkShortcut = .key(key: "h", modifiers: ["control"])
-        current.toggleRecordingBindings = []
-        current.cancelBindings = [.key(key: "c", modifiers: ["command"])]
-        current.pasteLatestTranscriptShortcut = .key(key: "p", modifiers: ["command"])
-        current.autoPaste = false
-        current.historyEnabled = false
-        current.historyRetentionDays = 2
-        current.historyMaxEntries = 3
-        current.locale = "fr-FR"
-        current.fnHoldThresholdMs = 200
-        current.maxSessionSeconds = 20
-        current.inputDevicePriority = [.init(name: "Custom mic", uid: "custom")]
-        current.fallbackToSystemDefault = false
+    func testDefaultVoiceBindingCandidateChangesExactlyThreeLists() {
+        var customized = SettingsValues()
+        customized.windowMoverEnabled = false
+        customized.windowMoverShortcut = .key(key: "w", modifiers: ["command"])
+        customized.voiceEnabled = false
+        customized.holdToTalkShortcut = .key(key: "legacy-h", modifiers: ["control"])
+        customized.toggleRecordingShortcut = .key(key: "legacy-t", modifiers: ["control"])
+        customized.cancelShortcut = .key(key: "legacy-c", modifiers: ["control"])
+        customized.holdToTalkBindings = [.key(key: "h", modifiers: ["control"]), .fnChord(key: "h")]
+        customized.toggleRecordingBindings = []
+        customized.cancelBindings = [.key(key: "escape", modifiers: [])]
+        customized.pasteLatestTranscriptShortcut = .key(key: "p", modifiers: ["command"])
+        customized.outputMode = .clipboardOnly
+        customized.historyEnabled = false
+        customized.locale = "fr-FR"
+        customized.inputDevicePriority = [.init(name: "Custom mic", uid: "custom")]
 
-        let unmanaged = SettingsRestorePlan.make(
-            current: current, effective: .resolve(config: nil, local: current))
-        XCTAssertEqual(unmanaged.candidate, BuiltInSettings.standard.localSnapshot)
-        XCTAssertEqual(unmanaged.restoredKeys, Set(EffectiveSettings.Key.allCases))
-        XCTAssertTrue(unmanaged.preservedManagedKeys.isEmpty)
+        var expected = customized
+        expected.holdToTalkBindings = [.modifierHold("fn")]
+        expected.toggleRecordingBindings = [.fnChord(key: "space")]
+        expected.cancelBindings = [.fnChord(key: "escape")]
 
-        let file = try decode(#"{"version":1,"windowMover":{"enabled":true},"voice":{"holdToTalkBindings":[{"type":"modifierHold","modifier":"fn"}],"locale":"de-DE"}}"#)
-        let effective = EffectiveSettings.resolve(config: file, local: current)
-        let mixed = SettingsRestorePlan.make(current: current, effective: effective)
-        XCTAssertEqual(mixed.candidate.windowMoverEnabled, false)
-        XCTAssertEqual(mixed.candidate.holdToTalkBindings, [.key(key: "h", modifiers: ["control"])])
-        XCTAssertEqual(mixed.candidate.locale, "fr-FR")
-        XCTAssertEqual(mixed.candidate.voiceEnabled, true)
-        XCTAssertEqual(mixed.candidate.cancelBindings, BuiltInSettings.standard.cancelBindings)
-        XCTAssertEqual(mixed.preservedManagedKeys, [.windowMoverEnabled, .holdToTalkShortcut, .locale])
+        XCTAssertEqual(customized.restoringDefaultVoiceBindings(), expected)
     }
 
-    func testRestoreDefaultsPublishesOneCompleteSnapshotAndPreservesManagedValues() async throws {
+    func testDefaultVoiceBindingsPersistThenPublishAsOneExactSnapshot() async throws {
         actor Recorder {
+            var events: [String] = []
             var snapshots: [EffectiveSettings] = []
-            var persistedLocal: SettingsValues?
-            func willPersist(_ local: SettingsValues) { persistedLocal = local }
-            func published(_ effective: EffectiveSettings) { snapshots.append(effective) }
-        }
-        final class Box: @unchecked Sendable { var removed = false }
-        let recorder = Recorder(), box = Box()
-        var local = BuiltInSettings.standard.localSnapshot
-        local.windowMoverEnabled = false
-        local.voiceEnabled = false
-        local.outputMode = .clipboardOnly
-        local.historyEnabled = false
-        local.locale = "fr-FR"
-        local.inputDevicePriority = [.init(name: "Custom mic", uid: "custom")]
-        let loader = ConfigReloader(local: local, read: { _ in
-            if box.removed { throw CocoaError(.fileReadNoSuchFile) }
-            return Data(#"{"version":1,"voice":{"locale":"de-DE"}}"#.utf8)
-        })
-        await loader.addApplyCallback { await recorder.published($0.effective) }
-        _ = try await loader.reload()
-
-        let restored = try await loader.restoreDefaults(current: local) {
-            await recorder.willPersist($0.local)
-        }
-        let persistedCandidate = await recorder.persistedLocal
-        let persisted = try XCTUnwrap(persistedCandidate)
-        XCTAssertEqual(persisted, restored.local)
-        XCTAssertTrue(restored.effective.windowMoverEnabled.value)
-        XCTAssertTrue(restored.effective.voiceEnabled.value)
-        XCTAssertEqual(restored.effective.outputMode.value, .pasteImmediately)
-        XCTAssertTrue(restored.effective.historyEnabled.value)
-        XCTAssertEqual(restored.effective.inputDevicePriority.value, [])
-        XCTAssertEqual(restored.effective.locale.value, "de-DE")
-        XCTAssertEqual(restored.local.locale, "fr-FR", "managed local shadow must be preserved")
-        let snapshots = await recorder.snapshots
-        XCTAssertEqual(snapshots.count, 2, "restore publishes exactly one complete snapshot")
-        XCTAssertEqual(snapshots.last, restored.effective)
-
-        box.removed = true
-        let unmanaged = try await loader.reload()
-        XCTAssertEqual(unmanaged.effective.locale.value, "fr-FR", "removing management must reveal the preserved custom value")
-    }
-
-    func testRestoreDefaultsRejectsWholeCandidateBeforePersistenceOrPublication() async throws {
-        actor Counter {
-            var publications = 0
-            var persistenceAttempts = 0
-            func published() { publications += 1 }
-            func persisted() { persistenceAttempts += 1 }
-        }
-        let counter = Counter()
-        var local = BuiltInSettings.standard.localSnapshot
-        local.pasteLatestTranscriptShortcut = .key(key: "p", modifiers: ["command"])
-        let json = #"{"version":1,"windowMover":{"shortcut":{"key":"v","modifiers":["control","command"]}}}"#
-        let loader = ConfigReloader(local: local, read: { _ in Data(json.utf8) })
-        await loader.addApplyCallback { _ in await counter.published() }
-        let accepted = try await loader.reload()
-
-        do {
-            _ = try await loader.restoreDefaults(current: local) { _ in await counter.persisted() }
-            XCTFail("conflicting complete restore was accepted")
-        } catch {
-            XCTAssertEqual(error as? ConfigDiagnostic,
-                           .invalidValue(path: "voice.pasteLatestTranscriptShortcut", reason: "conflicts with windowMover.shortcut"))
-        }
-        let after = await loader.effective
-        let publications = await counter.publications
-        let persistenceAttempts = await counter.persistenceAttempts
-        XCTAssertEqual(after, accepted.effective)
-        XCTAssertEqual(publications, 1)
-        XCTAssertEqual(persistenceAttempts, 0)
-        let reloaded = try await loader.reload()
-        XCTAssertEqual(reloaded.effective.pasteLatestTranscriptShortcut.value,
-                       .key(key: "p", modifiers: ["command"]), "failed restore must retain the old local baseline")
-    }
-
-    func testRestorePersistenceFailureDoesNotPublishOrCommitLocalBaseline() async throws {
-        actor Counter {
-            var publications = 0
-            func published() { publications += 1 }
-        }
-        let counter = Counter()
-        var local = BuiltInSettings.standard.localSnapshot
-        local.voiceEnabled = false
-        let loader = ConfigReloader(local: local, read: { _ in throw CocoaError(.fileReadNoSuchFile) })
-        await loader.addApplyCallback { _ in await counter.published() }
-        _ = try await loader.reload()
-
-        do {
-            _ = try await loader.restoreDefaults(current: local) { _ in throw CocoaError(.fileWriteNoPermission) }
-            XCTFail("persistence failure was accepted")
-        } catch {
-            guard let diagnostic = error as? ConfigDiagnostic,
-                  case .localPersistence = diagnostic else {
-                return XCTFail("unexpected diagnostic: \(error)")
+            func persisted(_ result: ConfigLoadResult) {
+                events.append("persist")
+                snapshots.append(result.effective)
             }
+            func published(_ result: ConfigLoadResult) {
+                events.append("publish")
+                snapshots.append(result.effective)
+            }
+            func reset() { events = []; snapshots = [] }
         }
-        let retained = await loader.effective
-        let publications = await counter.publications
-        XCTAssertFalse(retained.voiceEnabled.value)
-        XCTAssertEqual(publications, 1)
-        let reloaded = try await loader.reload()
-        XCTAssertFalse(reloaded.effective.voiceEnabled.value)
+        let recorder = Recorder()
+        var customized = SettingsValues()
+        customized.voiceEnabled = false
+        customized.holdToTalkBindings = [.key(key: "h", modifiers: ["control"])]
+        customized.toggleRecordingBindings = []
+        customized.cancelBindings = [.key(key: "escape", modifiers: [])]
+        customized.outputMode = .clipboardOnly
+        customized.locale = "fr-FR"
+        let loader = ConfigReloader(local: customized, read: { _ in throw CocoaError(.fileReadNoSuchFile) })
+        await loader.addApplyCallback { await recorder.published($0) }
+        _ = try await loader.reload()
+        await recorder.reset()
+
+        let restored = try await loader.stageAndReload(
+            local: customized.restoringDefaultVoiceBindings(),
+            requiringUnmanaged: VoiceBindingAction.allCases,
+            beforePublish: { await recorder.persisted($0) }
+        )
+
+        XCTAssertEqual(restored.effective.holdToTalkBindings.value, [.modifierHold("fn")])
+        XCTAssertEqual(restored.effective.toggleRecordingBindings.value, [.fnChord(key: "space")])
+        XCTAssertEqual(restored.effective.cancelBindings.value, [.fnChord(key: "escape")])
+        XCTAssertFalse(restored.effective.voiceEnabled.value, "restore must not change other Voice settings")
+        XCTAssertEqual(restored.effective.outputMode.value, .clipboardOnly)
+        XCTAssertEqual(restored.effective.locale.value, "fr-FR")
+        XCTAssertEqual(restored.changedKeys, [.holdToTalkShortcut, .toggleRecordingShortcut, .cancelShortcut])
+        let events = await recorder.events
+        let snapshots = await recorder.snapshots
+        XCTAssertEqual(events, ["persist", "publish"])
+        XCTAssertEqual(snapshots, [restored.effective, restored.effective])
+    }
+
+    func testDefaultVoiceBindingRestoreRejectsIfAnyListIsManaged() async throws {
+        actor Counter {
+            var persistence = 0
+            var publications = 0
+            func persisted() { persistence += 1 }
+            func published() { publications += 1 }
+        }
+        let cases: [(VoiceBindingAction, String, String)] = [
+            (.holdToTalk, #"{"version":1,"voice":{"holdToTalkBindings":[{"type":"modifierHold","modifier":"fn"}]}}"#, "voice.holdToTalkShortcut"),
+            (.toggleRecording, #"{"version":1,"voice":{"toggleRecordingBindings":[{"type":"fnChord","key":"space"}]}}"#, "voice.toggleRecordingShortcut"),
+            (.cancel, #"{"version":1,"voice":{"cancelBindings":[{"type":"fnChord","key":"escape"}]}}"#, "voice.cancelShortcut")
+        ]
+        for (action, json, path) in cases {
+            let counter = Counter()
+            var customized = SettingsValues()
+            customized.holdToTalkBindings = [.key(key: "h", modifiers: ["control"])]
+            customized.toggleRecordingBindings = [.key(key: "t", modifiers: ["control"])]
+            customized.cancelBindings = [.key(key: "c", modifiers: ["control"])]
+            let loader = ConfigReloader(local: customized, read: { _ in Data(json.utf8) })
+            await loader.addApplyCallback { _ in await counter.published() }
+            let accepted = try await loader.reload()
+
+            do {
+                _ = try await loader.stageAndReload(
+                    local: customized.restoringDefaultVoiceBindings(),
+                    requiringUnmanaged: VoiceBindingAction.allCases,
+                    beforePublish: { _ in await counter.persisted() }
+                )
+                XCTFail("managed \(action) restore was accepted")
+            } catch {
+                XCTAssertEqual(error as? ConfigDiagnostic,
+                               .invalidValue(path: path, reason: "is managed by configuration"))
+            }
+            let retained = await loader.effective
+            let persistence = await counter.persistence
+            let publications = await counter.publications
+            XCTAssertEqual(retained, accepted.effective)
+            XCTAssertEqual(persistence, 0)
+            XCTAssertEqual(publications, 1)
+        }
     }
 
 }

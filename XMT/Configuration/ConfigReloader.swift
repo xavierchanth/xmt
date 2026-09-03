@@ -2,7 +2,6 @@ import Foundation
 
 struct ConfigLoadResult: Sendable {
     let effective: EffectiveSettings
-    let local: SettingsValues
     let changedKeys: Set<EffectiveSettings.Key>
 }
 
@@ -46,8 +45,7 @@ actor ConfigReloader {
             await previous?.value
             guard let self else { throw CancellationError() }
             return try await self.performReload(using: self.local, commitLocal: false,
-                                                requiringUnmanaged: nil, restoringDefaults: false,
-                                                beforePublish: nil)
+                                                requiringUnmanaged: [], beforePublish: nil)
         }
         reloadTail = Task { _ = try? await operation.value }
         return try await operation.value
@@ -55,38 +53,22 @@ actor ConfigReloader {
 
     /// Validates a proposed local snapshot against the current file and publishes both only on success.
     /// Failed staging leaves the prior local baseline, effective snapshot, callbacks, and live handlers untouched.
-    func stageAndReload(local staged: SettingsValues, requiringUnmanaged action: VoiceBindingAction? = nil,
+    func stageAndReload(local staged: SettingsValues,
+                        requiringUnmanaged actions: [VoiceBindingAction] = [],
                         beforePublish: BeforePublish? = nil) async throws -> ConfigLoadResult {
         let previous = reloadTail
         let operation = Task { [weak self] () throws -> ConfigLoadResult in
             await previous?.value
             guard let self else { throw CancellationError() }
             return try await self.performReload(using: staged, commitLocal: true,
-                                                requiringUnmanaged: action, restoringDefaults: false,
-                                                beforePublish: beforePublish)
+                                                requiringUnmanaged: actions, beforePublish: beforePublish)
         }
         reloadTail = Task { _ = try? await operation.value }
         return try await operation.value
     }
 
-    /// Restores every unmanaged key as one validated publication. Management is
-    /// derived from the file read by this operation, so a concurrently edited file
-    /// cannot expose and overwrite a stale managed local shadow.
-    func restoreDefaults(current: SettingsValues, beforePublish: BeforePublish? = nil) async throws -> ConfigLoadResult {
-        let previous = reloadTail
-        let operation = Task { [weak self] () throws -> ConfigLoadResult in
-            await previous?.value
-            guard let self else { throw CancellationError() }
-            return try await self.performReload(using: current, commitLocal: true,
-                                                requiringUnmanaged: nil, restoringDefaults: true,
-                                                beforePublish: beforePublish)
-        }
-        reloadTail = Task { _ = try? await operation.value }
-        return try await operation.value
-    }
-
-    private func performReload(using proposedLocal: SettingsValues, commitLocal: Bool,
-                               requiringUnmanaged action: VoiceBindingAction?, restoringDefaults: Bool,
+    private func performReload(using localCandidate: SettingsValues, commitLocal: Bool,
+                               requiringUnmanaged actions: [VoiceBindingAction],
                                beforePublish: BeforePublish?) async throws -> ConfigLoadResult {
         let candidate: ConfigFile?
         do {
@@ -102,14 +84,8 @@ actor ConfigReloader {
             throw diagnostic
         }
 
-        var localCandidate = proposedLocal
-        if restoringDefaults {
-            let management = EffectiveSettings.resolve(config: candidate, local: proposedLocal, builtIn: builtIn)
-            localCandidate = SettingsRestorePlan.make(current: proposedLocal, effective: management,
-                                                      builtIn: builtIn).candidate
-        }
         let next = EffectiveSettings.resolve(config: candidate, local: localCandidate, builtIn: builtIn)
-        if let action {
+        for action in actions {
             let resolved: ResolvedSetting<ShortcutDTO>
             switch action { case .holdToTalk: resolved = next.holdToTalkShortcut; case .toggleRecording: resolved = next.toggleRecordingShortcut; case .cancel: resolved = next.cancelShortcut }
             if resolved.isManaged {
@@ -155,16 +131,8 @@ actor ConfigReloader {
                 lastDiagnostic = diagnostic; throw diagnostic
             }
         }
-        let result = ConfigLoadResult(effective: next, local: localCandidate,
-                                      changedKeys: next.changedKeys(from: effective))
-        if let beforePublish {
-            do { try await beforePublish(result) }
-            catch let diagnostic as ConfigDiagnostic { lastDiagnostic = diagnostic; throw diagnostic }
-            catch {
-                let diagnostic = ConfigDiagnostic.localPersistence(String(describing: error))
-                lastDiagnostic = diagnostic; throw diagnostic
-            }
-        }
+        let result = ConfigLoadResult(effective: next, changedKeys: next.changedKeys(from: effective))
+        if let beforePublish { try await beforePublish(result) }
         if commitLocal { local = localCandidate }
         effective = next
         lastDiagnostic = nil

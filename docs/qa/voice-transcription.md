@@ -72,3 +72,5 @@ Pure and coordinator tests exercise binding decoding, legacy aliases, effective 
 - For Hold to Talk choose Fn and verify the UI, local preference, effective setting, and Fn observer change without relaunch. Verify Fn is not offered for Toggle or Cancel.
 - Attempt bare letters, bare Escape, and Shift-only chords for Hold and Toggle and verify an inline safety diagnostic appears without changing or briefly registering the binding. Verify bare Escape remains accepted for phase-scoped Cancel.
 - Attempt a chord already owned by another Voice action, Window Mover, or Paste Latest and verify the old effective binding and live registration remain unchanged.
+- Customize all three lists, choose **Restore Default Bindings**, and cancel confirmation; verify every customization remains. Confirm on a second attempt and verify one update produces exactly Fn, Fn-Space, and Fn-Escape while all non-binding settings remain unchanged.
+- Manage each of Hold to Talk, Toggle Recording, and Cancel in turn through configuration and verify **Restore Default Bindings** is disabled whenever any one list is managed.
