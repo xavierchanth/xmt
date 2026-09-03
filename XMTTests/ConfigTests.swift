@@ -494,6 +494,52 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(model.pendingCommit?.binding, .modifierHold("fn"))
     }
 
+    func testRapidTwoKeyCaptureIsSynchronouslyOneShot() {
+        var decoder = VoiceBindingCaptureDecoder()
+        XCTAssertEqual(decoder.keyDown(keyCode: 0, modifiers: [.control], isRepeat: false),
+                       .captured(.key(key: "a", modifiers: ["control"])))
+        XCTAssertEqual(decoder.keyDown(keyCode: 11, modifiers: [.control], isRepeat: false), .ignored,
+                       "a second key delivered before redraw must not enqueue another commit")
+
+        var lease = VoiceBindingCaptureLease()
+        var transaction = VoiceBindingCaptureTransaction()
+        let token = lease.acquire()
+        transaction.begin(token: token, action: .holdToTalk, index: 0, settingsRevision: 4)
+        XCTAssertNil(transaction.claimCommit(token: token, action: .holdToTalk, index: 0,
+                                             currentSettingsRevision: 4, bindingCount: 1))
+        XCTAssertEqual(transaction.claimCommit(token: token, action: .holdToTalk, index: 0,
+                                               currentSettingsRevision: 4, bindingCount: 1),
+                       .staleCapture, "the transaction itself must also admit only one commit")
+    }
+
+    func testReloadShrinkOrChangeInvalidatesCaptureBeforeIndexing() {
+        var lease = VoiceBindingCaptureLease()
+        var transaction = VoiceBindingCaptureTransaction()
+        let token = lease.acquire()
+        let original = [ShortcutDTO.fnChord(key: "h"), .fnChord(key: "j")]
+        transaction.begin(token: token, action: .holdToTalk, index: 1, settingsRevision: 10,
+                          rollback: .init(action: .holdToTalk, bindings: original))
+
+        let rollback = transaction.invalidate(ifSettingsRevisionDiffers: 11)
+        XCTAssertEqual(rollback?.bindings, original)
+        XCTAssertEqual(transaction.claimCommit(token: token, action: .holdToTalk, index: 1,
+                                               currentSettingsRevision: 11, bindingCount: 1),
+                       .staleCapture,
+                       "a key from the removed row must be diagnosed rather than indexing the shorter list")
+
+        let replacement = lease.acquire()
+        transaction.begin(token: replacement, action: .cancel, index: 0, settingsRevision: 11)
+        XCTAssertEqual(transaction.claimCommit(token: token, action: .holdToTalk, index: 0,
+                                               currentSettingsRevision: 11, bindingCount: 1),
+                       .staleCapture, "old action and token cannot claim a replacement capture")
+        XCTAssertEqual(transaction.claimCommit(token: replacement, action: .cancel, index: 1,
+                                               currentSettingsRevision: 11, bindingCount: 1),
+                       .staleCapture, "a callback for a different index cannot claim the row")
+        XCTAssertEqual(transaction.claimCommit(token: replacement, action: .cancel, index: 0,
+                                               currentSettingsRevision: 11, bindingCount: 0),
+                       .bindingNoLongerExists)
+    }
+
     func testVoiceBindingCaptureDecoderCapturesEscapeVariantsAndBareFn() {
         var bareEscape = VoiceBindingCaptureDecoder()
         XCTAssertEqual(bareEscape.keyDown(keyCode: 53, modifiers: [], isRepeat: false),

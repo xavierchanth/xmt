@@ -14,6 +14,7 @@ struct VoiceSettingsView: View {
         let action: VoiceBindingAction
         let index: Int
         let token: VoiceBindingCaptureLease.Token
+        let settingsRevision: UInt64
     }
 
     var body: some View {
@@ -66,7 +67,7 @@ struct VoiceSettingsView: View {
             Section("Input priority") { DevicePriorityListView(module: module, priorityManaged: module.managedKeys.contains(.inputDevicePriority), fallbackManaged: module.managedKeys.contains(.fallbackToSystemDefault)) }
             Section("Configuration") { Button("Reload Configuration") { module.reloadConfig() }; if let diagnostic = module.configDiagnostic { Text(diagnostic).foregroundStyle(.red) } }
         }.formStyle(.grouped).onAppear { module.refreshDevices(); module.refreshLocalesAndAssets(); reloadLists() }
-          .onChange(of: module.settingsRevision) { reloadLists() }
+          .onChange(of: module.settingsRevision) { reloadLists(invalidatingCaptureFor: module.settingsRevision) }
           .alert("Restore Default Bindings?", isPresented: $showingDefaultBindingConfirmation) {
               Button("Cancel", role: .cancel) {}
               Button("Restore", role: .destructive) { restoreDefaultBindings() }
@@ -93,27 +94,67 @@ struct VoiceSettingsView: View {
     }
 
     private func bindingRow(action: VoiceBindingAction, index: Int, binding: ShortcutDTO) -> some View {
-        VoiceBindingRecorder(title: "Binding \(index + 1)", action: action, value: binding, isManaged: isManaged(action),
-            isRecording: active?.action == action && active?.index == index,
-            isOtherBindingBusy: active != nil && !(active?.action == action && active?.index == index),
+        let isThisRowActive = active?.action == action && active?.index == index
+        return VoiceBindingRecorder(title: "Binding \(index + 1)", action: action, value: binding, isManaged: isManaged(action),
+            isRecording: isThisRowActive,
+            isOtherBindingBusy: active != nil && !isThisRowActive,
+            captureToken: isThisRowActive ? active?.token : nil,
             begin: { begin(action, index) }, cancel: {
-                if let token = active?.token { finishCapture(token, committed: false) }
+                guard let row = active, row.action == action, row.index == index else { return }
+                finishCapture(row.token, committed: false)
             },
-            commit: { value in
-                guard let token = active?.token else { return "This capture is no longer active." }
-                var candidate = lists[action] ?? []; candidate[index] = value
-                if value == .unbound { candidate.remove(at: index) }
-                let diagnostic = await module.commitVoiceBindings(candidate, action: action)
-                if diagnostic == nil { lists[action] = candidate }
-                finishCapture(token, committed: diagnostic == nil)
-                return diagnostic
+            commit: { value, token in
+                await commitCaptured(value, action: action, index: index, token: token)
             }, didCommit: { _ in })
     }
 
-    private func begin(_ action: VoiceBindingAction, _ index: Int, rollback: VoiceBindingCaptureTransaction.Rollback? = nil) {
+    private func begin(_ action: VoiceBindingAction, _ index: Int,
+                       rollback: VoiceBindingCaptureTransaction.Rollback? = nil) -> VoiceBindingCaptureLease.Token {
         let token = module.acquireVoiceBindingCapture()
-        transaction.begin(token: token, rollback: rollback)
-        active = Row(action: action, index: index, token: token)
+        let revision = module.settingsRevision
+        transaction.begin(token: token, action: action, index: index,
+                          settingsRevision: revision, rollback: rollback)
+        active = Row(action: action, index: index, token: token, settingsRevision: revision)
+        return token
+    }
+
+    private func commitCaptured(_ value: ShortcutDTO, action: VoiceBindingAction, index: Int,
+                                token: VoiceBindingCaptureLease.Token) async -> String? {
+        guard let row = active,
+              row.action == action, row.index == index, row.token == token,
+              row.settingsRevision == module.settingsRevision else {
+            return VoiceBindingCaptureTransaction.Rejection.staleCapture.diagnostic
+        }
+        let values = lists[action] ?? []
+        if let rejection = transaction.claimCommit(
+            token: token, action: action, index: index,
+            currentSettingsRevision: module.settingsRevision, bindingCount: values.count
+        ) {
+            return rejection.diagnostic
+        }
+
+        // `claimCommit` proves this index belongs to this exact action/token/revision snapshot.
+        // Keep the actual mutation conditional too, so this effect boundary remains trap-free.
+        guard values.indices.contains(index) else {
+            return VoiceBindingCaptureTransaction.Rejection.bindingNoLongerExists.diagnostic
+        }
+        var candidate = values
+        candidate[index] = value
+        if value == .unbound { candidate.remove(at: index) }
+        let diagnostic = await module.commitVoiceBindings(candidate, action: action)
+
+        guard transaction.acceptsCompletion(
+            token: token, action: action, index: index,
+            currentSettingsRevision: module.settingsRevision
+        ) else {
+            // A successful commit publishes a new revision itself; onChange reloads its accepted
+            // value. Any other late completion is deliberately unable to mutate current UI state.
+            return diagnostic ?? (module.effectiveVoiceBindings(for: action) == candidate
+                ? nil : VoiceBindingCaptureTransaction.Rejection.staleCapture.diagnostic)
+        }
+        if diagnostic == nil { lists[action] = candidate }
+        finishCapture(token, committed: diagnostic == nil)
+        return diagnostic
     }
     private func finishCapture(_ token: VoiceBindingCaptureLease.Token, committed: Bool) {
         guard transaction.token == token else { return }
@@ -129,8 +170,19 @@ struct VoiceSettingsView: View {
         var values = previous; values.append(.unbound); lists[action] = values
         begin(action, values.count - 1, rollback: .init(action: action, bindings: previous))
     }
-    private func remove(_ action: VoiceBindingAction, _ index: Int) { var values = lists[action] ?? []; values.remove(at: index); commit(values, action) }
-    private func move(_ action: VoiceBindingAction, _ index: Int, _ delta: Int) { var values = lists[action] ?? []; values.swapAt(index, index + delta); commit(values, action) }
+    private func remove(_ action: VoiceBindingAction, _ index: Int) {
+        var values = lists[action] ?? []
+        guard values.indices.contains(index) else { return }
+        values.remove(at: index)
+        commit(values, action)
+    }
+    private func move(_ action: VoiceBindingAction, _ index: Int, _ delta: Int) {
+        var values = lists[action] ?? []
+        let destination = index + delta
+        guard values.indices.contains(index), values.indices.contains(destination) else { return }
+        values.swapAt(index, destination)
+        commit(values, action)
+    }
     private func commit(_ values: [ShortcutDTO], _ action: VoiceBindingAction) { Task { if await module.commitVoiceBindings(values, action: action) == nil { lists[action] = values } } }
     private func restoreDefaultBindings() {
         guard !module.hasManagedVoiceBindings, !isRestoringDefaultBindings else { return }
@@ -140,7 +192,16 @@ struct VoiceSettingsView: View {
             isRestoringDefaultBindings = false
         }
     }
-    private func reloadLists() { for action in VoiceBindingAction.allCases { lists[action] = module.effectiveVoiceBindings(for: action) } }
+    private func reloadLists(invalidatingCaptureFor revision: UInt64? = nil) {
+        if let revision, transaction.target != nil {
+            apply(transaction.invalidate(ifSettingsRevisionDiffers: revision))
+            module.cancelVoiceBindingCapture()
+            active = nil
+        }
+        for action in VoiceBindingAction.allCases {
+            lists[action] = module.effectiveVoiceBindings(for: action)
+        }
+    }
     private func isManaged(_ action: VoiceBindingAction) -> Bool { module.managedKeys.contains(action.managedKey) }
 }
 

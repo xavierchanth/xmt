@@ -11,9 +11,10 @@ struct VoiceBindingRecorder: View {
     let isManaged: Bool
     let isRecording: Bool
     let isOtherBindingBusy: Bool
-    let begin: () -> Void
+    let captureToken: VoiceBindingCaptureLease.Token?
+    let begin: () -> VoiceBindingCaptureLease.Token
     let cancel: () -> Void
-    let commit: (ShortcutDTO) async -> String?
+    let commit: (ShortcutDTO, VoiceBindingCaptureLease.Token) async -> String?
     var didCommit: (ShortcutDTO) -> Void = { _ in }
 
     @State private var diagnostic: String?
@@ -35,12 +36,12 @@ struct VoiceBindingRecorder: View {
                             .accessibilityHint("Stop editing without changing the binding")
                     } else {
                         if action == .holdToTalk {
-                            Button("Fn") { submit(.modifierHold("fn")) }
+                            Button("Fn") { submit(.modifierHold("fn"), token: begin()) }
                                 .accessibilityHint("Use the Function modifier by itself")
                         }
-                        Button("Record") { diagnostic = nil; begin() }
+                        Button("Record") { diagnostic = nil; _ = begin() }
                             .accessibilityHint("Capture the next key chord; use the Cancel button to stop editing")
-                        Button("Clear") { submit(.unbound) }
+                        Button("Clear") { submit(.unbound, token: begin()) }
                             .accessibilityHint("Unbind this action")
                     }
                 }
@@ -50,11 +51,21 @@ struct VoiceBindingRecorder: View {
         .disabled(isManaged || isCommitting || isOtherBindingBusy)
     }
 
-    private func captured(_ shortcut: ShortcutDTO) { submit(shortcut) }
-    private func submit(_ shortcut: ShortcutDTO) {
+    private func captured(_ shortcut: ShortcutDTO) {
+        guard let captureToken else {
+            diagnostic = VoiceBindingCaptureTransaction.Rejection.staleCapture.diagnostic
+            return
+        }
+        submit(shortcut, token: captureToken)
+    }
+
+    private func submit(_ shortcut: ShortcutDTO, token: VoiceBindingCaptureLease.Token) {
+        // This mutation precedes Task creation. Button actions and capture callbacks therefore
+        // cannot enqueue a second commit while SwiftUI is waiting to redraw disabled controls.
+        guard !isCommitting else { return }
         isCommitting = true
         Task { @MainActor in
-            diagnostic = await commit(shortcut)
+            diagnostic = await commit(shortcut, token)
             if diagnostic == nil { didCommit(shortcut) }
             isCommitting = false
         }

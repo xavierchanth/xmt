@@ -107,6 +107,8 @@ enum ShortcutDTO: Equatable, Sendable {
 
 /// Pure state machine for the binding recorder's AppKit event boundary.
 /// It keeps Fn-key ownership across flags/key events without depending on a live `NSEvent`.
+/// A successful capture consumes the decoder synchronously, so two key-down events delivered
+/// before SwiftUI redraws the row can still produce only one commit.
 struct VoiceBindingCaptureDecoder: Sendable {
     struct Modifiers: OptionSet, Equatable, Sendable {
         let rawValue: UInt8
@@ -126,8 +128,10 @@ struct VoiceBindingCaptureDecoder: Sendable {
 
     private var fnIsDown = false
     private var bareFnCandidate = false
+    private var isConsumed = false
 
     mutating func flagsChanged(_ modifiers: Modifiers) -> Output {
+        guard !isConsumed else { return .ignored }
         if modifiers.contains(.function) {
             if !fnIsDown {
                 fnIsDown = true
@@ -140,18 +144,25 @@ struct VoiceBindingCaptureDecoder: Sendable {
         guard fnIsDown else { return .ignored }
         fnIsDown = false
         defer { bareFnCandidate = false }
-        return bareFnCandidate ? .captured(.modifierHold("fn")) : .ignored
+        guard bareFnCandidate else { return .ignored }
+        return consume(.modifierHold("fn"))
     }
 
     mutating func keyDown(keyCode: UInt16, modifiers: Modifiers, isRepeat: Bool) -> Output {
+        guard !isConsumed else { return .ignored }
         if modifiers.contains(.function) { bareFnCandidate = false }
         guard !isRepeat else { return .ignored }
         guard let key = ShortcutDTO.keyName(forKeyCode: keyCode) else { return .unsupported }
-        if modifiers.contains(.function) { return .captured(.fnChord(key: key)) }
+        if modifiers.contains(.function) { return consume(.fnChord(key: key)) }
         let names: [(Modifiers, String)] = [
             (.control, "control"), (.option, "option"), (.shift, "shift"), (.command, "command")
         ]
-        return .captured(.key(key: key, modifiers: names.compactMap { modifiers.contains($0.0) ? $0.1 : nil }))
+        return consume(.key(key: key, modifiers: names.compactMap { modifiers.contains($0.0) ? $0.1 : nil }))
+    }
+
+    private mutating func consume(_ shortcut: ShortcutDTO) -> Output {
+        isConsumed = true
+        return .captured(shortcut)
     }
 }
 

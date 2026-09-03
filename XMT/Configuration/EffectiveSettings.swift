@@ -41,29 +41,98 @@ struct VoiceBindingCaptureLease: Equatable, Sendable {
 
 /// UI-side transaction paired with the routing lease. A newly inserted placeholder
 /// is provisional until commit; cancellation/failure restores the exact prior list.
-/// Tokens also prevent an old async completion from concluding a newer operation.
+/// The commit claim is synchronous and one-shot. Its complete row identity prevents a
+/// callback retained by an old view from indexing a list that has since been reloaded.
 struct VoiceBindingCaptureTransaction: Equatable, Sendable {
     struct Rollback: Equatable, Sendable { let action: VoiceBindingAction; let bindings: [ShortcutDTO] }
+    struct Target: Equatable, Sendable {
+        let action: VoiceBindingAction
+        let index: Int
+        let settingsRevision: UInt64
+    }
+    enum Rejection: Equatable, Sendable {
+        case staleCapture
+        case bindingNoLongerExists
+
+        var diagnostic: String {
+            switch self {
+            case .staleCapture:
+                return "This capture is stale because Voice settings changed. Record the binding again."
+            case .bindingNoLongerExists:
+                return "This binding no longer exists. Reload Voice settings and record it again."
+            }
+        }
+    }
+
     private(set) var token: VoiceBindingCaptureLease.Token?
+    private(set) var target: Target?
+    private(set) var hasClaimedCommit = false
     private var rollback: Rollback?
 
+    // Retained for non-row callers and the rollback-focused domain tests.
     mutating func begin(token: VoiceBindingCaptureLease.Token, rollback: Rollback? = nil) {
-        self.token = token
-        self.rollback = rollback
+        begin(token: token, target: nil, rollback: rollback)
+    }
+
+    mutating func begin(token: VoiceBindingCaptureLease.Token, action: VoiceBindingAction,
+                        index: Int, settingsRevision: UInt64, rollback: Rollback? = nil) {
+        begin(token: token, target: .init(action: action, index: index,
+                                         settingsRevision: settingsRevision), rollback: rollback)
+    }
+
+    /// Atomically consumes the capture before any asynchronous persistence starts.
+    /// Every field is checked before the caller is allowed to subscript its binding list.
+    mutating func claimCommit(token candidate: VoiceBindingCaptureLease.Token,
+                              action: VoiceBindingAction, index: Int,
+                              currentSettingsRevision: UInt64, bindingCount: Int) -> Rejection? {
+        guard token == candidate,
+              target == .init(action: action, index: index, settingsRevision: currentSettingsRevision),
+              !hasClaimedCommit else { return .staleCapture }
+        guard index >= 0, index < bindingCount else { return .bindingNoLongerExists }
+        hasClaimedCommit = true
+        return nil
+    }
+
+    func acceptsCompletion(token candidate: VoiceBindingCaptureLease.Token,
+                           action: VoiceBindingAction, index: Int,
+                           currentSettingsRevision: UInt64) -> Bool {
+        token == candidate && hasClaimedCommit
+            && target == .init(action: action, index: index,
+                               settingsRevision: currentSettingsRevision)
+    }
+
+    /// A settings publication is a capture boundary even when the row happens to survive it.
+    mutating func invalidate(ifSettingsRevisionDiffers revision: UInt64) -> Rollback? {
+        guard let target, target.settingsRevision != revision else { return nil }
+        return cancelAll()
     }
 
     mutating func conclude(token candidate: VoiceBindingCaptureLease.Token, committed: Bool) -> Rollback? {
         guard token == candidate else { return nil }
-        token = nil
-        defer { rollback = nil }
-        return committed ? nil : rollback
+        let result = committed ? nil : rollback
+        reset()
+        return result
     }
 
     mutating func cancelAll() -> Rollback? {
         guard token != nil else { return nil }
+        let result = rollback
+        reset()
+        return result
+    }
+
+    private mutating func begin(token: VoiceBindingCaptureLease.Token, target: Target?, rollback: Rollback?) {
+        self.token = token
+        self.target = target
+        self.rollback = rollback
+        hasClaimedCommit = false
+    }
+
+    private mutating func reset() {
         token = nil
-        defer { rollback = nil }
-        return rollback
+        target = nil
+        rollback = nil
+        hasClaimedCommit = false
     }
 }
 enum VoiceBindingPolicyError: Error, Equatable, Sendable { case modifierOnlyRequiresHold; case unsafeUnmodifiedKey }
