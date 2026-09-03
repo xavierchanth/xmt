@@ -36,7 +36,7 @@ struct VoiceSettingsView: View {
                             .disabled(isManaged(action) || active != nil || (lists[action]?.count ?? 0) >= KeyboardShortcuts.Name.voiceBindingSlotCount)
                     }
                 }
-                Text("Escape alone cancels capture; Control–Escape and Fn–Escape are bindable.").font(.footnote).foregroundStyle(.secondary)
+                Text("Escape, Control–Escape, and Fn–Escape are bindable. Use the on-screen Cancel button to stop capture.").font(.footnote).foregroundStyle(.secondary)
             }
             Section("Permissions and speech assets") {
                 HStack { Text("Speech assets: \(module.assetStatus)"); Spacer(); Button("Check") { module.refreshAssets() }; Button("Download") { module.downloadAssets() } }

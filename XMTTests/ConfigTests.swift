@@ -494,6 +494,34 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(model.pendingCommit?.binding, .modifierHold("fn"))
     }
 
+    func testVoiceBindingCaptureDecoderCapturesEscapeVariantsAndBareFn() {
+        var bareEscape = VoiceBindingCaptureDecoder()
+        XCTAssertEqual(bareEscape.keyDown(keyCode: 53, modifiers: [], isRepeat: false),
+                       .captured(.key(key: "escape", modifiers: [])))
+
+        var controlEscape = VoiceBindingCaptureDecoder()
+        XCTAssertEqual(controlEscape.keyDown(keyCode: 53, modifiers: [.control], isRepeat: false),
+                       .captured(.key(key: "escape", modifiers: ["control"])))
+
+        var fnEscape = VoiceBindingCaptureDecoder()
+        XCTAssertEqual(fnEscape.flagsChanged([.function]), .ignored)
+        XCTAssertEqual(fnEscape.keyDown(keyCode: 53, modifiers: [.function], isRepeat: false),
+                       .captured(.fnChord(key: "escape")))
+        XCTAssertEqual(fnEscape.flagsChanged([]), .ignored, "an Fn chord must not also decode as bare Fn")
+
+        var bareFn = VoiceBindingCaptureDecoder()
+        XCTAssertEqual(bareFn.flagsChanged([.function]), .ignored)
+        XCTAssertEqual(bareFn.flagsChanged([]), .captured(.modifierHold("fn")))
+    }
+
+    func testVoiceBindingCaptureDecoderRejectsUnsupportedAndNonBareFn() {
+        var decoder = VoiceBindingCaptureDecoder()
+        XCTAssertEqual(decoder.keyDown(keyCode: .max, modifiers: [], isRepeat: false), .unsupported)
+        XCTAssertEqual(decoder.keyDown(keyCode: 53, modifiers: [], isRepeat: true), .ignored)
+        XCTAssertEqual(decoder.flagsChanged([.control, .function]), .ignored)
+        XCTAssertEqual(decoder.flagsChanged([]), .ignored)
+    }
+
     func testVoiceBindingPolicyAndConflictValidation() throws {
         let controlEscape = ShortcutDTO.key(key: "escape", modifiers: ["control"])
         XCTAssertTrue(controlEscape.conflicts(with: .key(key: "escape", modifiers: ["CONTROL"])))

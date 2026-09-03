@@ -528,7 +528,9 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     private func handle(_ event: TriggerEvent) {
-        guard isEnabled else { return }
+        // Observation teardown can already have queued delivery on the main queue.
+        // Never let such a live shortcut affect recording while its key is being captured.
+        guard isEnabled, !bindingCaptureLease.isActive else { return }
         if case .degraded = machine.state { _ = machine.handle(.resetDegraded) }
         if case .degraded = status { status = .idle }
         switch event {
@@ -834,14 +836,14 @@ final class VoiceTranscriptionModule: ObservableObject {
         KeyboardShortcuts.onKeyDown(for: name) { [weak self] in
             let generation = MainActor.assumeIsolated { self?.bindingRouter.generation }
             Task { @MainActor in
-                guard let self, let generation else { return }
+                guard let self, let generation, !self.bindingCaptureLease.isActive else { return }
                 self.routeBindingEvents(self.bindingRouter.receive(.down(source, action), generation: generation))
             }
         }
         KeyboardShortcuts.onKeyUp(for: name) { [weak self] in
             let generation = MainActor.assumeIsolated { self?.bindingRouter.generation }
             Task { @MainActor in
-                guard let self, let generation else { return }
+                guard let self, let generation, !self.bindingCaptureLease.isActive else { return }
                 self.routeBindingEvents(self.bindingRouter.receive(.up(source), generation: generation))
             }
         }

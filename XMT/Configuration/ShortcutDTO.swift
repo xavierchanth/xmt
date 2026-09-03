@@ -105,6 +105,56 @@ enum ShortcutDTO: Equatable, Sendable {
     }()
 }
 
+/// Pure state machine for the binding recorder's AppKit event boundary.
+/// It keeps Fn-key ownership across flags/key events without depending on a live `NSEvent`.
+struct VoiceBindingCaptureDecoder: Sendable {
+    struct Modifiers: OptionSet, Equatable, Sendable {
+        let rawValue: UInt8
+        static let control = Self(rawValue: 1 << 0)
+        static let option = Self(rawValue: 1 << 1)
+        static let shift = Self(rawValue: 1 << 2)
+        static let command = Self(rawValue: 1 << 3)
+        static let function = Self(rawValue: 1 << 4)
+        static let standard: Self = [.control, .option, .shift, .command]
+    }
+
+    enum Output: Equatable, Sendable {
+        case captured(ShortcutDTO)
+        case unsupported
+        case ignored
+    }
+
+    private var fnIsDown = false
+    private var bareFnCandidate = false
+
+    mutating func flagsChanged(_ modifiers: Modifiers) -> Output {
+        if modifiers.contains(.function) {
+            if !fnIsDown {
+                fnIsDown = true
+                bareFnCandidate = modifiers.intersection(.standard).isEmpty
+            } else if !modifiers.intersection(.standard).isEmpty {
+                bareFnCandidate = false
+            }
+            return .ignored
+        }
+        guard fnIsDown else { return .ignored }
+        fnIsDown = false
+        defer { bareFnCandidate = false }
+        return bareFnCandidate ? .captured(.modifierHold("fn")) : .ignored
+    }
+
+    mutating func keyDown(keyCode: UInt16, modifiers: Modifiers, isRepeat: Bool) -> Output {
+        if modifiers.contains(.function) { bareFnCandidate = false }
+        guard !isRepeat else { return .ignored }
+        guard let key = ShortcutDTO.keyName(forKeyCode: keyCode) else { return .unsupported }
+        if modifiers.contains(.function) { return .captured(.fnChord(key: key)) }
+        let names: [(Modifiers, String)] = [
+            (.control, "control"), (.option, "option"), (.shift, "shift"), (.command, "command")
+        ]
+        return .captured(.key(key: key, modifiers: names.compactMap { modifiers.contains($0.0) ? $0.1 : nil }))
+    }
+}
+
 extension ShortcutDTO: Codable {
     private enum CodingKeys: String, CodingKey { case type, key, modifiers, modifier }
     private enum Kind: String, Codable { case unbound, key, modifierHold, fnChord }

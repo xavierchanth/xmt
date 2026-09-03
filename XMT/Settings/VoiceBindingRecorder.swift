@@ -2,7 +2,8 @@ import AppKit
 import KeyboardShortcuts
 import SwiftUI
 
-/// XMT-owned capture UI. Escape alone cancels; modified Escape is captured.
+/// XMT-owned capture UI. Escape, modified Escape, and Fn chords are captured;
+/// cancellation is available only through the explicit button.
 struct VoiceBindingRecorder: View {
     let title: String
     let action: VoiceBindingAction
@@ -24,7 +25,7 @@ struct VoiceBindingRecorder: View {
                 HStack {
                     Text(Self.display(value)).monospacedDigit().accessibilityLabel("Current binding: \(Self.display(value))")
                     if isRecording {
-                        KeyDownCaptureView(captured: { captured($0) }, cancelled: cancel, unsupported: {
+                        KeyDownCaptureView(captured: { captured($0) }, unsupported: {
                             diagnostic = "That key cannot be used as a global shortcut."
                         })
                         .frame(width: 1, height: 1)
@@ -38,7 +39,7 @@ struct VoiceBindingRecorder: View {
                                 .accessibilityHint("Use the Function modifier by itself")
                         }
                         Button("Record") { diagnostic = nil; begin() }
-                            .accessibilityHint("Capture the next key chord; Escape alone cancels")
+                            .accessibilityHint("Capture the next key chord; use the Cancel button to stop editing")
                         Button("Clear") { submit(.unbound) }
                             .accessibilityHint("Unbind this action")
                     }
@@ -73,28 +74,34 @@ struct VoiceBindingRecorder: View {
 
 private struct KeyDownCaptureView: NSViewRepresentable {
     let captured: (ShortcutDTO) -> Void
-    let cancelled: () -> Void
     let unsupported: () -> Void
-    func makeCoordinator() -> Coordinator { Coordinator(captured: captured, cancelled: cancelled, unsupported: unsupported) }
+    func makeCoordinator() -> Coordinator { Coordinator(captured: captured, unsupported: unsupported) }
     func makeNSView(context: Context) -> CaptureView { let view = CaptureView(); view.coordinator = context.coordinator; return view }
     func updateNSView(_ view: CaptureView, context: Context) { view.coordinator = context.coordinator }
     final class Coordinator {
-        let captured: (ShortcutDTO) -> Void; let cancelled: () -> Void; let unsupported: () -> Void
-        var sawFnDown = false
-        init(captured: @escaping (ShortcutDTO) -> Void, cancelled: @escaping () -> Void, unsupported: @escaping () -> Void) { self.captured = captured; self.cancelled = cancelled; self.unsupported = unsupported }
-        func flagsChanged(_ event: NSEvent) {
-            let down = event.modifierFlags.contains(.function)
-            if down { sawFnDown = true }
-            else if sawFnDown { sawFnDown = false; captured(.modifierHold("fn")) }
-        }
+        let captured: (ShortcutDTO) -> Void; let unsupported: () -> Void
+        var decoder = VoiceBindingCaptureDecoder()
+        init(captured: @escaping (ShortcutDTO) -> Void, unsupported: @escaping () -> Void) { self.captured = captured; self.unsupported = unsupported }
+        func flagsChanged(_ event: NSEvent) { deliver(decoder.flagsChanged(Self.modifiers(event.modifierFlags))) }
         func keyDown(_ event: NSEvent) {
-            guard !event.isARepeat, let key = ShortcutDTO.keyName(forKeyCode: event.keyCode) else { if !event.isARepeat { unsupported() }; return }
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            if flags.contains(.function) { sawFnDown = false; captured(.fnChord(key: key)); return }
-            let names: [(NSEvent.ModifierFlags, String)] = [(.control,"control"),(.option,"option"),(.shift,"shift"),(.command,"command")]
-            let modifiers = names.compactMap { flags.contains($0.0) ? $0.1 : nil }
-            if key == "escape" && modifiers.isEmpty { cancelled(); return }
-            captured(.key(key: key, modifiers: modifiers))
+            deliver(decoder.keyDown(keyCode: event.keyCode, modifiers: Self.modifiers(event.modifierFlags), isRepeat: event.isARepeat))
+        }
+        private func deliver(_ output: VoiceBindingCaptureDecoder.Output) {
+            switch output {
+            case .captured(let shortcut): captured(shortcut)
+            case .unsupported: unsupported()
+            case .ignored: break
+            }
+        }
+        private static func modifiers(_ flags: NSEvent.ModifierFlags) -> VoiceBindingCaptureDecoder.Modifiers {
+            let flags = flags.intersection(.deviceIndependentFlagsMask)
+            var decoded: VoiceBindingCaptureDecoder.Modifiers = []
+            if flags.contains(.control) { decoded.insert(.control) }
+            if flags.contains(.option) { decoded.insert(.option) }
+            if flags.contains(.shift) { decoded.insert(.shift) }
+            if flags.contains(.command) { decoded.insert(.command) }
+            if flags.contains(.function) { decoded.insert(.function) }
+            return decoded
         }
     }
     final class CaptureView: NSView {
@@ -103,5 +110,8 @@ private struct KeyDownCaptureView: NSViewRepresentable {
         override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); if let window { window.makeFirstResponder(self) } }
         override func keyDown(with event: NSEvent) { coordinator?.keyDown(event) }
         override func flagsChanged(with event: NSEvent) { coordinator?.flagsChanged(event) }
+        override func cancelOperation(_ sender: Any?) {
+            // Do not let the responder chain reinterpret Escape as capture cancellation.
+        }
     }
 }

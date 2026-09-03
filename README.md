@@ -56,7 +56,7 @@ Once running, XMT opens Settings and also requests a menu-bar item. macOS 26 can
 
 ## Testing
 
-`XMTTests` contains unit tests for window geometry, trigger arbitration and binding ownership, multi-binding routing and list editing, the voice session reducer, input-device selection and the bounded audio queue, recovery reconciliation, transcript commit ordering, and configuration decoding, migration, precedence, and reload. Run them through the shared `XMT` scheme with `just test`; `just check` runs both tests and documentation checks. Capture, speech analysis, the event tap, and the SwiftUI surfaces are not covered.
+`XMTTests` contains unit tests for window geometry, trigger arbitration and binding ownership, multi-binding routing and list editing, pure recorder chord decoding, the voice session reducer, input-device selection and the bounded audio queue, recovery reconciliation, transcript commit ordering, and configuration decoding, migration, precedence, and reload. Run them through the shared `XMT` scheme with `just test`; `just check` runs both tests and documentation checks. Audio capture, speech analysis, the live event tap, and the SwiftUI surfaces are not covered.
 
 ## Documentation checks
 
