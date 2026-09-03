@@ -556,7 +556,7 @@ final class ConfigTests: XCTestCase {
         defaults.set(try JSONEncoder().encode(array), forKey: "\(prefix).backup")
         VoiceBindingPersistence.saveManagedBackup(nil, in: defaults, key: prefix)
         XCTAssertNil(defaults.data(forKey: "\(prefix).backup"), "a nil local value must clear a stale backup")
-        XCTAssertEqual(VoiceBindingPersistence.restoreManagedBackup(in: defaults, key: prefix), [])
+        XCTAssertNil(VoiceBindingPersistence.restoreManagedBackup(in: defaults, key: prefix), "an absent local value must restore as absent")
 
         VoiceBindingPersistence.saveManagedBackup([], in: defaults, key: prefix)
         XCTAssertEqual(VoiceBindingPersistence.restoreManagedBackup(in: defaults, key: prefix), [], "explicit unbound must not restore stale bindings")

@@ -116,7 +116,8 @@ struct VoiceBindingPersistence {
             defaults.removeObject(forKey: dataKey) // clean up stale, inactive migration data
             return nil
         }
-        let restored = localBindings(explicit: true, canonicalData: defaults.data(forKey: dataKey), legacyValue: nil)
+        let data = defaults.data(forKey: dataKey)
+        let restored = data.flatMap { localBindings(explicit: true, canonicalData: $0, legacyValue: nil) }
         defaults.removeObject(forKey: dataKey)
         defaults.removeObject(forKey: activeKey)
         return restored
