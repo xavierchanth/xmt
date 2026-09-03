@@ -648,4 +648,172 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(restored.effective.holdToTalkShortcut.value, .key(key: "h", modifiers: ["control"]))
     }
 
+    func testBuiltInLocalSnapshotIsTheExactCompleteFreshDefault() {
+        let builtIn = BuiltInSettings.standard
+        let local = builtIn.localSnapshot
+        let resolved = EffectiveSettings.resolve(config: nil, local: local, builtIn: builtIn)
+
+        XCTAssertEqual(resolved.windowMoverEnabled.value, true)
+        XCTAssertEqual(resolved.windowMoverShortcut.value, .key(key: "space", modifiers: ["option"]))
+        XCTAssertEqual(resolved.voiceEnabled.value, true)
+        XCTAssertEqual(resolved.holdToTalkBindings.value, [.modifierHold("fn")])
+        XCTAssertEqual(resolved.toggleRecordingBindings.value, [.fnChord(key: "space")])
+        XCTAssertEqual(resolved.cancelBindings.value, [.fnChord(key: "escape")])
+        XCTAssertEqual(resolved.pasteLatestTranscriptShortcut.value, .key(key: "v", modifiers: ["control", "command"]))
+        XCTAssertEqual(resolved.outputMode.value, .pasteImmediately)
+        XCTAssertEqual(resolved.historyEnabled.value, true)
+        XCTAssertEqual(resolved.historyRetentionDays.value, 30)
+        XCTAssertEqual(resolved.historyMaxEntries.value, 500)
+        XCTAssertEqual(resolved.locale.value, "system")
+        XCTAssertEqual(resolved.fnHoldThresholdMs.value, 150)
+        XCTAssertEqual(resolved.maxSessionSeconds.value, 300)
+        XCTAssertEqual(resolved.inputDevicePriority.value, [])
+        XCTAssertEqual(resolved.fallbackToSystemDefault.value, true)
+        XCTAssertTrue([resolved.windowMoverEnabled.source, resolved.voiceEnabled.source,
+                       resolved.historyEnabled.source].allSatisfy { $0 == .local })
+    }
+
+    func testRestorePlanCanonicalizesCustomValuesAndPreservesManagedLocalShadows() throws {
+        var current = SettingsValues()
+        current.windowMoverEnabled = false
+        current.windowMoverShortcut = .key(key: "w", modifiers: ["command"])
+        current.voiceEnabled = false
+        current.holdToTalkShortcut = .key(key: "h", modifiers: ["control"])
+        current.toggleRecordingBindings = []
+        current.cancelBindings = [.key(key: "c", modifiers: ["command"])]
+        current.pasteLatestTranscriptShortcut = .key(key: "p", modifiers: ["command"])
+        current.autoPaste = false
+        current.historyEnabled = false
+        current.historyRetentionDays = 2
+        current.historyMaxEntries = 3
+        current.locale = "fr-FR"
+        current.fnHoldThresholdMs = 200
+        current.maxSessionSeconds = 20
+        current.inputDevicePriority = [.init(name: "Custom mic", uid: "custom")]
+        current.fallbackToSystemDefault = false
+
+        let unmanaged = SettingsRestorePlan.make(
+            current: current, effective: .resolve(config: nil, local: current))
+        XCTAssertEqual(unmanaged.candidate, BuiltInSettings.standard.localSnapshot)
+        XCTAssertEqual(unmanaged.restoredKeys, Set(EffectiveSettings.Key.allCases))
+        XCTAssertTrue(unmanaged.preservedManagedKeys.isEmpty)
+
+        let file = try decode(#"{"version":1,"windowMover":{"enabled":true},"voice":{"holdToTalkBindings":[{"type":"modifierHold","modifier":"fn"}],"locale":"de-DE"}}"#)
+        let effective = EffectiveSettings.resolve(config: file, local: current)
+        let mixed = SettingsRestorePlan.make(current: current, effective: effective)
+        XCTAssertEqual(mixed.candidate.windowMoverEnabled, false)
+        XCTAssertEqual(mixed.candidate.holdToTalkBindings, [.key(key: "h", modifiers: ["control"])])
+        XCTAssertEqual(mixed.candidate.locale, "fr-FR")
+        XCTAssertEqual(mixed.candidate.voiceEnabled, true)
+        XCTAssertEqual(mixed.candidate.cancelBindings, BuiltInSettings.standard.cancelBindings)
+        XCTAssertEqual(mixed.preservedManagedKeys, [.windowMoverEnabled, .holdToTalkShortcut, .locale])
+    }
+
+    func testRestoreDefaultsPublishesOneCompleteSnapshotAndPreservesManagedValues() async throws {
+        actor Recorder {
+            var snapshots: [EffectiveSettings] = []
+            var persistedLocal: SettingsValues?
+            func willPersist(_ local: SettingsValues) { persistedLocal = local }
+            func published(_ effective: EffectiveSettings) { snapshots.append(effective) }
+        }
+        final class Box: @unchecked Sendable { var removed = false }
+        let recorder = Recorder(), box = Box()
+        var local = BuiltInSettings.standard.localSnapshot
+        local.windowMoverEnabled = false
+        local.voiceEnabled = false
+        local.outputMode = .clipboardOnly
+        local.historyEnabled = false
+        local.locale = "fr-FR"
+        local.inputDevicePriority = [.init(name: "Custom mic", uid: "custom")]
+        let loader = ConfigReloader(local: local, read: { _ in
+            if box.removed { throw CocoaError(.fileReadNoSuchFile) }
+            return Data(#"{"version":1,"voice":{"locale":"de-DE"}}"#.utf8)
+        })
+        await loader.addApplyCallback { await recorder.published($0.effective) }
+        _ = try await loader.reload()
+
+        let restored = try await loader.restoreDefaults(current: local) {
+            await recorder.willPersist($0.local)
+        }
+        let persistedCandidate = await recorder.persistedLocal
+        let persisted = try XCTUnwrap(persistedCandidate)
+        XCTAssertEqual(persisted, restored.local)
+        XCTAssertTrue(restored.effective.windowMoverEnabled.value)
+        XCTAssertTrue(restored.effective.voiceEnabled.value)
+        XCTAssertEqual(restored.effective.outputMode.value, .pasteImmediately)
+        XCTAssertTrue(restored.effective.historyEnabled.value)
+        XCTAssertEqual(restored.effective.inputDevicePriority.value, [])
+        XCTAssertEqual(restored.effective.locale.value, "de-DE")
+        XCTAssertEqual(restored.local.locale, "fr-FR", "managed local shadow must be preserved")
+        let snapshots = await recorder.snapshots
+        XCTAssertEqual(snapshots.count, 2, "restore publishes exactly one complete snapshot")
+        XCTAssertEqual(snapshots.last, restored.effective)
+
+        box.removed = true
+        let unmanaged = try await loader.reload()
+        XCTAssertEqual(unmanaged.effective.locale.value, "fr-FR", "removing management must reveal the preserved custom value")
+    }
+
+    func testRestoreDefaultsRejectsWholeCandidateBeforePersistenceOrPublication() async throws {
+        actor Counter {
+            var publications = 0
+            var persistenceAttempts = 0
+            func published() { publications += 1 }
+            func persisted() { persistenceAttempts += 1 }
+        }
+        let counter = Counter()
+        var local = BuiltInSettings.standard.localSnapshot
+        local.pasteLatestTranscriptShortcut = .key(key: "p", modifiers: ["command"])
+        let json = #"{"version":1,"windowMover":{"shortcut":{"key":"v","modifiers":["control","command"]}}}"#
+        let loader = ConfigReloader(local: local, read: { _ in Data(json.utf8) })
+        await loader.addApplyCallback { _ in await counter.published() }
+        let accepted = try await loader.reload()
+
+        do {
+            _ = try await loader.restoreDefaults(current: local) { _ in await counter.persisted() }
+            XCTFail("conflicting complete restore was accepted")
+        } catch {
+            XCTAssertEqual(error as? ConfigDiagnostic,
+                           .invalidValue(path: "voice.pasteLatestTranscriptShortcut", reason: "conflicts with windowMover.shortcut"))
+        }
+        let after = await loader.effective
+        let publications = await counter.publications
+        let persistenceAttempts = await counter.persistenceAttempts
+        XCTAssertEqual(after, accepted.effective)
+        XCTAssertEqual(publications, 1)
+        XCTAssertEqual(persistenceAttempts, 0)
+        let reloaded = try await loader.reload()
+        XCTAssertEqual(reloaded.effective.pasteLatestTranscriptShortcut.value,
+                       .key(key: "p", modifiers: ["command"]), "failed restore must retain the old local baseline")
+    }
+
+    func testRestorePersistenceFailureDoesNotPublishOrCommitLocalBaseline() async throws {
+        actor Counter {
+            var publications = 0
+            func published() { publications += 1 }
+        }
+        let counter = Counter()
+        var local = BuiltInSettings.standard.localSnapshot
+        local.voiceEnabled = false
+        let loader = ConfigReloader(local: local, read: { _ in throw CocoaError(.fileReadNoSuchFile) })
+        await loader.addApplyCallback { _ in await counter.published() }
+        _ = try await loader.reload()
+
+        do {
+            _ = try await loader.restoreDefaults(current: local) { _ in throw CocoaError(.fileWriteNoPermission) }
+            XCTFail("persistence failure was accepted")
+        } catch {
+            guard let diagnostic = error as? ConfigDiagnostic,
+                  case .localPersistence = diagnostic else {
+                return XCTFail("unexpected diagnostic: \(error)")
+            }
+        }
+        let retained = await loader.effective
+        let publications = await counter.publications
+        XCTAssertFalse(retained.voiceEnabled.value)
+        XCTAssertEqual(publications, 1)
+        let reloaded = try await loader.reload()
+        XCTAssertFalse(reloaded.effective.voiceEnabled.value)
+    }
+
 }

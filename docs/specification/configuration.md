@@ -96,6 +96,8 @@ The former local `voice.keepLastTranscript` preference is migrated once to `voic
 
 A value supplied by the configuration file is **managed**. Managed values are applied immediately and are not written back to persisted settings, so removing the file restores what the user had configured.
 
+General settings offers a confirmed `Restore All Defaults…` action for Window Mover and Voice. It builds one complete local snapshot from the built-in defaults and validates that snapshot with the current configuration before persisting or publishing anything. Unmanaged custom values are replaced only after the destructive confirmation. File-managed values remain effective, and their hidden local values are preserved rather than silently reset; if a managed value and an unmanaged default conflict, or persistence preparation fails, the whole restore is rejected and its error is shown. A successful restore publishes immediately to every settings tab and live handler.
+
 The settings UI disables the control for a managed value rather than presenting a write that would not take effect: the Voice enable toggle, all three Voice binding recorders, paste-latest shortcut recorder, output mode, each of the history enabled/retention/maximum controls, locale, the device priority list and its add action, and the system-default fallback toggle; and in Window Mover, the enable toggle and the shortcut recorder. Managed ordinary shortcuts are pushed into the shortcut store directly.
 
 Applying a snapshot also applies module lifecycle: a Voice module that resolves to enabled recovers from any degraded state and starts observing, and one that resolves to disabled performs a full stop.

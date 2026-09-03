@@ -77,6 +77,17 @@ final class WindowMoverModule: ObservableObject {
         }
     }
 
+    /// Installs a validated local restore snapshot before its effective settings
+    /// are published. Managed values remain active; only their local shadow moves.
+    func prepareLocalRestore(enabled: Bool?, shortcut: ShortcutDTO?, activateShortcut: Bool) {
+        if let enabled { UserDefaults.standard.set(enabled, forKey: Self.enabledDefaultsKey) }
+        else { UserDefaults.standard.removeObject(forKey: Self.enabledDefaultsKey) }
+        unmanagedShortcut = shortcut.flatMap { try? $0.keyboardShortcut() }
+        if activateShortcut, KeyboardShortcuts.getShortcut(for: .moveToNextScreen) != unmanagedShortcut {
+            KeyboardShortcuts.setShortcut(unmanagedShortcut, for: .moveToNextScreen)
+        }
+    }
+
     func applyManaged(enabled: ResolvedSetting<Bool>, shortcut: ResolvedSetting<ShortcutDTO>) {
         isEnabledManaged = enabled.isManaged
         if isEnabled != enabled.value {
@@ -101,7 +112,10 @@ final class WindowMoverModule: ObservableObject {
             defaults.removeObject(forKey: Self.shortcutBackupDataKey)
             defaults.set(false, forKey: Self.shortcutBackupActiveKey)
         } else {
-            unmanagedShortcut = KeyboardShortcuts.getShortcut(for: .moveToNextScreen)
+            unmanagedShortcut = try? shortcut.value.keyboardShortcut()
+            if KeyboardShortcuts.getShortcut(for: .moveToNextScreen) != unmanagedShortcut {
+                KeyboardShortcuts.setShortcut(unmanagedShortcut, for: .moveToNextScreen)
+            }
         }
         // `setShortcut` registers immediately inside KeyboardShortcuts. Re-apply lifecycle state so
         // a disabled module never reserves and swallows its chord.

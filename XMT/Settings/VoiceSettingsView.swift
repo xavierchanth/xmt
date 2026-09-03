@@ -57,6 +57,7 @@ struct VoiceSettingsView: View {
             Section("Input priority") { DevicePriorityListView(module: module, priorityManaged: module.managedKeys.contains(.inputDevicePriority), fallbackManaged: module.managedKeys.contains(.fallbackToSystemDefault)) }
             Section("Configuration") { Button("Reload Configuration") { module.reloadConfig() }; if let diagnostic = module.configDiagnostic { Text(diagnostic).foregroundStyle(.red) } }
         }.formStyle(.grouped).onAppear { module.refreshDevices(); module.refreshLocalesAndAssets(); reloadLists() }
+          .onChange(of: module.settingsRevision) { reloadLists() }
           .onDisappear {
               apply(transaction.cancelAll())
               module.cancelVoiceBindingCapture()

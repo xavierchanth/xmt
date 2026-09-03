@@ -5,6 +5,17 @@ enum ConfigDiagnostic: Error, Equatable, Sendable {
     case malformedJSON(String)
     case unsupportedVersion(Int)
     case invalidValue(path: String, reason: String)
+    case localPersistence(String)
+
+    var userMessage: String {
+        switch self {
+        case .unreadable(let reason): return "Could not read configuration: \(reason)"
+        case .malformedJSON(let reason): return "Configuration JSON is malformed: \(reason)"
+        case .unsupportedVersion(let version): return "Configuration version \(version) is not supported."
+        case .invalidValue(let path, let reason): return "Invalid configuration at \(path): \(reason)."
+        case .localPersistence(let reason): return "Could not save local settings: \(reason)"
+        }
+    }
 }
 
 struct InputDeviceDTO: Codable, Equatable, Sendable {
