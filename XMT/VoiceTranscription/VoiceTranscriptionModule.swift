@@ -44,9 +44,9 @@ final class VoiceTranscriptionModule: ObservableObject {
     private var observer: FnEventObserver?
     private var observation: FnEventObserver.Observation?
     private var observerThresholdMs: Int?
-    private var observerHoldBinding: ShortcutDTO?
-    private var observerToggleBinding: ShortcutDTO?
-    private var observerCancelBinding: ShortcutDTO?
+    private var observerHoldBindings: [ShortcutDTO]?
+    private var observerToggleBindings: [ShortcutDTO]?
+    private var observerCancelBindings: [ShortcutDTO]?
     private var capture: AudioCaptureService?
     private var transcriber: TranscriberSession?
     private var transcriberResolvedLocaleIdentifier: String?
@@ -69,9 +69,9 @@ final class VoiceTranscriptionModule: ObservableObject {
     /// History remains unpublished until the first effective configuration and startup prune finish.
     private var hasResolvedInitialHistory = false
     private var isPasteLatestHandlerInstalled = false
-    private var unmanagedHoldShortcut: ShortcutDTO?
-    private var unmanagedToggleShortcut: ShortcutDTO?
-    private var unmanagedCancelShortcut: ShortcutDTO?
+    private var unmanagedHoldBindings: [ShortcutDTO]?
+    private var unmanagedToggleBindings: [ShortcutDTO]?
+    private var unmanagedCancelBindings: [ShortcutDTO]?
     private var unmanagedPasteLatestShortcut: KeyboardShortcuts.Shortcut?
     private var unmanagedWindowMoverShortcut: KeyboardShortcuts.Shortcut?
     private var feedbackGeneration: UInt64 = 0
@@ -110,9 +110,9 @@ final class VoiceTranscriptionModule: ObservableObject {
             unmanagedPasteLatestShortcut = KeyboardShortcuts.getShortcut(for: .pasteLatestTranscript)
         }
         unmanagedWindowMoverShortcut = KeyboardShortcuts.getShortcut(for: .moveToNextScreen)
-        unmanagedHoldShortcut = Self.localVoiceBinding(.voiceHoldToTalk, key: "hold")
-        unmanagedToggleShortcut = Self.localVoiceBinding(.voiceToggleRecording, key: "toggle")
-        unmanagedCancelShortcut = Self.localVoiceBinding(.voiceCancel, key: "cancel")
+        unmanagedHoldBindings = Self.localVoiceBindings(.voiceHoldToTalk, key: "hold")
+        unmanagedToggleBindings = Self.localVoiceBindings(.voiceToggleRecording, key: "toggle")
+        unmanagedCancelBindings = Self.localVoiceBindings(.voiceCancel, key: "cancel")
     }
 
     func register() {
@@ -156,7 +156,7 @@ final class VoiceTranscriptionModule: ObservableObject {
         lifecycleGeneration &+= 1
         armGeneration &+= 1
         observer?.setRecordingActive(false)
-        observation?.cancel(); observation = nil; observer = nil; observerThresholdMs = nil; observerHoldBinding = nil
+        observation?.cancel(); observation = nil; observer = nil; observerThresholdMs = nil; observerHoldBindings = nil
         maxTimer?.invalidate(); maxTimer = nil
         assetProgressObservation?.invalidate(); assetProgressObservation = nil
         let cancellationWasInFlight = cancellationCleanupTask != nil
@@ -189,7 +189,7 @@ final class VoiceTranscriptionModule: ObservableObject {
             }
         }
         KeyboardShortcuts.disable(.pasteLatestTranscript)
-        KeyboardShortcuts.disable(.voiceHoldToTalk); KeyboardShortcuts.disable(.voiceToggleRecording); KeyboardShortcuts.disable(.voiceCancel)
+        disableAllVoiceStandardSlots()
         if status != .pending { machine = VoiceSessionMachine(); status = .disabled }
     }
 
@@ -344,7 +344,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     func acquireVoiceBindingCapture() -> VoiceBindingCaptureLease.Token {
         let token = bindingCaptureLease.acquire()
         observation?.cancel(); observation = nil; observer = nil
-        KeyboardShortcuts.disable(.voiceHoldToTalk); KeyboardShortcuts.disable(.voiceToggleRecording); KeyboardShortcuts.disable(.voiceCancel)
+        disableAllVoiceStandardSlots()
         return token
     }
 
@@ -359,39 +359,45 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     private func restoreRoutingAfterBindingCapture() {
-        observerThresholdMs = nil; observerHoldBinding = nil; observerToggleBinding = nil; observerCancelBinding = nil
+        observerThresholdMs = nil; observerHoldBindings = nil; observerToggleBindings = nil; observerCancelBindings = nil
         recoverDegradedAndObserve()
     }
 
-    func effectiveVoiceBinding(for action: VoiceBindingAction) -> ShortcutDTO {
-        switch action { case .holdToTalk: return effective.holdToTalkShortcut.value; case .toggleRecording: return effective.toggleRecordingShortcut.value; case .cancel: return effective.cancelShortcut.value }
+    func effectiveVoiceBindings(for action: VoiceBindingAction) -> [ShortcutDTO] {
+        switch action { case .holdToTalk: return effective.holdToTalkBindings.value; case .toggleRecording: return effective.toggleRecordingBindings.value; case .cancel: return effective.cancelBindings.value }
     }
+
+    func effectiveVoiceBinding(for action: VoiceBindingAction) -> ShortcutDTO { effectiveVoiceBindings(for: action).first ?? .unbound }
 
     /// Stages and validates through ConfigReloader before any persisted or live registration changes.
     /// The tail makes rapid captures linearizable; each candidate observes the prior successful commit.
     func commitVoiceBinding(_ dto: ShortcutDTO, action: VoiceBindingAction) async -> String? {
+        await commitVoiceBindings(dto == .unbound ? [] : [dto], action: action)
+    }
+
+    func commitVoiceBindings(_ bindings: [ShortcutDTO], action: VoiceBindingAction) async -> String? {
         let previous = bindingCommitTail
         let operation = Task { @MainActor [weak self] () -> String? in
             _ = await previous?.value
             guard let self else { return "Voice settings are unavailable." }
-            return await self.performVoiceBindingCommit(dto, action: action)
+            return await self.performVoiceBindingCommit(bindings, action: action)
         }
         bindingCommitTail = operation
         return await operation.value
     }
 
-    private func performVoiceBindingCommit(_ dto: ShortcutDTO, action: VoiceBindingAction) async -> String? {
+    private func performVoiceBindingCommit(_ bindings: [ShortcutDTO], action: VoiceBindingAction) async -> String? {
         let managed: Bool
         switch action { case .holdToTalk: managed = effective.holdToTalkShortcut.isManaged; case .toggleRecording: managed = effective.toggleRecordingShortcut.isManaged; case .cancel: managed = effective.cancelShortcut.isManaged }
         guard !managed else { return "This binding is managed by configuration." }
-        if let issue = VoiceBindingPolicy.validate(dto, for: action) {
+        if let issue = bindings.compactMap({ VoiceBindingPolicy.validate($0, for: action) }).first {
             return issue == .unsafeUnmodifiedKey
                 ? "Hold and Toggle require Control, Option, or Command; Shift alone is unsafe."
                 : "Fn modifier-only is available only for Hold to Talk."
         }
         guard let reloader else { return "Configuration is not ready." }
         var staged = currentLocalSettings()
-        switch action { case .holdToTalk: staged.holdToTalkShortcut = dto; case .toggleRecording: staged.toggleRecordingShortcut = dto; case .cancel: staged.cancelShortcut = dto }
+        switch action { case .holdToTalk: staged.holdToTalkBindings = bindings; case .toggleRecording: staged.toggleRecordingBindings = bindings; case .cancel: staged.cancelBindings = bindings }
         let result: ConfigLoadResult
         do {
             result = try await reloader.stageAndReload(local: staged, requiringUnmanaged: action)
@@ -400,15 +406,14 @@ final class VoiceTranscriptionModule: ObservableObject {
         } catch {
             configDiagnostic = "Could not validate the binding."; return configDiagnostic
         }
-        let accepted: ResolvedSetting<ShortcutDTO>
-        switch action { case .holdToTalk: accepted = result.effective.holdToTalkShortcut; case .toggleRecording: accepted = result.effective.toggleRecordingShortcut; case .cancel: accepted = result.effective.cancelShortcut }
-        guard !accepted.isManaged, accepted.value == dto else { return "This binding became managed before the change completed." }
-        let name: KeyboardShortcuts.Name
-        switch action { case .holdToTalk: name = .voiceHoldToTalk; unmanagedHoldShortcut = dto; case .toggleRecording: name = .voiceToggleRecording; unmanagedToggleShortcut = dto; case .cancel: name = .voiceCancel; unmanagedCancelShortcut = dto }
-        let key = Self.voiceBindingKey(name)
+        let accepted: ResolvedSetting<[ShortcutDTO]>
+        switch action { case .holdToTalk: accepted = result.effective.holdToTalkBindings; case .toggleRecording: accepted = result.effective.toggleRecordingBindings; case .cancel: accepted = result.effective.cancelBindings }
+        guard !accepted.isManaged, accepted.value == bindings else { return "This binding became managed before the change completed." }
+        let key: String
+        switch action { case .holdToTalk: key = "hold"; unmanagedHoldBindings = bindings; case .toggleRecording: key = "toggle"; unmanagedToggleBindings = bindings; case .cancel: key = "cancel"; unmanagedCancelBindings = bindings }
         let defaults = UserDefaults.standard
         defaults.set(true, forKey: "voice.binding.\(key).explicit")
-        if let data = try? JSONEncoder().encode(dto) { defaults.set(data, forKey: "voice.binding.\(key).value") }
+        if let data = try? JSONEncoder().encode(bindings) { defaults.set(data, forKey: "voice.binding.\(key).value") }
         configDiagnostic = nil
         return nil
     }
@@ -498,26 +503,26 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     private func reconcileObservation() {
-        guard observerThresholdMs != effective.fnHoldThresholdMs.value || observerHoldBinding != effective.holdToTalkShortcut.value || observerToggleBinding != effective.toggleRecordingShortcut.value || observerCancelBinding != effective.cancelShortcut.value else { return }
+        guard observerThresholdMs != effective.fnHoldThresholdMs.value || observerHoldBindings != effective.holdToTalkBindings.value || observerToggleBindings != effective.toggleRecordingBindings.value || observerCancelBindings != effective.cancelBindings.value else { return }
         guard case .idle = machine.state else { return }
-        observation?.cancel(); observation = nil; observer = nil; observerThresholdMs = nil; observerHoldBinding = nil; observerToggleBinding = nil; observerCancelBinding = nil
+        observation?.cancel(); observation = nil; observer = nil; observerThresholdMs = nil; observerHoldBindings = nil; observerToggleBindings = nil; observerCancelBindings = nil
         startObserving()
     }
 
     private func startObserving() {
         guard !bindingCaptureLease.isActive else { return }
         guard isEnabled, observation == nil else { if isEnabled, status == .disabled { status = .idle }; return }
-        let bareHold: Bool = { if case .modifierHold = effective.holdToTalkShortcut.value { return true }; return false }()
+        let bareHold: Bool = { if effective.holdToTalkBindings.value.contains(where: { if case .modifierHold = $0 { return true }; return false }) { return true }; return false }()
         var chords: [Int64: FnChordAction] = [:]
         func add(_ binding: ShortcutDTO, _ action: FnChordAction) { if case .fnChord(let key) = binding, let code = ShortcutDTO.keyCodes[key.lowercased()] { chords[code] = action } }
-        add(effective.holdToTalkShortcut.value, .hold); add(effective.toggleRecordingShortcut.value, .toggle); add(effective.cancelShortcut.value, .cancel)
+        effective.holdToTalkBindings.value.forEach { add($0, .hold) }; effective.toggleRecordingBindings.value.forEach { add($0, .toggle) }; effective.cancelBindings.value.forEach { add($0, .cancel) }
         guard bareHold || !chords.isEmpty else { if status == .disabled { status = .idle }; return }
         guard CGPreflightListenEventAccess() else { status = .degraded("Input Monitoring access is required"); return }
         guard AXIsProcessTrusted() else { status = .degraded("Accessibility access is required for Fn shortcuts"); return }
         let observer = FnEventObserver(holdThreshold: Double(effective.fnHoldThresholdMs.value) / 1000, bareHoldEnabled: bareHold, chords: chords)
         do {
             observation = try observer.observe { [weak self] event in self?.handle(event) }
-            self.observer = observer; observerThresholdMs = effective.fnHoldThresholdMs.value; observerHoldBinding = effective.holdToTalkShortcut.value; observerToggleBinding = effective.toggleRecordingShortcut.value; observerCancelBinding = effective.cancelShortcut.value
+            self.observer = observer; observerThresholdMs = effective.fnHoldThresholdMs.value; observerHoldBindings = effective.holdToTalkBindings.value; observerToggleBindings = effective.toggleRecordingBindings.value; observerCancelBindings = effective.cancelBindings.value
             if status == .disabled { status = .idle }
         } catch { status = .degraded("Input Monitoring access is required") }
     }
@@ -785,8 +790,8 @@ final class VoiceTranscriptionModule: ObservableObject {
             .flatMap { try? JSONDecoder().decode([InputDeviceDTO].self, from: $0) } ?? []
         return SettingsValues(windowMoverEnabled: WindowMoverModule.shared.persistedEnabled,
                               windowMoverShortcut: unmanagedWindowMoverShortcut.flatMap(ShortcutDTO.fromKeyboardShortcut),
-                              voiceEnabled: defaults.bool(forKey: "voice.enabled"), holdToTalkShortcut: unmanagedHoldShortcut,
-                              toggleRecordingShortcut: unmanagedToggleShortcut, cancelShortcut: unmanagedCancelShortcut,
+                              voiceEnabled: defaults.bool(forKey: "voice.enabled"), holdToTalkBindings: unmanagedHoldBindings,
+                              toggleRecordingBindings: unmanagedToggleBindings, cancelBindings: unmanagedCancelBindings,
                               pasteLatestTranscriptShortcut: persistedPasteLatestTranscriptShortcut,
                               outputMode: VoiceOutputMode(rawValue: defaults.string(forKey: "voice.outputMode") ?? "") ?? .pasteImmediately,
                               historyEnabled: defaults.bool(forKey: VoiceHistoryPreferences.enabledKey),
@@ -808,9 +813,12 @@ final class VoiceTranscriptionModule: ObservableObject {
     private func registerPasteLatestShortcut() {
         guard !isPasteLatestHandlerInstalled else { return }
         isPasteLatestHandlerInstalled = true
-        registerStandardBinding(.voiceHoldToTalk, source: .init("standard.hold"), action: .hold)
-        registerStandardBinding(.voiceToggleRecording, source: .init("standard.toggle"), action: .toggle)
-        registerStandardBinding(.voiceCancel, source: .init("standard.cancel"), action: .cancel)
+        for action in [VoiceBindingAction.holdToTalk, .toggleRecording, .cancel] {
+            for index in 0..<KeyboardShortcuts.Name.voiceBindingSlotCount {
+                let routed: VoiceBindingRouter.Action = action == .holdToTalk ? .hold : (action == .toggleRecording ? .toggle : .cancel)
+                registerStandardBinding(.voiceBindingSlot(action: action, index: index), source: .init("standard.\(action.rawValue).\(index)"), action: routed)
+            }
+        }
         KeyboardShortcuts.onKeyUp(for: .pasteLatestTranscript) { [weak self] in
             Task { @MainActor in
                 guard let self, self.isEnabled else { return }
@@ -845,65 +853,68 @@ final class VoiceTranscriptionModule: ObservableObject {
     private var requestedLocale: Locale { localeIdentifier == "system" ? .current : Locale(identifier: localeIdentifier) }
 
     private func applyVoiceShortcuts(_ value: EffectiveSettings) {
-        unmanagedHoldShortcut = applyManagedVoiceBinding(value.holdToTalkShortcut, name: .voiceHoldToTalk, key: "hold", unmanaged: unmanagedHoldShortcut)
-        unmanagedToggleShortcut = applyManagedVoiceBinding(value.toggleRecordingShortcut, name: .voiceToggleRecording, key: "toggle", unmanaged: unmanagedToggleShortcut)
-        unmanagedCancelShortcut = applyManagedVoiceBinding(value.cancelShortcut, name: .voiceCancel, key: "cancel", unmanaged: unmanagedCancelShortcut)
+        unmanagedHoldBindings = applyManagedVoiceBindings(value.holdToTalkBindings, action: .holdToTalk, key: "hold", unmanaged: unmanagedHoldBindings)
+        unmanagedToggleBindings = applyManagedVoiceBindings(value.toggleRecordingBindings, action: .toggleRecording, key: "toggle", unmanaged: unmanagedToggleBindings)
+        unmanagedCancelBindings = applyManagedVoiceBindings(value.cancelBindings, action: .cancel, key: "cancel", unmanaged: unmanagedCancelBindings)
         reconcileShortcutActivation()
     }
 
-    private func applyManagedVoiceBinding(_ binding: ResolvedSetting<ShortcutDTO>, name: KeyboardShortcuts.Name,
-                                          key: String, unmanaged: ShortcutDTO?) -> ShortcutDTO? {
+    private func applyManagedVoiceBindings(_ binding: ResolvedSetting<[ShortcutDTO]>, action: VoiceBindingAction,
+                                           key: String, unmanaged: [ShortcutDTO]?) -> [ShortcutDTO]? {
         let defaults = UserDefaults.standard, activeKey = "voice.binding.\(key).backupActive", dataKey = "voice.binding.\(key).backup"
         var local = unmanaged
-        if binding.isManaged {
-            if !defaults.bool(forKey: activeKey) {
-                defaults.set(true, forKey: activeKey)
-                if let local, let data = try? JSONEncoder().encode(local) { defaults.set(data, forKey: dataKey) }
-                else { defaults.removeObject(forKey: dataKey) }
-            }
-            KeyboardShortcuts.setShortcut(try? binding.value.keyboardShortcut(), for: name)
-        } else if defaults.bool(forKey: activeKey) {
-            local = defaults.data(forKey: dataKey).flatMap { try? JSONDecoder().decode(ShortcutDTO.self, from: $0) }
-            KeyboardShortcuts.setShortcut(local.flatMap { try? $0.keyboardShortcut() }, for: name)
+        if binding.isManaged && !defaults.bool(forKey: activeKey) {
+            defaults.set(true, forKey: activeKey)
+            if let local, let data = try? JSONEncoder().encode(local) { defaults.set(data, forKey: dataKey) }
+        } else if !binding.isManaged && defaults.bool(forKey: activeKey) {
+            local = defaults.data(forKey: dataKey).flatMap { try? JSONDecoder().decode([ShortcutDTO].self, from: $0) }
             defaults.set(local != nil, forKey: "voice.binding.\(key).explicit")
             if let local, let data = try? JSONEncoder().encode(local) { defaults.set(data, forKey: "voice.binding.\(key).value") }
             defaults.removeObject(forKey: dataKey); defaults.set(false, forKey: activeKey)
-        } else {
-            KeyboardShortcuts.setShortcut(try? binding.value.keyboardShortcut(), for: name)
+        }
+        let active = binding.isManaged ? binding.value : (local ?? binding.value)
+        for index in 0..<KeyboardShortcuts.Name.voiceBindingSlotCount {
+            let dto = index < active.count ? active[index] : .unbound
+            KeyboardShortcuts.setShortcut(try? dto.keyboardShortcut(), for: .voiceBindingSlot(action: action, index: index))
         }
         return local
     }
 
-    private static func voiceBindingKey(_ name: KeyboardShortcuts.Name) -> String {
-        if name == .voiceHoldToTalk { return "hold" }; if name == .voiceToggleRecording { return "toggle" }; return "cancel"
-    }
-
-    private static func localVoiceBinding(_ name: KeyboardShortcuts.Name, key: String) -> ShortcutDTO? {
+    private static func localVoiceBindings(_ name: KeyboardShortcuts.Name, key: String) -> [ShortcutDTO]? {
         let defaults = UserDefaults.standard, dataKey = "voice.binding.\(key).backup"
         if defaults.bool(forKey: "voice.binding.\(key).backupActive") {
-            return defaults.data(forKey: dataKey).flatMap { try? JSONDecoder().decode(ShortcutDTO.self, from: $0) }
+            return VoiceBindingPersistence.localBindings(explicit: true, canonicalData: defaults.data(forKey: dataKey), legacyValue: nil)
         }
         let explicit = defaults.bool(forKey: "voice.binding.\(key).explicit")
         let legacy = KeyboardShortcuts.getShortcut(for: name).flatMap(ShortcutDTO.fromKeyboardShortcut)
-        guard let migrated = VoiceBindingPersistence.localValue(
-            explicit: explicit, canonicalData: defaults.data(forKey: "voice.binding.\(key).value"), legacyValue: legacy
-        ) else { return nil }
-        if defaults.data(forKey: "voice.binding.\(key).value") == nil,
-           let data = try? JSONEncoder().encode(migrated) { defaults.set(data, forKey: "voice.binding.\(key).value") }
+        guard let migrated = VoiceBindingPersistence.localBindings(explicit: explicit, canonicalData: defaults.data(forKey: "voice.binding.\(key).value"), legacyValue: legacy) else { return nil }
+        if defaults.data(forKey: "voice.binding.\(key).value") == nil, let data = try? JSONEncoder().encode(migrated) { defaults.set(data, forKey: "voice.binding.\(key).value") }
         return migrated
+    }
+
+    private func disableAllVoiceStandardSlots() {
+        for action in [VoiceBindingAction.holdToTalk, .toggleRecording, .cancel] {
+            for index in 0..<KeyboardShortcuts.Name.voiceBindingSlotCount {
+                KeyboardShortcuts.disable(.voiceBindingSlot(action: action, index: index))
+            }
+        }
     }
 
     private func reconcileShortcutActivation() {
         if bindingCaptureLease.isActive {
-            KeyboardShortcuts.disable(.voiceHoldToTalk); KeyboardShortcuts.disable(.voiceToggleRecording); KeyboardShortcuts.disable(.voiceCancel)
+            disableAllVoiceStandardSlots()
             return
         }
         let phase: VoiceInteractionPhase
         switch status { case .arming: phase = .arming; case .recording: phase = .recording; case .finalizing: phase = .finalizing; case .idle, .noSpeech, .pasteFailed, .degraded: phase = .idle; default: phase = .unavailable }
         let policy = VoiceShortcutActivationPolicy.decide(moduleEnabled: isEnabled, phase: phase)
-        policy.holdEnabled ? KeyboardShortcuts.enable(.voiceHoldToTalk) : KeyboardShortcuts.disable(.voiceHoldToTalk)
-        policy.toggleEnabled ? KeyboardShortcuts.enable(.voiceToggleRecording) : KeyboardShortcuts.disable(.voiceToggleRecording)
-        policy.cancelEnabled ? KeyboardShortcuts.enable(.voiceCancel) : KeyboardShortcuts.disable(.voiceCancel)
+        for action in [VoiceBindingAction.holdToTalk, .toggleRecording, .cancel] {
+            let enabled = action == .holdToTalk ? policy.holdEnabled : (action == .toggleRecording ? policy.toggleEnabled : policy.cancelEnabled)
+            for index in 0..<KeyboardShortcuts.Name.voiceBindingSlotCount {
+                let name = KeyboardShortcuts.Name.voiceBindingSlot(action: action, index: index)
+                enabled ? KeyboardShortcuts.enable(name) : KeyboardShortcuts.disable(name)
+            }
+        }
     }
 
     private func applyPasteLatestShortcut(_ shortcut: ResolvedSetting<ShortcutDTO>) {

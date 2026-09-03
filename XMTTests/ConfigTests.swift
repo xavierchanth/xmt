@@ -382,8 +382,11 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(resolved.holdToTalkShortcut.value, .unbound)
         XCTAssertTrue(resolved.holdToTalkShortcut.isManaged)
         let ordered = try decode(#"{"version":1,"voice":{"holdToTalkBindings":[{"key":"a","modifiers":["control"]},{"key":"b","modifiers":["option"]}]}}"#)
-        XCTAssertEqual(EffectiveSettings.resolve(config: ordered, local: local).holdToTalkShortcut.value,
-                       .key(key: "a", modifiers: ["control"]))
+        let orderedEffective = EffectiveSettings.resolve(config: ordered, local: local)
+        XCTAssertEqual(orderedEffective.holdToTalkShortcut.value, .key(key: "a", modifiers: ["control"]))
+        XCTAssertEqual(orderedEffective.holdToTalkBindings.value, [
+            .key(key: "a", modifiers: ["control"]), .key(key: "b", modifiers: ["option"])
+        ])
     }
 
     func testBindingOverlapPolicyRejectsDuplicatesAndCrossActionOverlap() {
@@ -425,18 +428,18 @@ final class ConfigTests: XCTestCase {
 
     func testManagedVoiceBindingsRestoreAllIndependentLocalValues() throws {
         var local = SettingsValues()
-        local.holdToTalkShortcut = .unbound
-        local.toggleRecordingShortcut = .key(key: "t", modifiers: ["control"])
-        local.cancelShortcut = .fnChord(key: "f12")
+        local.holdToTalkBindings = [.key(key: "h", modifiers: ["control"]), .fnChord(key: "h")]
+        local.toggleRecordingBindings = [.key(key: "t", modifiers: ["control"]), .fnChord(key: "t")]
+        local.cancelBindings = [.fnChord(key: "f12"), .key(key: "escape", modifiers: ["command"])]
         let managed = try decode(#"{"version":1,"voice":{"holdToTalkShortcut":{"type":"fnChord","key":"h"},"toggleRecordingShortcut":{"type":"unbound"},"cancelShortcut":{"type":"key","key":"escape","modifiers":["control"]}}}"#)
         let effectiveManaged = EffectiveSettings.resolve(config: managed, local: local)
         XCTAssertEqual(effectiveManaged.holdToTalkShortcut.value, .fnChord(key: "h"))
         XCTAssertEqual(effectiveManaged.toggleRecordingShortcut.value, .unbound)
         XCTAssertEqual(effectiveManaged.cancelShortcut.value, .key(key: "escape", modifiers: ["control"]))
         let restored = EffectiveSettings.resolve(config: nil, local: local)
-        XCTAssertEqual(restored.holdToTalkShortcut.value, local.holdToTalkShortcut)
-        XCTAssertEqual(restored.toggleRecordingShortcut.value, local.toggleRecordingShortcut)
-        XCTAssertEqual(restored.cancelShortcut.value, local.cancelShortcut)
+        XCTAssertEqual(restored.holdToTalkBindings.value, local.holdToTalkBindings)
+        XCTAssertEqual(restored.toggleRecordingBindings.value, local.toggleRecordingBindings)
+        XCTAssertEqual(restored.cancelBindings.value, local.cancelBindings)
     }
 
     func testVoiceRecorderEscapeFnClearAndCancelModel() throws {

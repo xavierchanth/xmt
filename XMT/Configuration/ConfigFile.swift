@@ -197,6 +197,9 @@ struct ConfigFile: Codable, Equatable, Sendable {
         var located: [VoiceBindingPolicy.LocatedBinding] = []
         for (path, canonical, singular, action) in groups {
             let values = canonical ?? singular.map { [$0] } ?? []
+            if values.count > VoiceBindingPersistence.maximumBindingsPerAction {
+                throw ConfigDiagnostic.invalidValue(path: path, reason: "supports at most \(VoiceBindingPersistence.maximumBindingsPerAction) bindings")
+            }
             for (index, shortcut) in values.enumerated() {
             let itemPath = canonical == nil ? path.replacingOccurrences(of: "Bindings", with: "Shortcut") : "\(path)[\(index)]"
             if case let .modifierHold(name) = shortcut, !["fn", "function"].contains(name.lowercased()) { throw ConfigDiagnostic.invalidValue(path: path, reason: "only Fn is supported as a modifier hold") }

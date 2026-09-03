@@ -3,49 +3,36 @@ import SwiftUI
 
 struct VoiceSettingsView: View {
     @ObservedObject private var module = VoiceTranscriptionModule.shared
-    @State private var bindingRecorder = VoiceBindingRecorderModel()
+    @State private var lists: [VoiceBindingAction: [ShortcutDTO]] = [:]
+    @State private var active: Row?
     @State private var captureToken: VoiceBindingCaptureLease.Token?
-    @State private var busyAction: VoiceBindingAction?
-    @State private var actionList = VoiceActionListModel()
+
+    private struct Row: Equatable { let action: VoiceBindingAction; let index: Int }
 
     var body: some View {
         Form {
             Section {
-                Toggle("Enable Voice Transcription", isOn: $module.isEnabled)
-                    .disabled(module.managedKeys.contains(.voiceEnabled))
-                Text("Use Hold to Talk, Toggle Recording, or Cancel. Fn remains available for Hold to Talk.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                Toggle("Enable Voice Transcription", isOn: $module.isEnabled).disabled(module.managedKeys.contains(.voiceEnabled))
+                Text("Each action can have several standard or Fn bindings.").font(.footnote).foregroundStyle(.secondary)
             }
             Section("Voice bindings") {
-                if actionList.actions.isEmpty {
-                    Text("No voice bindings").foregroundStyle(.secondary)
-                }
-                ForEach(actionList.actions, id: \.self) { action in
-                    HStack(alignment: .top) {
-                        bindingRow(action.title, action: action, managed: action.managedKey)
-                        VStack(spacing: 4) {
-                            Button { actionList.move(action, by: -1) } label: { Image(systemName: "chevron.up") }
-                                .accessibilityLabel("Move \(action.title) binding up")
-                                .disabled(actionList.actions.first == action || busyAction != nil)
-                            Button { actionList.move(action, by: 1) } label: { Image(systemName: "chevron.down") }
-                                .accessibilityLabel("Move \(action.title) binding down")
-                                .disabled(actionList.actions.last == action || busyAction != nil)
-                            Button(role: .destructive) { remove(action) } label: { Image(systemName: "minus.circle") }
-                                .accessibilityLabel("Remove \(action.title) binding")
-                                .disabled(module.managedKeys.contains(action.managedKey) || busyAction != nil)
+                ForEach(VoiceBindingAction.all, id: \.self) { action in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(action.title).font(.headline)
+                        ForEach(Array((lists[action] ?? []).enumerated()), id: \.offset) { index, binding in
+                            HStack {
+                                bindingRow(action: action, index: index, binding: binding)
+                                Button { move(action, index, -1) } label: { Image(systemName: "chevron.up") }.disabled(index == 0 || active != nil)
+                                Button { move(action, index, 1) } label: { Image(systemName: "chevron.down") }.disabled(index + 1 == lists[action]?.count || active != nil)
+                                Button(role: .destructive) { remove(action, index) } label: { Image(systemName: "minus.circle") }
+                                    .disabled(isManaged(action) || active != nil)
+                            }
                         }
+                        Button { add(action) } label: { Label("Add \(action.title) binding", systemImage: "plus.circle") }
+                            .disabled(isManaged(action) || active != nil || (lists[action]?.count ?? 0) >= KeyboardShortcuts.Name.voiceBindingSlotCount)
                     }
                 }
-                Menu("Add voice binding") {
-                    ForEach(actionList.availableActions, id: \.self) { action in
-                        Button(action.title) { add(action) }
-                            .accessibilityLabel("Add \(action.title) binding")
-                    }
-                }
-                .disabled(actionList.availableActions.isEmpty || busyAction != nil)
-                .accessibilityHint("Adds one of the currently unbound Voice actions and starts shortcut capture")
-                Text("Escape alone cancels capture; Control–Escape and Fn–Escape are bindable. macOS Keyboard settings for Globe/Fn may intercept some Fn events before XMT.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                Text("Escape alone cancels capture; Control–Escape and Fn–Escape are bindable.").font(.footnote).foregroundStyle(.secondary)
             }
             Section("Permissions and speech assets") {
                 HStack { Text("Speech assets: \(module.assetStatus)"); Spacer(); Button("Check") { module.refreshAssets() }; Button("Download") { module.downloadAssets() } }
@@ -53,18 +40,10 @@ struct VoiceSettingsView: View {
                 AccessibilityStatusView(consumerDescription: "Voice Transcription uses Accessibility to paste completed text when requested.")
             }
             Section("Output") {
-                Picker("Completed transcript", selection: $module.outputMode) {
-                    Text("Paste immediately").tag(VoiceOutputMode.pasteImmediately)
-                    Text("Clipboard only").tag(VoiceOutputMode.clipboardOnly)
-                }.disabled(module.managedKeys.contains(.outputMode))
-                Picker("Language", selection: $module.localeIdentifier) {
-                    Text("System Language").tag("system")
-                    ForEach(module.supportedLocaleIdentifiers, id: \.self) { id in Text(Locale.current.localizedString(forIdentifier: id) ?? id).tag(id) }
-                }.disabled(module.managedKeys.contains(.locale))
+                Picker("Completed transcript", selection: $module.outputMode) { Text("Paste immediately").tag(VoiceOutputMode.pasteImmediately); Text("Clipboard only").tag(VoiceOutputMode.clipboardOnly) }.disabled(module.managedKeys.contains(.outputMode))
+                Picker("Language", selection: $module.localeIdentifier) { Text("System Language").tag("system"); ForEach(module.supportedLocaleIdentifiers, id: \.self) { id in Text(Locale.current.localizedString(forIdentifier: id) ?? id).tag(id) } }.disabled(module.managedKeys.contains(.locale))
                 Button("Copy Last Transcript") { module.copyLastTranscript() }.disabled(module.lastTranscript.isEmpty)
-                KeyboardShortcuts.Recorder("Paste latest transcript:", name: .pasteLatestTranscript,
-                    onChange: { module.userChangedPasteLatestShortcut($0) })
-                    .disabled(module.managedKeys.contains(.pasteLatestTranscriptShortcut))
+                KeyboardShortcuts.Recorder("Paste latest transcript:", name: .pasteLatestTranscript, onChange: { module.userChangedPasteLatestShortcut($0) }).disabled(module.managedKeys.contains(.pasteLatestTranscriptShortcut))
             }
             Section("Transcript history") {
                 Toggle("Save transcript history", isOn: $module.historyEnabled).disabled(module.managedKeys.contains(.historyEnabled))
@@ -72,75 +51,36 @@ struct VoiceSettingsView: View {
                 TextField("Maximum entries", value: $module.historyMaxEntries, format: .number).disabled(!module.historyEnabled || module.managedKeys.contains(.historyMaxEntries))
             }
             Section("Input priority") { DevicePriorityListView(module: module, priorityManaged: module.managedKeys.contains(.inputDevicePriority), fallbackManaged: module.managedKeys.contains(.fallbackToSystemDefault)) }
-            if module.status == .pending { Section("Recovery") { Button("Retry Recording") { module.retryPending() }; Button("Delete Recording", role: .destructive) { module.deletePending() } } }
-            Section("Configuration") { HStack { Button("Reload Configuration") { module.reloadConfig() }; if let diagnostic = module.configDiagnostic { Text(diagnostic).foregroundStyle(.red) } } }
-        }.formStyle(.grouped)
-            .onAppear {
-                module.refreshDevices(); module.refreshLocalesAndAssets()
-                actionList.replace(with: VoiceBindingAction.all.filter { module.effectiveVoiceBinding(for: $0) != .unbound })
-            }
-            .onDisappear {
-                module.cancelVoiceBindingCapture()
-                captureToken = nil; busyAction = nil
-                if let action = bindingRecorder.activeAction { bindingRecorder.receive(.cancel(action)) }
-            }
+            Section("Configuration") { Button("Reload Configuration") { module.reloadConfig() }; if let diagnostic = module.configDiagnostic { Text(diagnostic).foregroundStyle(.red) } }
+        }.formStyle(.grouped).onAppear { module.refreshDevices(); module.refreshLocalesAndAssets(); reloadLists() }
+          .onDisappear { module.cancelVoiceBindingCapture(); active = nil; captureToken = nil }
     }
 
-    private func bindingRow(_ title: String, action: VoiceBindingAction, managed: EffectiveSettings.Key) -> some View {
-        VoiceBindingRecorder(title: title, action: action, value: module.effectiveVoiceBinding(for: action),
-            isManaged: module.managedKeys.contains(managed), isRecording: bindingRecorder.activeAction == action,
-            isOtherBindingBusy: busyAction != nil && busyAction != action,
-            begin: {
-                captureToken = module.acquireVoiceBindingCapture(); busyAction = action
-                bindingRecorder.receive(.begin(action))
-            },
-            cancel: {
-                bindingRecorder.receive(.cancel(action))
-                if let token = captureToken { module.releaseVoiceBindingCapture(token) }
-                captureToken = nil; busyAction = nil
-                if module.effectiveVoiceBinding(for: action) == .unbound { actionList.remove(action) }
-            },
-            commit: { binding in
-                let token = captureToken ?? module.acquireVoiceBindingCapture()
-                captureToken = token; busyAction = action
-                switch binding {
-                case .unbound: bindingRecorder.receive(.clear(action))
-                case .modifierHold where action == .holdToTalk: bindingRecorder.receive(.selectFn)
-                default: bindingRecorder.receive(.captured(action, binding))
-                }
-                let diagnostic = await module.commitVoiceBinding(binding, action: action)
-                module.releaseVoiceBindingCapture(token)
-                if captureToken == token { captureToken = nil; busyAction = nil }
-                return diagnostic
-            },
-            didCommit: { binding in
-                if binding == .unbound { actionList.remove(action) }
-            })
+    private func bindingRow(action: VoiceBindingAction, index: Int, binding: ShortcutDTO) -> some View {
+        VoiceBindingRecorder(title: "Binding \(index + 1)", action: action, value: binding, isManaged: isManaged(action),
+            isRecording: active == Row(action: action, index: index), isOtherBindingBusy: active != nil && active != Row(action: action, index: index),
+            begin: { begin(action, index) }, cancel: { finishCapture() },
+            commit: { value in
+                var candidate = lists[action] ?? []; candidate[index] = value
+                if value == .unbound { candidate.remove(at: index) }
+                let diagnostic = await module.commitVoiceBindings(candidate, action: action)
+                if diagnostic == nil { lists[action] = candidate }
+                finishCapture(); return diagnostic
+            }, didCommit: { _ in })
     }
 
-    private func add(_ action: VoiceBindingAction) {
-        guard actionList.add(action) else { return }
-        captureToken = module.acquireVoiceBindingCapture(); busyAction = action
-        bindingRecorder.receive(.begin(action))
-    }
-
-    private func remove(_ action: VoiceBindingAction) {
-        let token = module.acquireVoiceBindingCapture(); busyAction = action
-        Task { @MainActor in
-            let diagnostic = await module.commitVoiceBinding(.unbound, action: action)
-            module.releaseVoiceBindingCapture(token)
-            if diagnostic == nil { actionList.remove(action) }
-            if captureToken == nil { busyAction = nil }
-        }
-    }
+    private func begin(_ action: VoiceBindingAction, _ index: Int) { captureToken = module.acquireVoiceBindingCapture(); active = Row(action: action, index: index) }
+    private func finishCapture() { if let token = captureToken { module.releaseVoiceBindingCapture(token) }; captureToken = nil; active = nil }
+    private func add(_ action: VoiceBindingAction) { var values = lists[action] ?? []; values.append(.unbound); lists[action] = values; begin(action, values.count - 1) }
+    private func remove(_ action: VoiceBindingAction, _ index: Int) { var values = lists[action] ?? []; values.remove(at: index); commit(values, action) }
+    private func move(_ action: VoiceBindingAction, _ index: Int, _ delta: Int) { var values = lists[action] ?? []; values.swapAt(index, index + delta); commit(values, action) }
+    private func commit(_ values: [ShortcutDTO], _ action: VoiceBindingAction) { Task { if await module.commitVoiceBindings(values, action: action) == nil { lists[action] = values } } }
+    private func reloadLists() { for action in VoiceBindingAction.all { lists[action] = module.effectiveVoiceBindings(for: action) } }
+    private func isManaged(_ action: VoiceBindingAction) -> Bool { module.managedKeys.contains(action.managedKey) }
 }
 
-private extension VoiceBindingAction {
+extension VoiceBindingAction: Hashable {
     static let all: [Self] = [.holdToTalk, .toggleRecording, .cancel]
-    var title: String {
-        switch self { case .holdToTalk: "Hold to talk"; case .toggleRecording: "Toggle recording"; case .cancel: "Cancel" }
-    }
-    var managedKey: EffectiveSettings.Key {
-        switch self { case .holdToTalk: .holdToTalkShortcut; case .toggleRecording: .toggleRecordingShortcut; case .cancel: .cancelShortcut }
-    }
+    var title: String { switch self { case .holdToTalk: "Hold to talk"; case .toggleRecording: "Toggle recording"; case .cancel: "Cancel" } }
+    var managedKey: EffectiveSettings.Key { switch self { case .holdToTalk: .holdToTalkShortcut; case .toggleRecording: .toggleRecordingShortcut; case .cancel: .cancelShortcut } }
 }

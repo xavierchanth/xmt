@@ -54,6 +54,9 @@ struct VoiceBindingPolicy {
 }
 
 struct VoiceBindingPersistence {
+    /// A fixed bank keeps KeyboardShortcuts registrations stable across launches.
+    static let maximumBindingsPerAction = 8
+
     /// Canonical storage is an ordered array. During the one-release migration,
     /// scalar canonical data and the former KeyboardShortcuts value remain readable.
     static func localBindings(explicit: Bool, canonicalData: Data?, legacyValue: ShortcutDTO?) -> [ShortcutDTO]? {
@@ -173,6 +176,9 @@ struct SettingsValues: Equatable, Sendable {
     var holdToTalkShortcut: ShortcutDTO? = nil
     var toggleRecordingShortcut: ShortcutDTO? = nil
     var cancelShortcut: ShortcutDTO? = nil
+    var holdToTalkBindings: [ShortcutDTO]? = nil
+    var toggleRecordingBindings: [ShortcutDTO]? = nil
+    var cancelBindings: [ShortcutDTO]? = nil
     var pasteLatestTranscriptShortcut: ShortcutDTO? = nil
     var outputMode: VoiceOutputMode? = nil
     var autoPaste: Bool? = nil
@@ -191,9 +197,12 @@ struct BuiltInSettings: Equatable, Sendable {
     var windowMoverEnabled = true
     var windowMoverShortcut: ShortcutDTO = .key(key: "space", modifiers: ["option"])
     var voiceEnabled = true
-    var holdToTalkShortcut: ShortcutDTO = .modifierHold("fn")
-    var toggleRecordingShortcut: ShortcutDTO = .fnChord(key: "space")
-    var cancelShortcut: ShortcutDTO = .fnChord(key: "escape")
+    var holdToTalkBindings: [ShortcutDTO] = [.modifierHold("fn")]
+    var toggleRecordingBindings: [ShortcutDTO] = [.fnChord(key: "space")]
+    var cancelBindings: [ShortcutDTO] = [.fnChord(key: "escape")]
+    var holdToTalkShortcut: ShortcutDTO { get { holdToTalkBindings.first ?? .unbound } set { holdToTalkBindings = [newValue] } }
+    var toggleRecordingShortcut: ShortcutDTO { get { toggleRecordingBindings.first ?? .unbound } set { toggleRecordingBindings = [newValue] } }
+    var cancelShortcut: ShortcutDTO { get { cancelBindings.first ?? .unbound } set { cancelBindings = [newValue] } }
     var pasteLatestTranscriptShortcut: ShortcutDTO = .key(key: "v", modifiers: ["control", "command"])
     var outputMode: VoiceOutputMode = .pasteImmediately
     var historyEnabled = true
@@ -212,9 +221,12 @@ struct EffectiveSettings: Equatable, Sendable {
     let windowMoverEnabled: ResolvedSetting<Bool>
     let windowMoverShortcut: ResolvedSetting<ShortcutDTO>
     let voiceEnabled: ResolvedSetting<Bool>
-    let holdToTalkShortcut: ResolvedSetting<ShortcutDTO>
-    let toggleRecordingShortcut: ResolvedSetting<ShortcutDTO>
-    let cancelShortcut: ResolvedSetting<ShortcutDTO>
+    let holdToTalkBindings: ResolvedSetting<[ShortcutDTO]>
+    let toggleRecordingBindings: ResolvedSetting<[ShortcutDTO]>
+    let cancelBindings: ResolvedSetting<[ShortcutDTO]>
+    var holdToTalkShortcut: ResolvedSetting<ShortcutDTO> { .init(value: holdToTalkBindings.value.first ?? .unbound, source: holdToTalkBindings.source) }
+    var toggleRecordingShortcut: ResolvedSetting<ShortcutDTO> { .init(value: toggleRecordingBindings.value.first ?? .unbound, source: toggleRecordingBindings.source) }
+    var cancelShortcut: ResolvedSetting<ShortcutDTO> { .init(value: cancelBindings.value.first ?? .unbound, source: cancelBindings.source) }
     let pasteLatestTranscriptShortcut: ResolvedSetting<ShortcutDTO>
     let outputMode: ResolvedSetting<VoiceOutputMode>
     var autoPaste: ResolvedSetting<Bool> { .init(value: outputMode.value == .pasteImmediately, source: outputMode.source) }
@@ -243,9 +255,9 @@ struct EffectiveSettings: Equatable, Sendable {
             windowMoverEnabled: pick(config?.windowMover.enabled, local.windowMoverEnabled, builtIn.windowMoverEnabled),
             windowMoverShortcut: pick(config?.windowMover.shortcut, local.windowMoverShortcut, builtIn.windowMoverShortcut),
             voiceEnabled: pick(config?.voice.enabled, local.voiceEnabled, builtIn.voiceEnabled),
-            holdToTalkShortcut: pick(config?.voice.holdToTalkBindings.map { $0.first ?? .unbound } ?? config?.voice.holdToTalkShortcut ?? config?.voice.shortcut, local.holdToTalkShortcut, builtIn.holdToTalkShortcut),
-            toggleRecordingShortcut: pick(config?.voice.toggleRecordingBindings.map { $0.first ?? .unbound } ?? config?.voice.toggleRecordingShortcut, local.toggleRecordingShortcut, builtIn.toggleRecordingShortcut),
-            cancelShortcut: pick(config?.voice.cancelBindings.map { $0.first ?? .unbound } ?? config?.voice.cancelShortcut, local.cancelShortcut, builtIn.cancelShortcut),
+            holdToTalkBindings: pick(config?.voice.holdToTalkBindings ?? config?.voice.holdToTalkShortcut.map { [$0] } ?? config?.voice.shortcut.map { [$0] }, local.holdToTalkBindings ?? local.holdToTalkShortcut.map { [$0] }, builtIn.holdToTalkBindings),
+            toggleRecordingBindings: pick(config?.voice.toggleRecordingBindings ?? config?.voice.toggleRecordingShortcut.map { [$0] }, local.toggleRecordingBindings ?? local.toggleRecordingShortcut.map { [$0] }, builtIn.toggleRecordingBindings),
+            cancelBindings: pick(config?.voice.cancelBindings ?? config?.voice.cancelShortcut.map { [$0] }, local.cancelBindings ?? local.cancelShortcut.map { [$0] }, builtIn.cancelBindings),
             pasteLatestTranscriptShortcut: pick(config?.voice.pasteLatestTranscriptShortcut, local.pasteLatestTranscriptShortcut, builtIn.pasteLatestTranscriptShortcut),
             outputMode: pick(config?.voice.outputMode ?? config?.voice.autoPaste.map { $0 ? .pasteImmediately : .clipboardOnly }, local.outputMode ?? local.autoPaste.map { $0 ? .pasteImmediately : .clipboardOnly }, builtIn.outputMode),
             historyEnabled: pick(config?.voice.history?.enabled, local.historyEnabled, builtIn.historyEnabled),
@@ -264,9 +276,9 @@ struct EffectiveSettings: Equatable, Sendable {
         if windowMoverEnabled != old.windowMoverEnabled { result.insert(.windowMoverEnabled) }
         if windowMoverShortcut != old.windowMoverShortcut { result.insert(.windowMoverShortcut) }
         if voiceEnabled != old.voiceEnabled { result.insert(.voiceEnabled) }
-        if holdToTalkShortcut != old.holdToTalkShortcut { result.insert(.holdToTalkShortcut) }
-        if toggleRecordingShortcut != old.toggleRecordingShortcut { result.insert(.toggleRecordingShortcut) }
-        if cancelShortcut != old.cancelShortcut { result.insert(.cancelShortcut) }
+        if holdToTalkBindings != old.holdToTalkBindings { result.insert(.holdToTalkShortcut) }
+        if toggleRecordingBindings != old.toggleRecordingBindings { result.insert(.toggleRecordingShortcut) }
+        if cancelBindings != old.cancelBindings { result.insert(.cancelShortcut) }
         if pasteLatestTranscriptShortcut != old.pasteLatestTranscriptShortcut { result.insert(.pasteLatestTranscriptShortcut) }
         if outputMode != old.outputMode { result.insert(.outputMode); result.insert(.autoPaste) }
         if historyEnabled != old.historyEnabled { result.insert(.historyEnabled) }
