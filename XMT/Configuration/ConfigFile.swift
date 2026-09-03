@@ -168,7 +168,7 @@ struct ConfigFile: Codable, Equatable, Sendable {
     func validate() throws {
         if let shortcut = windowMover.shortcut {
             if case .unbound = shortcut { throw ConfigDiagnostic.invalidValue(path: "windowMover.shortcut", reason: "must be a key shortcut; unbound is not supported") }
-            guard case .key = shortcut else { throw ConfigDiagnostic.invalidValue(path: "windowMover.shortcut", reason: "modifier hold is not valid for Window Mover") }
+            guard case .key = shortcut else { throw ConfigDiagnostic.invalidValue(path: "windowMover.shortcut", reason: "must be a standard key shortcut") }
             do { try shortcut.validate() } catch { throw ConfigDiagnostic.invalidValue(path: "windowMover.shortcut", reason: String(describing: error)) }
         }
         if voice.shortcut != nil && voice.holdToTalkShortcut != nil {
@@ -195,7 +195,7 @@ struct ConfigFile: Codable, Equatable, Sendable {
         if let shortcut = voice.pasteLatestTranscriptShortcut {
             if case .unbound = shortcut { throw ConfigDiagnostic.invalidValue(path: "voice.pasteLatestTranscriptShortcut", reason: "must be a key shortcut; unbound is not supported") }
             guard case .key = shortcut else {
-                throw ConfigDiagnostic.invalidValue(path: "voice.pasteLatestTranscriptShortcut", reason: "must be a key shortcut")
+                throw ConfigDiagnostic.invalidValue(path: "voice.pasteLatestTranscriptShortcut", reason: "must be a standard key shortcut")
             }
             do { try shortcut.validate() }
             catch { throw ConfigDiagnostic.invalidValue(path: "voice.pasteLatestTranscriptShortcut", reason: String(describing: error)) }

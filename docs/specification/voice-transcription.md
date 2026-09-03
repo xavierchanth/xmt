@@ -32,8 +32,8 @@ The module observes the Function key through a `CGEventTap` at the session tap, 
 ### Gestures
 
 - **Hold Fn** starts push-to-talk once the hold threshold elapses. Releasing Fn ends it and finalizes the session.
-- **Fn-Space** requests a toggle. From an idle Fn hold it starts a latched session; pressed again — as Fn-Space, or through the menu's stop action — it stops one.
-- Pressing Fn-Space while push-to-talk is already active — including while its resources are still arming — converts that same session to latched, and the later Fn release does not stop it.
+- **Fn-Space** requests a toggle by default, and **Fn-Escape** cancels by default. Each action can instead be unbound, use another supported Fn chord, or use a standard modified chord; hold-to-talk can also use bare Fn.
+- Pressing the configured toggle chord while push-to-talk is already active — including while its resources are still arming — converts that same session to latched, and the later Fn release does not stop it.
 - Releasing push-to-talk or toggling a latched session off while resources are still arming cancels that arming attempt. A stale completion cannot begin recording afterwards.
 
 The hold threshold is **150 ms** by default and is settable only through the configuration file, within 50–500 ms. Changing it while the module is idle rebuilds the observer with the new threshold; a change that arrives mid-session takes effect after the session commits.
@@ -42,25 +42,27 @@ The hold threshold is **150 ms** by default and is settable only through the con
 
 Physical bookkeeping is deliberately separate from arbitration. While Fn is held:
 
-- Space key-down is reported once per press; auto-repeat of Space produces no further gesture input.
-- Space key-down and its matching key-up are **consumed**, so an Fn-Space chord does not reach the focused application. Every other event is passed through unmodified.
-- Any other key-down while Fn is held moves the gesture into pass-through, so ordinary Fn chords such as Fn-F keep working.
+- A configured Fn-chord key-down is reported once per press; auto-repeat produces no further action.
+- Its key-down and matching key-up are **consumed**. Unowned events are passed through unmodified, including unrelated Fn chords.
+- An unowned key-down while Fn is held prevents the bare-Fn hold from firing. A configured Fn chord intentionally takes precedence over the pending bare-Fn hold, allowing the three defaults to coexist.
 
 The tap's synchronous callback decides consumption and returns; semantic callbacks to the module are always delivered asynchronously on the main queue afterwards.
 
 ### Arbitration states
 
-The arbitrator is a pure reducer with four states — idle, Fn pending, push-to-talk active, and chord pass-through — and is covered by `XMTTests/TriggerArbitratorTests.swift`.
+The arbitrator is a pure reducer with idle, Fn-pending, push-to-talk-active, Fn-chord-hold-active, and chord-pass-through states, and is covered by `XMTTests/TriggerArbitratorTests.swift`.
 
 | From | Input | To | Emitted |
 |---|---|---|---|
 | idle | Fn down | Fn pending | none |
 | Fn pending | Fn up | idle | none — a bare Fn tap does nothing |
 | Fn pending | hold threshold elapsed | push-to-talk active | push-to-talk began |
-| Fn pending | Space down | chord pass-through | toggle requested |
+| Fn pending | configured toggle/cancel chord down | chord pass-through | toggle/cancel requested |
+| Fn pending | configured hold chord down | Fn-chord hold active | push-to-talk began |
+| Fn-chord hold active | matching key up or interruption | idle | push-to-talk ended |
 | Fn pending | other key down | chord pass-through | none |
 | push-to-talk active | Fn up | idle | push-to-talk ended |
-| push-to-talk active | Space down | push-to-talk active | toggle requested |
+| push-to-talk active | configured toggle/cancel chord down | push-to-talk active | toggle/cancel requested |
 | Fn pending | tap disabled | idle | none |
 | push-to-talk active | tap disabled | idle | push-to-talk ended |
 | any active state | secure input | idle | discard active interaction |
@@ -199,7 +201,7 @@ The menu bar menu shows Voice state only when there is something to say: recordi
 
 The `Voice` tab in Settings contains:
 
-- the enable toggle and independent XMT-owned Hold to Talk, Toggle Recording, and Cancel capture controls; Hold to Talk explicitly offers Fn, Record chord, and Clear, while Toggle and Cancel offer Record chord and Clear. Capture accepts key-down for bare Escape and Control-Escape; editing ends only through the visible Cancel control. Exactly one binding row captures at a time; starting another cancels the previous capture. Unsupported keys produce an inline diagnostic. A captured candidate is staged through serialized configuration reload and effective conflict validation before local state or live registrations change; managed, conflicting, unreadable, invalid, and raced attempts retain the prior displayed and active binding. Fn modifier-only is accepted only for Hold to Talk. Hold or Toggle chords lacking Control, Option, or Command—including Shift-only chords—are rejected inline because they could intercept ordinary typing while idle. Ordinary hold chords preserve key-down/key-up, toggle alternates start/stop, and Cancel defaults to Control-Option-Escape and is registered only while arming or recording;
+- the enable toggle and independent XMT-owned Hold to Talk, Toggle Recording, and Cancel capture controls; Hold to Talk explicitly offers Fn, Record chord, and Clear, while Toggle and Cancel offer Record chord and Clear. Escape alone cancels capture; Control-Escape and Fn-Escape save. Exactly one binding row captures at a time; starting another cancels the previous capture. Unsupported keys produce an inline diagnostic. A captured candidate is staged through serialized configuration reload and effective conflict validation before local state or live registrations change; managed, conflicting, unreadable, invalid, and raced attempts retain the prior displayed and active binding. Fn modifier-only is accepted only for Hold to Talk. Hold or Toggle chords lacking Control, Option, or Command—including Shift-only chords—are rejected inline because they could intercept ordinary typing while idle. Ordinary hold chords preserve key-down/key-up, toggle alternates start/stop, and Cancel defaults to Control-Option-Escape and is registered only while arming or recording;
 - speech-asset status with check and download actions, the contextual access request, and the shared Accessibility status row naming completed-transcript and paste-latest delivery as its consumers;
 - output settings — an explicit Paste immediately or Clipboard only picker, System Language plus supported locale choices, copy last transcript, and the paste-latest shortcut recorder;
 - transcript-history controls for enabled, retention days, and maximum entries;

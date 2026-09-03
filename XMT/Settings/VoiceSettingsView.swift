@@ -17,7 +17,7 @@ struct VoiceSettingsView: View {
                 bindingRow("Hold to talk", action: .holdToTalk, managed: .holdToTalkShortcut)
                 bindingRow("Toggle recording", action: .toggleRecording, managed: .toggleRecordingShortcut)
                 bindingRow("Cancel", action: .cancel, managed: .cancelShortcut)
-                Text("Escape is bindable. Use the visible Cancel button to stop recording a shortcut.")
+                Text("Escape alone cancels capture; Control–Escape and Fn–Escape are bindable. macOS Keyboard settings for Globe/Fn may intercept some Fn events before XMT.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section("Permissions and speech assets") {

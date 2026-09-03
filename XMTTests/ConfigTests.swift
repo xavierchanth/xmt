@@ -278,7 +278,8 @@ final class ConfigTests: XCTestCase {
     func testVoiceV2DefaultsAndLegacyMigration() throws {
         let defaults = EffectiveSettings.resolve(config: nil)
         XCTAssertEqual(defaults.holdToTalkShortcut.value, .modifierHold("fn"))
-        XCTAssertEqual(defaults.cancelShortcut.value, .key(key: "escape", modifiers: ["control", "option"]))
+        XCTAssertEqual(defaults.toggleRecordingShortcut.value, .fnChord(key: "space"))
+        XCTAssertEqual(defaults.cancelShortcut.value, .fnChord(key: "escape"))
         XCTAssertEqual(defaults.outputMode.value, .pasteImmediately)
         XCTAssertEqual(defaults.locale.value, "system")
         let migrated = EffectiveSettings.resolve(config: try decode(#"{"version":1,"voice":{"shortcut":{"type":"modifierHold","modifier":"fn"},"autoPaste":false}}"#))
@@ -361,10 +362,15 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(model.pendingCommit?.binding, .modifierHold("fn"))
     }
 
-    func testVoiceBindingPolicyAndConflictValidation() {
+    func testVoiceBindingPolicyAndConflictValidation() throws {
         let controlEscape = ShortcutDTO.key(key: "escape", modifiers: ["control"])
         XCTAssertTrue(controlEscape.conflicts(with: .key(key: "escape", modifiers: ["CONTROL"])))
         XCTAssertFalse(controlEscape.conflicts(with: .key(key: "escape", modifiers: [])))
+        XCTAssertTrue(ShortcutDTO.fnChord(key: "escape").conflicts(with: .fnChord(key: "ESCAPE")))
+        XCTAssertFalse(ShortcutDTO.modifierHold("fn").conflicts(with: .fnChord(key: "escape")))
+        let value = ShortcutDTO.fnChord(key: "pageup")
+        XCTAssertEqual(try JSONDecoder().decode(ShortcutDTO.self, from: JSONEncoder().encode(value)), value)
+        XCTAssertEqual(try decode(#"{"version":1,"voice":{"toggleRecordingShortcut":{"type":"fnChord","key":"f12"}}}"#).voice.toggleRecordingShortcut, .fnChord(key: "f12"))
     }
 
     func testStagedLocalBindingFailureDoesNotChangeBaselineOrEffective() async throws {
@@ -373,7 +379,7 @@ final class ConfigTests: XCTestCase {
         let loader = ConfigReloader(local: local, read: missing)
         let accepted = try await loader.reload()
         var staged = local
-        staged.holdToTalkShortcut = .key(key: "space", modifiers: ["control", "option"])
+        staged.holdToTalkShortcut = .fnChord(key: "space")
         do { _ = try await loader.stageAndReload(local: staged); XCTFail("expected default toggle conflict") } catch {}
         let afterFailure = await loader.effective; XCTAssertEqual(afterFailure, accepted.effective)
         let reloaded = try await loader.reload()

@@ -45,6 +45,8 @@ final class VoiceTranscriptionModule: ObservableObject {
     private var observation: FnEventObserver.Observation?
     private var observerThresholdMs: Int?
     private var observerHoldBinding: ShortcutDTO?
+    private var observerToggleBinding: ShortcutDTO?
+    private var observerCancelBinding: ShortcutDTO?
     private var capture: AudioCaptureService?
     private var transcriber: TranscriberSession?
     private var transcriberResolvedLocaleIdentifier: String?
@@ -380,7 +382,9 @@ final class VoiceTranscriptionModule: ObservableObject {
         let name: KeyboardShortcuts.Name
         switch action { case .holdToTalk: name = .voiceHoldToTalk; unmanagedHoldShortcut = dto; case .toggleRecording: name = .voiceToggleRecording; unmanagedToggleShortcut = dto; case .cancel: name = .voiceCancel; unmanagedCancelShortcut = dto }
         let key = Self.voiceBindingKey(name)
-        UserDefaults.standard.set(true, forKey: "voice.binding.\(key).explicit")
+        let defaults = UserDefaults.standard
+        defaults.set(true, forKey: "voice.binding.\(key).explicit")
+        if let data = try? JSONEncoder().encode(dto) { defaults.set(data, forKey: "voice.binding.\(key).value") }
         configDiagnostic = nil
         return nil
     }
@@ -469,21 +473,25 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     private func reconcileObservation() {
-        guard observerThresholdMs != effective.fnHoldThresholdMs.value || observerHoldBinding != effective.holdToTalkShortcut.value else { return }
+        guard observerThresholdMs != effective.fnHoldThresholdMs.value || observerHoldBinding != effective.holdToTalkShortcut.value || observerToggleBinding != effective.toggleRecordingShortcut.value || observerCancelBinding != effective.cancelShortcut.value else { return }
         guard case .idle = machine.state else { return }
-        observation?.cancel(); observation = nil; observer = nil; observerThresholdMs = nil; observerHoldBinding = nil
+        observation?.cancel(); observation = nil; observer = nil; observerThresholdMs = nil; observerHoldBinding = nil; observerToggleBinding = nil; observerCancelBinding = nil
         startObserving()
     }
 
     private func startObserving() {
         guard isEnabled, observation == nil else { if isEnabled, status == .disabled { status = .idle }; return }
-        guard case .modifierHold = effective.holdToTalkShortcut.value else { if status == .disabled { status = .idle }; return }
+        let bareHold: Bool = { if case .modifierHold = effective.holdToTalkShortcut.value { return true }; return false }()
+        var chords: [Int64: FnChordAction] = [:]
+        func add(_ binding: ShortcutDTO, _ action: FnChordAction) { if case .fnChord(let key) = binding, let code = ShortcutDTO.keyCodes[key.lowercased()] { chords[code] = action } }
+        add(effective.holdToTalkShortcut.value, .hold); add(effective.toggleRecordingShortcut.value, .toggle); add(effective.cancelShortcut.value, .cancel)
+        guard bareHold || !chords.isEmpty else { if status == .disabled { status = .idle }; return }
         guard CGPreflightListenEventAccess() else { status = .degraded("Input Monitoring access is required"); return }
         guard AXIsProcessTrusted() else { status = .degraded("Accessibility access is required for Fn shortcuts"); return }
-        let observer = FnEventObserver(holdThreshold: Double(effective.fnHoldThresholdMs.value) / 1000, allowsFnSpaceToggle: false)
+        let observer = FnEventObserver(holdThreshold: Double(effective.fnHoldThresholdMs.value) / 1000, bareHoldEnabled: bareHold, chords: chords)
         do {
             observation = try observer.observe { [weak self] event in self?.handle(event) }
-            self.observer = observer; observerThresholdMs = effective.fnHoldThresholdMs.value; observerHoldBinding = effective.holdToTalkShortcut.value
+            self.observer = observer; observerThresholdMs = effective.fnHoldThresholdMs.value; observerHoldBinding = effective.holdToTalkShortcut.value; observerToggleBinding = effective.toggleRecordingShortcut.value; observerCancelBinding = effective.cancelShortcut.value
             if status == .disabled { status = .idle }
         } catch { status = .degraded("Input Monitoring access is required") }
     }
@@ -496,6 +504,7 @@ final class VoiceTranscriptionModule: ObservableObject {
         case .pushToTalkBegan: begin(mode: .pushToTalk)
         case .pushToTalkEnded: interpret(machine.handle(.pushToTalkEnded))
         case .toggleRequested: begin(mode: .latched)
+        case .cancelRequested: cancelVoiceInteraction()
         case .secureInputBegan:
             observer?.setRecordingActive(false)
             interpret(machine.handle(.interrupted))
@@ -811,6 +820,7 @@ final class VoiceTranscriptionModule: ObservableObject {
             local = defaults.data(forKey: dataKey).flatMap { try? JSONDecoder().decode(ShortcutDTO.self, from: $0) }
             KeyboardShortcuts.setShortcut(local.flatMap { try? $0.keyboardShortcut() }, for: name)
             defaults.set(local != nil, forKey: "voice.binding.\(key).explicit")
+            if let local, let data = try? JSONEncoder().encode(local) { defaults.set(data, forKey: "voice.binding.\(key).value") }
             defaults.removeObject(forKey: dataKey); defaults.set(false, forKey: activeKey)
         } else {
             KeyboardShortcuts.setShortcut(try? binding.value.keyboardShortcut(), for: name)
@@ -828,7 +838,11 @@ final class VoiceTranscriptionModule: ObservableObject {
             return defaults.data(forKey: dataKey).flatMap { try? JSONDecoder().decode(ShortcutDTO.self, from: $0) }
         }
         guard defaults.bool(forKey: "voice.binding.\(key).explicit") else { return nil }
-        return KeyboardShortcuts.getShortcut(for: name).flatMap(ShortcutDTO.fromKeyboardShortcut) ?? .unbound
+        if let data = defaults.data(forKey: "voice.binding.\(key).value"), let value = try? JSONDecoder().decode(ShortcutDTO.self, from: data) { return value }
+        // One-release migration from the former KeyboardShortcuts-owned storage.
+        let migrated = KeyboardShortcuts.getShortcut(for: name).flatMap(ShortcutDTO.fromKeyboardShortcut) ?? .unbound
+        if let data = try? JSONEncoder().encode(migrated) { defaults.set(data, forKey: "voice.binding.\(key).value") }
+        return migrated
     }
 
     private func reconcileShortcutActivation() {

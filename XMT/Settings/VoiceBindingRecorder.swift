@@ -2,7 +2,7 @@ import AppKit
 import KeyboardShortcuts
 import SwiftUI
 
-/// XMT-owned capture UI. Escape is data; editing ends only through the explicit Cancel control.
+/// XMT-owned capture UI. Escape alone cancels; modified Escape is captured.
 struct VoiceBindingRecorder: View {
     let title: String
     let action: VoiceBindingAction
@@ -22,7 +22,7 @@ struct VoiceBindingRecorder: View {
                 HStack {
                     Text(Self.display(value)).monospacedDigit().accessibilityLabel("Current binding: \(Self.display(value))")
                     if isRecording {
-                        KeyDownCaptureView(captured: { captured($0) }, unsupported: {
+                        KeyDownCaptureView(captured: { captured($0) }, cancelled: cancel, unsupported: {
                             diagnostic = "That key cannot be used as a global shortcut."
                         })
                         .frame(width: 1, height: 1)
@@ -60,6 +60,7 @@ struct VoiceBindingRecorder: View {
         switch value {
         case .unbound: return "Unbound"
         case .modifierHold: return "Fn"
+        case .fnChord(let key): return "Fn–" + (key.lowercased() == "escape" ? "Esc" : key.uppercased())
         case .key(let key, let modifiers):
             let symbols = ["control": "⌃", "option": "⌥", "shift": "⇧", "command": "⌘"]
             return modifiers.compactMap { symbols[$0.lowercased()] }.joined() + (key.lowercased() == "escape" ? "Esc" : key.uppercased())
@@ -69,31 +70,35 @@ struct VoiceBindingRecorder: View {
 
 private struct KeyDownCaptureView: NSViewRepresentable {
     let captured: (ShortcutDTO) -> Void
+    let cancelled: () -> Void
     let unsupported: () -> Void
-    func makeCoordinator() -> Coordinator { Coordinator(captured: captured, unsupported: unsupported) }
-    func makeNSView(context: Context) -> CaptureView {
-        let view = CaptureView(); view.handler = context.coordinator.handle; return view
-    }
-    func updateNSView(_ view: CaptureView, context: Context) { view.handler = context.coordinator.handle }
+    func makeCoordinator() -> Coordinator { Coordinator(captured: captured, cancelled: cancelled, unsupported: unsupported) }
+    func makeNSView(context: Context) -> CaptureView { let view = CaptureView(); view.coordinator = context.coordinator; return view }
+    func updateNSView(_ view: CaptureView, context: Context) { view.coordinator = context.coordinator }
     final class Coordinator {
-        let captured: (ShortcutDTO) -> Void
-        let unsupported: () -> Void
-        init(captured: @escaping (ShortcutDTO) -> Void, unsupported: @escaping () -> Void) { self.captured = captured; self.unsupported = unsupported }
-        func handle(_ event: NSEvent) {
-            guard !event.isARepeat else { return }
-            guard let shortcut = KeyboardShortcuts.Shortcut(event: event), let dto = ShortcutDTO.fromKeyboardShortcut(shortcut) else {
-                unsupported(); return
-            }
-            captured(dto)
+        let captured: (ShortcutDTO) -> Void; let cancelled: () -> Void; let unsupported: () -> Void
+        var sawFnDown = false
+        init(captured: @escaping (ShortcutDTO) -> Void, cancelled: @escaping () -> Void, unsupported: @escaping () -> Void) { self.captured = captured; self.cancelled = cancelled; self.unsupported = unsupported }
+        func flagsChanged(_ event: NSEvent) {
+            let down = event.modifierFlags.contains(.function)
+            if down { sawFnDown = true }
+            else if sawFnDown { sawFnDown = false; captured(.modifierHold("fn")) }
+        }
+        func keyDown(_ event: NSEvent) {
+            guard !event.isARepeat, let key = ShortcutDTO.keyName(forKeyCode: event.keyCode) else { if !event.isARepeat { unsupported() }; return }
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if flags.contains(.function) { sawFnDown = false; captured(.fnChord(key: key)); return }
+            let names: [(NSEvent.ModifierFlags, String)] = [(.control,"control"),(.option,"option"),(.shift,"shift"),(.command,"command")]
+            let modifiers = names.compactMap { flags.contains($0.0) ? $0.1 : nil }
+            if key == "escape" && modifiers.isEmpty { cancelled(); return }
+            captured(.key(key: key, modifiers: modifiers))
         }
     }
     final class CaptureView: NSView {
-        var handler: ((NSEvent) -> Void)?
+        var coordinator: Coordinator?
         override var acceptsFirstResponder: Bool { true }
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            if let window { window.makeFirstResponder(self) }
-        }
-        override func keyDown(with event: NSEvent) { handler?(event) }
+        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); if let window { window.makeFirstResponder(self) } }
+        override func keyDown(with event: NSEvent) { coordinator?.keyDown(event) }
+        override func flagsChanged(with event: NSEvent) { coordinator?.flagsChanged(event) }
     }
 }

@@ -10,10 +10,12 @@ struct FnEventMapping: Equatable {
 /// Pure physical-key bookkeeping shared by the tap and focused tests.
 struct FnPhysicalEventMapper {
     private(set) var fnIsDown = false
-    private(set) var hasConsumedSpaceDown = false
-    let allowsFnSpaceToggle: Bool
+    private(set) var consumedKeys: [Int64: FnChordAction] = [:]
+    let chords: [Int64: FnChordAction]
+    var hasConsumedSpaceDown: Bool { consumedKeys[49] != nil }
 
-    init(allowsFnSpaceToggle: Bool = true) { self.allowsFnSpaceToggle = allowsFnSpaceToggle }
+    init(allowsFnSpaceToggle: Bool = true) { chords = allowsFnSpaceToggle ? [49: .toggle] : [:] }
+    init(chords: [Int64: FnChordAction]) { self.chords = chords }
 
     mutating func fnChanged(isDown: Bool) -> FnEventMapping {
         guard isDown != fnIsDown else { return .init(input: nil, consumesEvent: false) }
@@ -23,26 +25,18 @@ struct FnPhysicalEventMapper {
 
     mutating func keyDown(code: Int64, isRepeat: Bool) -> FnEventMapping {
         guard fnIsDown else { return .init(input: nil, consumesEvent: false) }
-        guard allowsFnSpaceToggle, code == 49 else {
-            return .init(input: isRepeat ? nil : .otherKeyDown, consumesEvent: false)
-        }
-        let input: TriggerInput? = hasConsumedSpaceDown ? nil : .spaceDown
-        hasConsumedSpaceDown = true
-        return .init(input: input, consumesEvent: true)
+        guard let action = chords[code] else { return .init(input: isRepeat ? nil : .otherKeyDown, consumesEvent: false) }
+        let first = consumedKeys[code] == nil
+        consumedKeys[code] = action
+        return .init(input: first && !isRepeat ? .chordDown(action) : nil, consumesEvent: true)
     }
 
     mutating func keyUp(code: Int64) -> FnEventMapping {
-        guard code == 49, hasConsumedSpaceDown else {
-            return .init(input: nil, consumesEvent: false)
-        }
-        hasConsumedSpaceDown = false
-        return .init(input: nil, consumesEvent: true)
+        guard let action = consumedKeys.removeValue(forKey: code) else { return .init(input: nil, consumesEvent: false) }
+        return .init(input: .chordUp(action), consumesEvent: true)
     }
 
-    mutating func interrupt() {
-        fnIsDown = false
-        hasConsumedSpaceDown = false
-    }
+    mutating func interrupt() { fnIsDown = false; consumedKeys.removeAll() }
 }
 
 /// The Input Monitoring boundary for the two Fn gestures. It owns no voice or
@@ -83,7 +77,6 @@ final class FnEventObserver {
     }
 
     private let threshold: TimeInterval
-    private let allowsFnSpaceToggle: Bool
     private var handlers: [UUID: Subscriber] = [:]
     private var arbitrator = TriggerArbitrator()
     private var tap: CFMachPort?
@@ -95,8 +88,13 @@ final class FnEventObserver {
 
     init(holdThreshold: TimeInterval = 0.35, allowsFnSpaceToggle: Bool = true) {
         threshold = holdThreshold
-        self.allowsFnSpaceToggle = allowsFnSpaceToggle
         physicalEvents = FnPhysicalEventMapper(allowsFnSpaceToggle: allowsFnSpaceToggle)
+    }
+
+    init(holdThreshold: TimeInterval, bareHoldEnabled: Bool, chords: [Int64: FnChordAction]) {
+        threshold = holdThreshold
+        physicalEvents = FnPhysicalEventMapper(chords: chords)
+        arbitrator = TriggerArbitrator(bareHoldEnabled: bareHoldEnabled)
     }
 
     func observe(_ handler: @escaping Handler) throws -> Observation {

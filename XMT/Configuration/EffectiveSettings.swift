@@ -9,6 +9,7 @@ struct VoiceBindingPolicy {
         switch binding {
         case .unbound: return nil
         case .modifierHold: return action == .holdToTalk ? nil : .modifierOnlyRequiresHold
+        case .fnChord: return nil
         case .key(_, let modifiers):
             let safe = Set(modifiers.map { $0.lowercased() }).isDisjoint(with: ["control", "option", "command"]) == false
             return action != .cancel && !safe ? .unsafeUnmodifiedKey : nil
@@ -137,8 +138,8 @@ struct BuiltInSettings: Equatable, Sendable {
     var windowMoverShortcut: ShortcutDTO = .key(key: "space", modifiers: ["option"])
     var voiceEnabled = true
     var holdToTalkShortcut: ShortcutDTO = .modifierHold("fn")
-    var toggleRecordingShortcut: ShortcutDTO = .key(key: "space", modifiers: ["control", "option"])
-    var cancelShortcut: ShortcutDTO = .key(key: "escape", modifiers: ["control", "option"])
+    var toggleRecordingShortcut: ShortcutDTO = .fnChord(key: "space")
+    var cancelShortcut: ShortcutDTO = .fnChord(key: "escape")
     var pasteLatestTranscriptShortcut: ShortcutDTO = .key(key: "v", modifiers: ["control", "command"])
     var outputMode: VoiceOutputMode = .pasteImmediately
     var historyEnabled = true

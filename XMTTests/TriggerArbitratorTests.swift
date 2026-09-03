@@ -100,8 +100,8 @@ final class TriggerArbitratorTests: XCTestCase {
         var mapper = FnPhysicalEventMapper()
         _ = mapper.fnChanged(isDown: true)
         XCTAssertEqual(mapper.keyDown(code: 49, isRepeat: false),
-                       .init(input: .spaceDown, consumesEvent: true))
-        XCTAssertEqual(mapper.keyUp(code: 49), .init(input: nil, consumesEvent: true))
+                       .init(input: .chordDown(.toggle), consumesEvent: true))
+        XCTAssertEqual(mapper.keyUp(code: 49), .init(input: .chordUp(.toggle), consumesEvent: true))
     }
 
     func testPhysicalMapperConsumesSpaceUpAfterFnRelease() {
@@ -138,8 +138,27 @@ final class TriggerArbitratorTests: XCTestCase {
         XCTAssertFalse(mapper.keyUp(code: 49).consumesEvent)
     }
 
+    func testConfiguredDefaultChordsCoexistWithBareHold() {
+        assertSequence([.fnDown, .chordDown(.toggle), .chordUp(.toggle), .fnUp], state: .idle, events: [.toggleRequested])
+        assertSequence([.fnDown, .chordDown(.cancel), .chordUp(.cancel), .fnUp], state: .idle, events: [.cancelRequested])
+        assertSequence([.fnDown, .holdThresholdElapsed, .chordDown(.cancel), .fnUp], state: .idle,
+                       events: [.pushToTalkBegan, .cancelRequested, .pushToTalkEnded])
+    }
+
+    func testConfiguredFnHoldBalancesOnKeyUpAndInterruption() {
+        var mapper = FnPhysicalEventMapper(chords: [53: .hold])
+        _ = mapper.fnChanged(isDown: true)
+        XCTAssertEqual(mapper.keyDown(code: 53, isRepeat: false).input, .chordDown(.hold))
+        XCTAssertNil(mapper.keyDown(code: 53, isRepeat: true).input)
+        XCTAssertEqual(mapper.keyUp(code: 53).input, .chordUp(.hold))
+        assertSequence([.fnDown, .chordDown(.hold), .chordUp(.hold)], state: .idle,
+                       events: [.pushToTalkBegan, .pushToTalkEnded])
+        assertSequence([.fnDown, .chordDown(.hold), .tapDisabled], state: .idle,
+                       events: [.pushToTalkBegan, .pushToTalkEnded])
+    }
+
     private let inputs: [TriggerInput] = [
-        .fnDown, .fnUp, .spaceDown, .otherKeyDown, .holdThresholdElapsed,
+        .fnDown, .fnUp, .spaceDown, .chordDown(.toggle), .chordUp(.toggle), .otherKeyDown, .holdThresholdElapsed,
         .tapDisabled, .secureInputInterrupted
     ]
 

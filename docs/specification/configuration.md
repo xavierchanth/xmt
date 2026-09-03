@@ -28,7 +28,9 @@ The document is a JSON object with a required integer `version`. The only suppor
   },
   "voice": {
     "enabled": true,
-    "shortcut": { "type": "modifierHold", "modifier": "fn" },
+    "holdToTalkShortcut": { "type": "modifierHold", "modifier": "fn" },
+    "toggleRecordingShortcut": { "type": "fnChord", "key": "space" },
+    "cancelShortcut": { "type": "fnChord", "key": "escape" },
     "pasteLatestTranscriptShortcut": { "type": "key", "key": "v", "modifiers": ["control", "command"] },
     "outputMode": "pasteImmediately",
     "history": {
@@ -49,10 +51,12 @@ Field meanings are owned by the modules: [Voice Transcription](voice-transcripti
 
 ### Shortcut values
 
-A shortcut is one of two shapes, distinguished by `type`:
+A shortcut is one of four shapes, distinguished by `type`:
 
 - `key` — a `key` name plus an optional `modifiers` array drawn from `command`, `control`, `option`, and `shift`. Key names cover digits, letters, `f1` through `f20`, and named keys such as `space`, `return`, `tab`, `escape`, `delete`, `forwarddelete`, the arrows, `home`, `end`, `pageup`, `pagedown`, and the punctuation keys. Names are case-insensitive.
 - `modifierHold` — the modifier name `fn` or its alias `function`. Only Voice hold-to-talk accepts this shape, and only for Fn.
+- `fnChord` — a supported `key` name combined with the physical Fn modifier. Voice actions accept this shape.
+- `unbound` — an explicit absence of a binding for any Voice action.
 
 When `type` is omitted, a document containing `modifier` is read as a modifier hold and anything else as a key shortcut. A modifier hold is deliberately not representable as a key shortcut with optional bits.
 
@@ -61,7 +65,7 @@ When `type` is omitted, a document containing `modifier` is read as a modifier h
 Decoding is all-or-nothing: a document is decoded, version-checked, and fully validated before any value is published. Diagnostics distinguish an unreadable file, malformed JSON with the failing coding path, an unsupported version, and an invalid value with its path and reason. The validated constraints are:
 
 - `windowMover.shortcut` MUST be a key shortcut — a modifier hold is rejected for Window Mover — and MUST convert to a real key and modifier set.
-- `voice.holdToTalkShortcut` accepts an ordinary modified key chord, an Fn modifier hold, or unbound. `voice.toggleRecordingShortcut` accepts a modified key chord or unbound. Hold and Toggle require at least one of Control, Option, or Command. Bare and Shift-only chords are rejected because their always-ready registration could intercept normal typing; Shift may additionally accompany one of those safe modifiers. `voice.cancelShortcut` accepts any key chord, including bare Escape, because it is registered only during arming or recording; it also accepts unbound. Fn modifier-only is rejected for toggle/cancel. The former `voice.shortcut` decodes as a compatibility alias for hold-to-talk.
+- The three Voice action bindings accept an Fn chord, an ordinary key chord, or unbound; hold-to-talk additionally accepts an Fn modifier hold. Hold and Toggle standard key chords require at least one of Control, Option, or Command. Bare and Shift-only chords are rejected because their always-ready registration could intercept normal typing; Shift may additionally accompany one of those safe modifiers. `voice.cancelShortcut` accepts any key chord, including bare Escape, because it is registered only during arming or recording; it also accepts unbound. Fn modifier-only is rejected for toggle/cancel. The former `voice.shortcut` decodes as a compatibility alias for hold-to-talk.
 - `voice.pasteLatestTranscriptShortcut` MUST be a key shortcut that converts to a real key and modifier set; modifier holds are rejected.
 - `voice.history.retentionDays` and `voice.history.maxEntries` MUST each be at least 1.
 - `voice.keepLastTranscript` is a decode-only compatibility alias for `voice.history.enabled` for one release. Supplying both keys rejects the complete candidate, even when their Boolean values agree; encoding emits only the canonical `history` object.
@@ -76,7 +80,7 @@ An empty `inputDevicePriority` array is a valid explicit value and is distinct f
 
 Effective settings resolve per key, from lowest to highest precedence:
 
-1. **Built-in defaults.** Window Mover enabled with Option-Space; Voice enabled with Fn gestures; paste latest transcript with Control-Command-V; output mode `pasteImmediately`; transcript history enabled with 30 retention days and at most 500 entries; locale `system`; Fn hold threshold 150 ms; maximum session 300 seconds; empty device priority; system-default fallback on.
+1. **Built-in defaults.** Window Mover enabled with Option-Space; Voice enabled with bare-Fn hold, Fn-Space toggle, and Fn-Escape cancel; paste latest transcript with Control-Command-V; output mode `pasteImmediately`; transcript history enabled with 30 retention days and at most 500 entries; locale `system`; Fn hold threshold 150 ms; maximum session 300 seconds; empty device priority; system-default fallback on.
 2. **Persisted local values** written by the settings UI.
 3. **Values explicitly present in the configuration file.**
 

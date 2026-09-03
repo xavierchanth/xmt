@@ -8,7 +8,7 @@ Two modules are built in.
 
 **Window Mover** — a global shortcut (default **Option-Space**) that moves the focused window to the next display, wrapping around, preserving relative geometry, and handling native full-screen windows. Specified in [the Window Mover specification](docs/specification/window-mover.md).
 
-**Voice Transcription** — hold **Fn** to dictate, or press **Fn-Space** to latch recording on and off. Speech is analyzed on device with macOS 26's `SpeechAnalyzer`, the transcript goes to the clipboard and optionally pastes itself into the focused input, and an interrupted recording is kept so it can be retried once. Specified in [the Voice Transcription specification](docs/specification/voice-transcription.md). It is implemented and integrated but **has not yet been validated against real microphone, Speech, or paste behavior**; see [validation gaps](docs/roadmap/README.md#voice-transcription-validation-gaps) before relying on it.
+**Voice Transcription** — hold **Fn** to dictate, press **Fn-Space** to latch recording on and off, or press **Fn-Escape** to cancel; all three bindings are configurable or independently unbound. Speech is analyzed on device with macOS 26's `SpeechAnalyzer`, the transcript goes to the clipboard and optionally pastes itself into the focused input, and an interrupted recording is kept so it can be retried once. Specified in [the Voice Transcription specification](docs/specification/voice-transcription.md). It is implemented and integrated but **has not yet been validated against real microphone, Speech, or paste behavior**; see [validation gaps](docs/roadmap/README.md#voice-transcription-validation-gaps) before relying on it.
 
 Supporting behavior:
 
