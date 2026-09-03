@@ -514,8 +514,10 @@ final class ConfigTests: XCTestCase {
         let maxBefore = await maxLoader.effective
         do { _ = try await maxLoader.reload(); XCTFail("expected maximum rejection") }
         catch { XCTAssertEqual(error as? ConfigDiagnostic, .invalidValue(path: "voice.holdToTalkBindings", reason: "supports at most 8 bindings")) }
-        XCTAssertEqual(await maxLoader.effective, maxBefore)
-        XCTAssertEqual(await maxLoader.lastDiagnostic, .invalidValue(path: "voice.holdToTalkBindings", reason: "supports at most 8 bindings"))
+        let maxAfter = await maxLoader.effective
+        let maxDiagnostic = await maxLoader.lastDiagnostic
+        XCTAssertEqual(maxAfter, maxBefore)
+        XCTAssertEqual(maxDiagnostic, .invalidValue(path: "voice.holdToTalkBindings", reason: "supports at most 8 bindings"))
 
         let duplicate = ShortcutDTO.key(key: "d", modifiers: ["command"])
         var locals = SettingsValues()
@@ -525,7 +527,8 @@ final class ConfigTests: XCTestCase {
         let conflictBefore = await conflictLoader.effective
         do { _ = try await conflictLoader.reload(); XCTFail("expected secondary cross-action conflict") }
         catch { XCTAssertEqual(error as? ConfigDiagnostic, .invalidValue(path: "voice.cancelBindings[1]", reason: "conflicts with voice.holdToTalkBindings[1]")) }
-        XCTAssertEqual(await conflictLoader.effective, conflictBefore)
+        let conflictAfter = await conflictLoader.effective
+        XCTAssertEqual(conflictAfter, conflictBefore)
 
         locals.cancelBindings = [.fnChord(key: "c")]
         locals.holdToTalkBindings = [duplicate, duplicate]
