@@ -72,6 +72,27 @@ struct VoiceBindingPersistence {
         guard let bindings = localBindings(explicit: explicit, canonicalData: canonicalData, legacyValue: legacyValue) else { return nil }
         return bindings.first ?? .unbound
     }
+
+    /// The single migration boundary for managed-value backups. Both the former
+    /// scalar encoding and the canonical array encoding are accepted on restore.
+    static func saveManagedBackup(_ bindings: [ShortcutDTO]?, in defaults: UserDefaults, key: String) {
+        let activeKey = "\(key).backupActive", dataKey = "\(key).backup"
+        defaults.set(true, forKey: activeKey)
+        defaults.removeObject(forKey: dataKey) // never retain an older backup for nil
+        if let bindings, let data = try? JSONEncoder().encode(bindings) { defaults.set(data, forKey: dataKey) }
+    }
+
+    static func restoreManagedBackup(in defaults: UserDefaults, key: String) -> [ShortcutDTO]? {
+        let activeKey = "\(key).backupActive", dataKey = "\(key).backup"
+        guard defaults.bool(forKey: activeKey) else {
+            defaults.removeObject(forKey: dataKey) // clean up stale, inactive migration data
+            return nil
+        }
+        let restored = localBindings(explicit: true, canonicalData: defaults.data(forKey: dataKey), legacyValue: nil)
+        defaults.removeObject(forKey: dataKey)
+        defaults.removeObject(forKey: activeKey)
+        return restored
+    }
 }
 
 struct VoiceBindingRecorderModel: Equatable, Sendable {

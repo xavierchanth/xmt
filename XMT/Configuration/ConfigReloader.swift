@@ -87,33 +87,41 @@ actor ConfigReloader {
                 lastDiagnostic = diagnostic; throw diagnostic
             }
         }
-        let voiceBindings: [(String, ShortcutDTO, VoiceBindingAction)] = [
-            ("voice.holdToTalkShortcut", next.holdToTalkShortcut.value, .holdToTalk),
-            ("voice.toggleRecordingShortcut", next.toggleRecordingShortcut.value, .toggleRecording),
-            ("voice.cancelShortcut", next.cancelShortcut.value, .cancel)
+        // Validate the complete resolved snapshot, not merely the first binding or
+        // arrays physically present in the config file. Local and built-in secondary
+        // bindings participate in the same safety and overlap rules.
+        let groups: [(String, ResolvedSetting<[ShortcutDTO]>, VoiceBindingAction, Bool)] = [
+            ("voice.holdToTalkBindings", next.holdToTalkBindings, .holdToTalk, candidate?.voice.holdToTalkBindings != nil || localCandidate.holdToTalkBindings != nil),
+            ("voice.toggleRecordingBindings", next.toggleRecordingBindings, .toggleRecording, candidate?.voice.toggleRecordingBindings != nil || localCandidate.toggleRecordingBindings != nil),
+            ("voice.cancelBindings", next.cancelBindings, .cancel, candidate?.voice.cancelBindings != nil || localCandidate.cancelBindings != nil)
         ]
-        for (path, binding, action) in voiceBindings {
-            if let issue = VoiceBindingPolicy.validate(binding, for: action) {
-                let reason = issue == .modifierOnlyRequiresHold ? "Fn modifier-only is supported only for hold-to-talk" : "requires Control, Option, or Command; Shift alone is unsafe"
-                let diagnostic = ConfigDiagnostic.invalidValue(path: path, reason: reason)
+        var located: [VoiceBindingPolicy.LocatedBinding] = []
+        for (base, resolved, action, usesArrayPath) in groups {
+            if resolved.value.count > VoiceBindingPersistence.maximumBindingsPerAction {
+                let diagnostic = ConfigDiagnostic.invalidValue(path: base, reason: "supports at most \(VoiceBindingPersistence.maximumBindingsPerAction) bindings")
                 lastDiagnostic = diagnostic; throw diagnostic
             }
+            for (index, binding) in resolved.value.enumerated() {
+                let path = usesArrayPath ? "\(base)[\(index)]" : base.replacingOccurrences(of: "Bindings", with: "Shortcut")
+                if let issue = VoiceBindingPolicy.validate(binding, for: action) {
+                    let reason = issue == .modifierOnlyRequiresHold ? "Fn modifier-only is supported only for hold-to-talk" : "requires Control, Option, or Command; Shift alone is unsafe"
+                    let diagnostic = ConfigDiagnostic.invalidValue(path: path, reason: reason)
+                    lastDiagnostic = diagnostic; throw diagnostic
+                }
+                do { try binding.validate() } catch {
+                    let diagnostic = ConfigDiagnostic.invalidValue(path: path, reason: String(describing: error))
+                    lastDiagnostic = diagnostic; throw diagnostic
+                }
+                located.append(.init(path: path, action: action, binding: binding))
+            }
         }
-        var bindings: [(String, ShortcutDTO)] = [("windowMover.shortcut", next.windowMoverShortcut.value)]
-        func append(_ canonical: [ShortcutDTO]?, effective: ShortcutDTO, path: String) {
-            if let canonical {
-                bindings += canonical.enumerated().map { ("\(path)[\($0.offset)]", $0.element) }
-            } else { bindings.append((path.replacingOccurrences(of: "Bindings", with: "Shortcut"), effective)) }
-        }
-        append(candidate?.voice.holdToTalkBindings, effective: next.holdToTalkShortcut.value, path: "voice.holdToTalkBindings")
-        append(candidate?.voice.toggleRecordingBindings, effective: next.toggleRecordingShortcut.value, path: "voice.toggleRecordingBindings")
-        append(candidate?.voice.cancelBindings, effective: next.cancelShortcut.value, path: "voice.cancelBindings")
-        bindings.append(("voice.pasteLatestTranscriptShortcut", next.pasteLatestTranscriptShortcut.value))
-        for left in bindings.indices {
-            for right in bindings.indices where right > left && bindings[left].1.conflicts(with: bindings[right].1) {
-                let diagnostic = ConfigDiagnostic.invalidValue(path: bindings[left].0, reason: "conflicts with \(bindings[right].0)")
-                lastDiagnostic = diagnostic
-                throw diagnostic
+        var allBindings: [(String, ShortcutDTO)] = [("windowMover.shortcut", next.windowMoverShortcut.value)]
+        allBindings += located.map { ($0.path, $0.binding) }
+        allBindings.append(("voice.pasteLatestTranscriptShortcut", next.pasteLatestTranscriptShortcut.value))
+        for later in allBindings.indices {
+            for earlier in 0..<later where allBindings[later].1.conflicts(with: allBindings[earlier].1) {
+                let diagnostic = ConfigDiagnostic.invalidValue(path: allBindings[later].0, reason: "conflicts with \(allBindings[earlier].0)")
+                lastDiagnostic = diagnostic; throw diagnostic
             }
         }
         let result = ConfigLoadResult(effective: next, changedKeys: next.changedKeys(from: effective))

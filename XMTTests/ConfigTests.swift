@@ -480,6 +480,56 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(try decode(#"{"version":1,"voice":{"toggleRecordingShortcut":{"type":"fnChord","key":"f12"}}}"#).voice.toggleRecordingShortcut, .fnChord(key: "f12"))
     }
 
+    func testResolvedSecondaryBindingsValidateMaxDuplicatesAndCrossActionAtomically() async throws {
+        let missing: @Sendable (URL) throws -> Data = { _ in throw CocoaError(.fileReadNoSuchFile) }
+
+        var tooMany = SettingsValues()
+        tooMany.holdToTalkBindings = (0...VoiceBindingPersistence.maximumBindingsPerAction).map { .fnChord(key: "f\($0 + 1)") }
+        let maxLoader = ConfigReloader(local: tooMany, read: missing)
+        let maxBefore = await maxLoader.effective
+        do { _ = try await maxLoader.reload(); XCTFail("expected maximum rejection") }
+        catch { XCTAssertEqual(error as? ConfigDiagnostic, .invalidValue(path: "voice.holdToTalkBindings", reason: "supports at most 8 bindings")) }
+        XCTAssertEqual(await maxLoader.effective, maxBefore)
+        XCTAssertEqual(await maxLoader.lastDiagnostic, .invalidValue(path: "voice.holdToTalkBindings", reason: "supports at most 8 bindings"))
+
+        let duplicate = ShortcutDTO.key(key: "d", modifiers: ["command"])
+        var locals = SettingsValues()
+        locals.holdToTalkBindings = [.fnChord(key: "h"), duplicate]
+        locals.cancelBindings = [.fnChord(key: "c"), duplicate]
+        let conflictLoader = ConfigReloader(local: locals, read: missing)
+        let conflictBefore = await conflictLoader.effective
+        do { _ = try await conflictLoader.reload(); XCTFail("expected secondary cross-action conflict") }
+        catch { XCTAssertEqual(error as? ConfigDiagnostic, .invalidValue(path: "voice.cancelBindings[1]", reason: "conflicts with voice.holdToTalkBindings[1]")) }
+        XCTAssertEqual(await conflictLoader.effective, conflictBefore)
+
+        locals.cancelBindings = [.fnChord(key: "c")]
+        locals.holdToTalkBindings = [duplicate, duplicate]
+        let duplicateLoader = ConfigReloader(local: locals, read: missing)
+        do { _ = try await duplicateLoader.reload(); XCTFail("expected duplicate") }
+        catch { XCTAssertEqual(error as? ConfigDiagnostic, .invalidValue(path: "voice.holdToTalkBindings[1]", reason: "conflicts with voice.holdToTalkBindings[0]")) }
+    }
+
+    func testManagedBackupMigrationRestoresScalarAndArrayAndRemovesStaleData() throws {
+        let suite = "ConfigTests.managedBackup.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let prefix = "voice.binding.hold"
+        let scalar = ShortcutDTO.fnChord(key: "h")
+        defaults.set(true, forKey: "\(prefix).backupActive")
+        defaults.set(try JSONEncoder().encode(scalar), forKey: "\(prefix).backup")
+        XCTAssertEqual(VoiceBindingPersistence.restoreManagedBackup(in: defaults, key: prefix), [scalar])
+        XCTAssertNil(defaults.object(forKey: "\(prefix).backupActive"))
+        XCTAssertNil(defaults.data(forKey: "\(prefix).backup"))
+
+        let array = [scalar, .key(key: "j", modifiers: ["control"])]
+        VoiceBindingPersistence.saveManagedBackup(array, in: defaults, key: prefix)
+        XCTAssertEqual(VoiceBindingPersistence.restoreManagedBackup(in: defaults, key: prefix), array)
+
+        defaults.set(try JSONEncoder().encode(scalar), forKey: "\(prefix).backup")
+        XCTAssertNil(VoiceBindingPersistence.restoreManagedBackup(in: defaults, key: prefix))
+        XCTAssertNil(defaults.data(forKey: "\(prefix).backup"), "inactive stale backup must be removed")
+    }
+
     func testStagedLocalBindingFailureDoesNotChangeBaselineOrEffective() async throws {
         let missing: @Sendable (URL) throws -> Data = { _ in throw CocoaError(.fileReadNoSuchFile) }
         var local = SettingsValues(); local.holdToTalkShortcut = .key(key: "h", modifiers: ["control"])
