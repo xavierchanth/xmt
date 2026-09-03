@@ -400,6 +400,10 @@ final class ConfigTests: XCTestCase {
             .init(path: "hold[0]", action: .holdToTalk, binding: .unbound),
             .init(path: "cancel[0]", action: .cancel, binding: .unbound)
         ]))
+        XCTAssertThrowsError(try decode(#"{"version":1,"voice":{"cancelBindings":[{"key":"escape"},{"key":"ESCAPE"}]}}"#)) {
+            XCTAssertEqual($0 as? ConfigDiagnostic,
+                           .invalidValue(path: "voice.cancelBindings[1]", reason: "conflicts with voice.cancelBindings[0]"))
+        }
     }
 
     func testCanonicalBindingPersistenceAndOneReleaseScalarDecode() throws {
