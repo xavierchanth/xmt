@@ -335,6 +335,21 @@ final class ConfigTests: XCTestCase {
         }
     }
 
+    func testVoiceActionListAllowsEmptyUniqueAddRemoveAndReorder() {
+        var list = VoiceActionListModel()
+        XCTAssertTrue(list.actions.isEmpty)
+        XCTAssertTrue(list.add(.holdToTalk))
+        XCTAssertTrue(list.add(.cancel))
+        XCTAssertFalse(list.add(.holdToTalk))
+        list.move(.cancel, by: -1)
+        XCTAssertEqual(list.actions, [.cancel, .holdToTalk])
+        list.remove(.cancel)
+        XCTAssertEqual(list.actions, [.holdToTalk])
+        list.remove(.holdToTalk)
+        XCTAssertTrue(list.actions.isEmpty)
+        XCTAssertEqual(list.availableActions, [.holdToTalk, .toggleRecording, .cancel])
+    }
+
     func testCaptureLeaseRejectsStaleReleaseAndDisappearanceCancelsOwner() {
         var lease = VoiceBindingCaptureLease()
         let rowA = lease.acquire()
@@ -348,6 +363,51 @@ final class ConfigTests: XCTestCase {
         XCTAssertTrue(lease.cancelAll())
         XCTAssertFalse(lease.release(disappearing))
         XCTAssertFalse(lease.cancelAll())
+    }
+
+    func testCanonicalOrderedBindingArraysAndSingularMigration() throws {
+        let file = try decode(#"{"version":1,"voice":{"holdToTalkBindings":[{"type":"fnChord","key":"h"},{"key":"k","modifiers":["control"]}],"toggleRecordingShortcut":{"type":"fnChord","key":"t"}}}"#)
+        XCTAssertEqual(file.voice.holdToTalkBindings, [.fnChord(key: "h"), .key(key: "k", modifiers: ["control"])])
+        XCTAssertEqual(file.voice.toggleRecordingShortcut, .fnChord(key: "t"))
+        let voice = (try JSONSerialization.jsonObject(with: JSONEncoder().encode(file)) as? [String: Any])?["voice"] as? [String: Any]
+        XCTAssertEqual((voice?["holdToTalkBindings"] as? [Any])?.count, 2)
+        XCTAssertEqual((voice?["toggleRecordingBindings"] as? [Any])?.count, 1)
+        XCTAssertNil(voice?["toggleRecordingShortcut"])
+    }
+
+    func testBindingArrayPrecedenceAndExplicitEmptyMeansUnbound() throws {
+        var local = SettingsValues(); local.holdToTalkShortcut = .key(key: "l", modifiers: ["control"])
+        let empty = try decode(#"{"version":1,"voice":{"holdToTalkBindings":[]}}"#)
+        let resolved = EffectiveSettings.resolve(config: empty, local: local)
+        XCTAssertEqual(resolved.holdToTalkShortcut.value, .unbound)
+        XCTAssertTrue(resolved.holdToTalkShortcut.isManaged)
+        let ordered = try decode(#"{"version":1,"voice":{"holdToTalkBindings":[{"key":"a","modifiers":["control"]},{"key":"b","modifiers":["option"]}]}}"#)
+        XCTAssertEqual(EffectiveSettings.resolve(config: ordered, local: local).holdToTalkShortcut.value,
+                       .key(key: "a", modifiers: ["control"]))
+    }
+
+    func testBindingOverlapPolicyRejectsDuplicatesAndCrossActionOverlap() {
+        let a = ShortcutDTO.key(key: "x", modifiers: ["command"])
+        XCTAssertEqual(VoiceBindingPolicy.firstOverlap(in: [
+            .init(path: "hold[0]", action: .holdToTalk, binding: a),
+            .init(path: "hold[1]", action: .holdToTalk, binding: a)
+        ])?.later, "hold[1]")
+        XCTAssertEqual(VoiceBindingPolicy.firstOverlap(in: [
+            .init(path: "hold[0]", action: .holdToTalk, binding: a),
+            .init(path: "cancel[0]", action: .cancel, binding: a)
+        ])?.earlier, "hold[0]")
+        XCTAssertNil(VoiceBindingPolicy.firstOverlap(in: [
+            .init(path: "hold[0]", action: .holdToTalk, binding: .unbound),
+            .init(path: "cancel[0]", action: .cancel, binding: .unbound)
+        ]))
+    }
+
+    func testCanonicalBindingPersistenceAndOneReleaseScalarDecode() throws {
+        let values: [ShortcutDTO] = [.fnChord(key: "a"), .fnChord(key: "b")]
+        XCTAssertEqual(VoiceBindingPersistence.localBindings(explicit: true, canonicalData: try JSONEncoder().encode(values), legacyValue: nil), values)
+        XCTAssertEqual(VoiceBindingPersistence.localBindings(explicit: true, canonicalData: try JSONEncoder().encode(values[0]), legacyValue: nil), [values[0]])
+        XCTAssertEqual(VoiceBindingPersistence.localBindings(explicit: true, canonicalData: nil, legacyValue: nil), [])
+        XCTAssertNil(VoiceBindingPersistence.localBindings(explicit: false, canonicalData: try JSONEncoder().encode(values), legacyValue: nil))
     }
 
     func testAllLegacyVoiceBindingsPreserveExplicitUnbound() throws {

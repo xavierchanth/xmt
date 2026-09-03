@@ -26,7 +26,9 @@ struct TriggerArbitrator {
         case (.pttActive, .chordDown(let action)):
             switch action { case .toggle: return [.toggleRequested]; case .cancel: return [.cancelRequested]; case .hold: return [] }
         case (.pttActive, .tapDisabled), (.pttActive, .secureInputInterrupted): state = .idle; return [.pushToTalkEnded]
-        case (.chordHoldActive, .chordUp(.hold)), (.chordHoldActive, .fnUp),
+        // The key that initiated a chord hold owns its release. Releasing Fn
+        // first must not end it (the mapper retains the consumed key until key-up).
+        case (.chordHoldActive, .chordUp(.hold)),
              (.chordHoldActive, .tapDisabled), (.chordHoldActive, .secureInputInterrupted):
             state = .idle; return [.pushToTalkEnded]
         case (.chordPassthrough, .fnUp), (.chordPassthrough, .tapDisabled), (.chordPassthrough, .secureInputInterrupted): state = .idle

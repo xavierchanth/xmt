@@ -80,6 +80,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     private var isPastingLatest = false
     private var bindingCommitTail: Task<String?, Never>?
     private var bindingCaptureLease = VoiceBindingCaptureLease()
+    private var bindingRouter = VoiceBindingRouter()
     private var historyLatestObserver: NSObjectProtocol?
     private static let pasteLatestShortcutBackupActiveKey = "voice.pasteLatestShortcutBackupActive"
     private static let pasteLatestShortcutBackupDataKey = "voice.pasteLatestShortcutBackupData"
@@ -486,6 +487,7 @@ final class VoiceTranscriptionModule: ObservableObject {
         applying = false
         if !changed.isDisjoint(with: [.holdToTalkShortcut, .toggleRecordingShortcut, .cancelShortcut]) {
             // Rebinding is a cancellation boundary; no stale handler may complete a private session.
+            routeBindingEvents(bindingRouter.reconfigure())
             cancelVoiceInteraction()
         }
         applyVoiceShortcuts(value)
@@ -806,10 +808,9 @@ final class VoiceTranscriptionModule: ObservableObject {
     private func registerPasteLatestShortcut() {
         guard !isPasteLatestHandlerInstalled else { return }
         isPasteLatestHandlerInstalled = true
-        KeyboardShortcuts.onKeyDown(for: .voiceHoldToTalk) { [weak self] in Task { @MainActor in self?.begin(mode: .pushToTalk) } }
-        KeyboardShortcuts.onKeyUp(for: .voiceHoldToTalk) { [weak self] in Task { @MainActor in guard let self else { return }; self.interpret(self.machine.handle(.pushToTalkEnded)) } }
-        KeyboardShortcuts.onKeyUp(for: .voiceToggleRecording) { [weak self] in Task { @MainActor in self?.begin(mode: .latched) } }
-        KeyboardShortcuts.onKeyDown(for: .voiceCancel) { [weak self] in Task { @MainActor in self?.cancelVoiceInteraction() } }
+        registerStandardBinding(.voiceHoldToTalk, source: .init("standard.hold"), action: .hold)
+        registerStandardBinding(.voiceToggleRecording, source: .init("standard.toggle"), action: .toggle)
+        registerStandardBinding(.voiceCancel, source: .init("standard.cancel"), action: .cancel)
         KeyboardShortcuts.onKeyUp(for: .pasteLatestTranscript) { [weak self] in
             Task { @MainActor in
                 guard let self, self.isEnabled else { return }
@@ -818,6 +819,27 @@ final class VoiceTranscriptionModule: ObservableObject {
         }
         if isEnabled { KeyboardShortcuts.enable(.pasteLatestTranscript) }
         else { KeyboardShortcuts.disable(.pasteLatestTranscript) }
+    }
+
+    private func registerStandardBinding(_ name: KeyboardShortcuts.Name, source: VoiceBindingRouter.Source,
+                                         action: VoiceBindingRouter.Action) {
+        KeyboardShortcuts.onKeyDown(for: name) { [weak self] in
+            Task { @MainActor in guard let self else { return }; self.routeBindingEvents(self.bindingRouter.receive(.down(source, action))) }
+        }
+        KeyboardShortcuts.onKeyUp(for: name) { [weak self] in
+            Task { @MainActor in guard let self else { return }; self.routeBindingEvents(self.bindingRouter.receive(.up(source))) }
+        }
+    }
+
+    private func routeBindingEvents(_ events: [VoiceBindingRouter.Event]) {
+        for event in events {
+            switch event {
+            case .holdBegan: begin(mode: .pushToTalk)
+            case .holdEnded: interpret(machine.handle(.pushToTalkEnded))
+            case .toggleRequested: begin(mode: .latched)
+            case .cancelRequested: cancelVoiceInteraction()
+            }
+        }
     }
 
     private var requestedLocale: Locale { localeIdentifier == "system" ? .current : Locale(identifier: localeIdentifier) }

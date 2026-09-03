@@ -99,13 +99,16 @@ actor ConfigReloader {
                 lastDiagnostic = diagnostic; throw diagnostic
             }
         }
-        let bindings: [(String, ShortcutDTO)] = [
-            ("windowMover.shortcut", next.windowMoverShortcut.value),
-            ("voice.holdToTalkShortcut", next.holdToTalkShortcut.value),
-            ("voice.toggleRecordingShortcut", next.toggleRecordingShortcut.value),
-            ("voice.cancelShortcut", next.cancelShortcut.value),
-            ("voice.pasteLatestTranscriptShortcut", next.pasteLatestTranscriptShortcut.value)
-        ]
+        var bindings: [(String, ShortcutDTO)] = [("windowMover.shortcut", next.windowMoverShortcut.value)]
+        func append(_ canonical: [ShortcutDTO]?, effective: ShortcutDTO, path: String) {
+            if let canonical {
+                bindings += canonical.enumerated().map { ("\(path)[\($0.offset)]", $0.element) }
+            } else { bindings.append((path.replacingOccurrences(of: "Bindings", with: "Shortcut"), effective)) }
+        }
+        append(candidate?.voice.holdToTalkBindings, effective: next.holdToTalkShortcut.value, path: "voice.holdToTalkBindings")
+        append(candidate?.voice.toggleRecordingBindings, effective: next.toggleRecordingShortcut.value, path: "voice.toggleRecordingBindings")
+        append(candidate?.voice.cancelBindings, effective: next.cancelShortcut.value, path: "voice.cancelBindings")
+        bindings.append(("voice.pasteLatestTranscriptShortcut", next.pasteLatestTranscriptShortcut.value))
         for left in bindings.indices {
             for right in bindings.indices where right > left && bindings[left].1.conflicts(with: bindings[right].1) {
                 let diagnostic = ConfigDiagnostic.invalidValue(path: bindings[left].0, reason: "conflicts with \(bindings[right].0)")

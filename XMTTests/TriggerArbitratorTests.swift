@@ -145,6 +145,44 @@ final class TriggerArbitratorTests: XCTestCase {
                        events: [.pushToTalkBegan, .cancelRequested, .pushToTalkEnded])
     }
 
+    func testChordHoldInitiatingKeyOwnsReleaseWhenFnReleasedFirst() {
+        assertSequence([.fnDown, .chordDown(.hold), .fnUp], state: .chordHoldActive,
+                       events: [.pushToTalkBegan])
+        assertSequence([.fnDown, .chordDown(.hold), .fnUp, .chordUp(.hold)], state: .idle,
+                       events: [.pushToTalkBegan, .pushToTalkEnded])
+    }
+
+    func testBindingRouterMultiplexesSourcesAndCollapsesRepeats() {
+        var router = VoiceBindingRouter()
+        let first = VoiceBindingRouter.Source("slot.0")
+        let second = VoiceBindingRouter.Source("slot.1")
+        XCTAssertEqual(router.receive(.down(first, .toggle)), [.toggleRequested])
+        XCTAssertEqual(router.receive(.down(first, .toggle)), [])
+        XCTAssertEqual(router.receive(.up(first)), [])
+        XCTAssertEqual(router.receive(.down(second, .toggle)), [.toggleRequested])
+    }
+
+    func testBindingRouterHoldReleaseIsOwnedAndReconfigurationIsSafe() {
+        var router = VoiceBindingRouter()
+        let owner = VoiceBindingRouter.Source("slot.0")
+        let other = VoiceBindingRouter.Source("slot.1")
+        XCTAssertEqual(router.receive(.down(owner, .hold)), [.holdBegan])
+        XCTAssertEqual(router.receive(.down(other, .hold)), [])
+        XCTAssertEqual(router.receive(.up(other)), [])
+        XCTAssertEqual(router.receive(.up(owner)), [.holdEnded])
+        XCTAssertEqual(router.receive(.down(owner, .hold)), [.holdBegan])
+        XCTAssertEqual(router.reconfigure(), [.holdEnded])
+        XCTAssertEqual(router.receive(.up(owner)), [])
+    }
+
+    func testBindingRouterInterruptionEndsHoldExactlyOnce() {
+        var router = VoiceBindingRouter()
+        let source = VoiceBindingRouter.Source("fn.escape")
+        XCTAssertEqual(router.receive(.down(source, .hold)), [.holdBegan])
+        XCTAssertEqual(router.receive(.interrupted), [.holdEnded])
+        XCTAssertEqual(router.receive(.interrupted), [])
+    }
+
     func testConfiguredFnHoldBalancesOnKeyUpAndInterruption() {
         var mapper = FnPhysicalEventMapper(chords: [53: .hold])
         _ = mapper.fnChanged(isDown: true)

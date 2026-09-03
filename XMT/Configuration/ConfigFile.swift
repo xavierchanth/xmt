@@ -39,10 +39,13 @@ struct ConfigFile: Codable, Equatable, Sendable {
     }
     struct Voice: Codable, Equatable, Sendable {
         var enabled: Bool?
-        var shortcut: ShortcutDTO? // decode-only v1 alias for holdToTalkShortcut
-        var holdToTalkShortcut: ShortcutDTO?
-        var toggleRecordingShortcut: ShortcutDTO?
-        var cancelShortcut: ShortcutDTO?
+        var shortcut: ShortcutDTO? // decode-only legacy alias
+        var holdToTalkShortcut: ShortcutDTO? // decode-only one-release alias
+        var toggleRecordingShortcut: ShortcutDTO? // decode-only one-release alias
+        var cancelShortcut: ShortcutDTO? // decode-only one-release alias
+        var holdToTalkBindings: [ShortcutDTO]?
+        var toggleRecordingBindings: [ShortcutDTO]?
+        var cancelBindings: [ShortcutDTO]?
         var pasteLatestTranscriptShortcut: ShortcutDTO?
         var autoPaste: Bool? // decode-only compatibility alias
         var outputMode: VoiceOutputMode?
@@ -64,13 +67,16 @@ struct ConfigFile: Codable, Equatable, Sendable {
         }
 
         private enum CodingKeys: String, CodingKey {
-            case enabled, shortcut, holdToTalkShortcut, toggleRecordingShortcut, cancelShortcut, pasteLatestTranscriptShortcut, autoPaste, outputMode, history
+            case enabled, shortcut, holdToTalkShortcut, toggleRecordingShortcut, cancelShortcut
+            case holdToTalkBindings, toggleRecordingBindings, cancelBindings
+            case pasteLatestTranscriptShortcut, autoPaste, outputMode, history
             case keepLastTranscript
             case locale, fnHoldThresholdMs, maxSessionSeconds, inputDevicePriority, fallbackToSystemDefault
         }
         private enum HistoryCodingKeys: String, CodingKey { case enabled }
 
         init(enabled: Bool? = nil, shortcut: ShortcutDTO? = nil, holdToTalkShortcut: ShortcutDTO? = nil, toggleRecordingShortcut: ShortcutDTO? = nil, cancelShortcut: ShortcutDTO? = nil,
+             holdToTalkBindings: [ShortcutDTO]? = nil, toggleRecordingBindings: [ShortcutDTO]? = nil, cancelBindings: [ShortcutDTO]? = nil,
              pasteLatestTranscriptShortcut: ShortcutDTO? = nil, autoPaste: Bool? = nil, outputMode: VoiceOutputMode? = nil,
              history: History? = nil, locale: String? = nil, fnHoldThresholdMs: Int? = nil,
              maxSessionSeconds: Int? = nil, inputDevicePriority: [InputDeviceDTO]? = nil,
@@ -80,6 +86,9 @@ struct ConfigFile: Codable, Equatable, Sendable {
             self.holdToTalkShortcut = holdToTalkShortcut
             self.toggleRecordingShortcut = toggleRecordingShortcut
             self.cancelShortcut = cancelShortcut
+            self.holdToTalkBindings = holdToTalkBindings
+            self.toggleRecordingBindings = toggleRecordingBindings
+            self.cancelBindings = cancelBindings
             self.pasteLatestTranscriptShortcut = pasteLatestTranscriptShortcut
             self.autoPaste = autoPaste
             self.outputMode = outputMode
@@ -98,6 +107,9 @@ struct ConfigFile: Codable, Equatable, Sendable {
             holdToTalkShortcut = try box.decodeIfPresent(ShortcutDTO.self, forKey: .holdToTalkShortcut)
             toggleRecordingShortcut = try box.decodeIfPresent(ShortcutDTO.self, forKey: .toggleRecordingShortcut)
             cancelShortcut = try box.decodeIfPresent(ShortcutDTO.self, forKey: .cancelShortcut)
+            holdToTalkBindings = try box.decodeIfPresent([ShortcutDTO].self, forKey: .holdToTalkBindings)
+            toggleRecordingBindings = try box.decodeIfPresent([ShortcutDTO].self, forKey: .toggleRecordingBindings)
+            cancelBindings = try box.decodeIfPresent([ShortcutDTO].self, forKey: .cancelBindings)
             pasteLatestTranscriptShortcut = try box.decodeIfPresent(ShortcutDTO.self, forKey: .pasteLatestTranscriptShortcut)
             autoPaste = try box.decodeIfPresent(Bool.self, forKey: .autoPaste)
             outputMode = try box.decodeIfPresent(VoiceOutputMode.self, forKey: .outputMode)
@@ -127,9 +139,9 @@ struct ConfigFile: Codable, Equatable, Sendable {
         func encode(to encoder: Encoder) throws {
             var box = encoder.container(keyedBy: CodingKeys.self)
             try box.encodeIfPresent(enabled, forKey: .enabled)
-            try box.encodeIfPresent(holdToTalkShortcut ?? shortcut, forKey: .holdToTalkShortcut)
-            try box.encodeIfPresent(toggleRecordingShortcut, forKey: .toggleRecordingShortcut)
-            try box.encodeIfPresent(cancelShortcut, forKey: .cancelShortcut)
+            try box.encodeIfPresent(holdToTalkBindings ?? holdToTalkShortcut.map { [$0] } ?? shortcut.map { [$0] }, forKey: .holdToTalkBindings)
+            try box.encodeIfPresent(toggleRecordingBindings ?? toggleRecordingShortcut.map { [$0] }, forKey: .toggleRecordingBindings)
+            try box.encodeIfPresent(cancelBindings ?? cancelShortcut.map { [$0] }, forKey: .cancelBindings)
             try box.encodeIfPresent(pasteLatestTranscriptShortcut, forKey: .pasteLatestTranscriptShortcut)
             try box.encodeIfPresent(outputMode ?? autoPaste.map { $0 ? .pasteImmediately : .clipboardOnly }, forKey: .outputMode)
             try box.encodeIfPresent(history, forKey: .history)
@@ -171,27 +183,34 @@ struct ConfigFile: Codable, Equatable, Sendable {
             guard case .key = shortcut else { throw ConfigDiagnostic.invalidValue(path: "windowMover.shortcut", reason: "must be a standard key shortcut") }
             do { try shortcut.validate() } catch { throw ConfigDiagnostic.invalidValue(path: "windowMover.shortcut", reason: String(describing: error)) }
         }
-        if voice.shortcut != nil && voice.holdToTalkShortcut != nil {
-            throw ConfigDiagnostic.invalidValue(path: "voice.shortcut", reason: "conflicts with voice.holdToTalkShortcut")
+        if voice.shortcut != nil && (voice.holdToTalkShortcut != nil || voice.holdToTalkBindings != nil) {
+            throw ConfigDiagnostic.invalidValue(path: "voice.shortcut", reason: "conflicts with canonical hold-to-talk bindings")
         }
-        let bindings: [(String, ShortcutDTO?, VoiceBindingAction)] = [
-            ("voice.holdToTalkShortcut", voice.holdToTalkShortcut ?? voice.shortcut, .holdToTalk),
-            ("voice.toggleRecordingShortcut", voice.toggleRecordingShortcut, .toggleRecording),
-            ("voice.cancelShortcut", voice.cancelShortcut, .cancel)
+        let groups: [(String, [ShortcutDTO]?, ShortcutDTO?, VoiceBindingAction)] = [
+            ("voice.holdToTalkBindings", voice.holdToTalkBindings, voice.holdToTalkShortcut ?? voice.shortcut, .holdToTalk),
+            ("voice.toggleRecordingBindings", voice.toggleRecordingBindings, voice.toggleRecordingShortcut, .toggleRecording),
+            ("voice.cancelBindings", voice.cancelBindings, voice.cancelShortcut, .cancel)
         ]
-        for (path, shortcut, action) in bindings {
-            guard let shortcut else { continue }
+        for (path, canonical, singular, _) in groups where canonical != nil && singular != nil {
+            throw ConfigDiagnostic.invalidValue(path: path, reason: "conflicts with singular compatibility key")
+        }
+        var located: [VoiceBindingPolicy.LocatedBinding] = []
+        for (path, canonical, singular, action) in groups {
+            let values = canonical ?? singular.map { [$0] } ?? []
+            for (index, shortcut) in values.enumerated() {
+            let itemPath = canonical == nil ? path.replacingOccurrences(of: "Bindings", with: "Shortcut") : "\(path)[\(index)]"
             if case let .modifierHold(name) = shortcut, !["fn", "function"].contains(name.lowercased()) { throw ConfigDiagnostic.invalidValue(path: path, reason: "only Fn is supported as a modifier hold") }
             if let issue = VoiceBindingPolicy.validate(shortcut, for: action) {
                 let reason = issue == .modifierOnlyRequiresHold ? "Fn modifier-only is supported only for hold-to-talk" : "requires Control, Option, or Command; Shift alone is unsafe"
-                throw ConfigDiagnostic.invalidValue(path: path, reason: reason)
+                throw ConfigDiagnostic.invalidValue(path: itemPath, reason: reason)
             }
-            do { try shortcut.validate() } catch { throw ConfigDiagnostic.invalidValue(path: path, reason: String(describing: error)) }
+            do { try shortcut.validate() } catch { throw ConfigDiagnostic.invalidValue(path: itemPath, reason: String(describing: error)) }
+            located.append(.init(path: itemPath, action: action, binding: shortcut))
+            }
         }
-        let configured = bindings.compactMap { item -> (String, ShortcutDTO)? in item.1.map { (item.0, $0) } }
-        for i in configured.indices { for j in configured.indices where j > i {
-            if configured[i].1.conflicts(with: configured[j].1) { throw ConfigDiagnostic.invalidValue(path: configured[j].0, reason: "conflicts with \(configured[i].0)") }
-        }}
+        if let overlap = VoiceBindingPolicy.firstOverlap(in: located) {
+            throw ConfigDiagnostic.invalidValue(path: overlap.later, reason: "conflicts with \(overlap.earlier)")
+        }
         if let shortcut = voice.pasteLatestTranscriptShortcut {
             if case .unbound = shortcut { throw ConfigDiagnostic.invalidValue(path: "voice.pasteLatestTranscriptShortcut", reason: "must be a key shortcut; unbound is not supported") }
             guard case .key = shortcut else {

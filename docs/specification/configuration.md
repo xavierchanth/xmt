@@ -56,7 +56,7 @@ A shortcut is one of four shapes, distinguished by `type`:
 - `key` — a `key` name plus an optional `modifiers` array drawn from `command`, `control`, `option`, and `shift`. Key names cover digits, letters, `f1` through `f20`, and named keys such as `space`, `return`, `tab`, `escape`, `delete`, `forwarddelete`, the arrows, `home`, `end`, `pageup`, `pagedown`, and the punctuation keys. Names are case-insensitive.
 - `modifierHold` — the modifier name `fn` or its alias `function`. Only Voice hold-to-talk accepts this shape, and only for Fn.
 - `fnChord` — a supported `key` name combined with the physical Fn modifier. Voice actions accept this shape.
-- `unbound` — an explicit absence of a binding for any Voice action.
+- `unbound` — an explicit absence of a binding for any Voice action. For example, setting all three Voice action fields to `{ "type": "unbound" }` corresponds to the empty Voice binding list in Settings; adding a row writes that action's concrete shortcut value.
 
 When `type` is omitted, a document containing `modifier` is read as a modifier hold and anything else as a key shortcut. A modifier hold is deliberately not representable as a key shortcut with optional bits.
 

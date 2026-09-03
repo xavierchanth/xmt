@@ -6,6 +6,7 @@ struct VoiceSettingsView: View {
     @State private var bindingRecorder = VoiceBindingRecorderModel()
     @State private var captureToken: VoiceBindingCaptureLease.Token?
     @State private var busyAction: VoiceBindingAction?
+    @State private var actionList = VoiceActionListModel()
 
     var body: some View {
         Form {
@@ -16,9 +17,33 @@ struct VoiceSettingsView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section("Voice bindings") {
-                bindingRow("Hold to talk", action: .holdToTalk, managed: .holdToTalkShortcut)
-                bindingRow("Toggle recording", action: .toggleRecording, managed: .toggleRecordingShortcut)
-                bindingRow("Cancel", action: .cancel, managed: .cancelShortcut)
+                if actionList.actions.isEmpty {
+                    Text("No voice bindings").foregroundStyle(.secondary)
+                }
+                ForEach(actionList.actions, id: \.self) { action in
+                    HStack(alignment: .top) {
+                        bindingRow(action.title, action: action, managed: action.managedKey)
+                        VStack(spacing: 4) {
+                            Button { actionList.move(action, by: -1) } label: { Image(systemName: "chevron.up") }
+                                .accessibilityLabel("Move \(action.title) binding up")
+                                .disabled(actionList.actions.first == action || busyAction != nil)
+                            Button { actionList.move(action, by: 1) } label: { Image(systemName: "chevron.down") }
+                                .accessibilityLabel("Move \(action.title) binding down")
+                                .disabled(actionList.actions.last == action || busyAction != nil)
+                            Button(role: .destructive) { remove(action) } label: { Image(systemName: "minus.circle") }
+                                .accessibilityLabel("Remove \(action.title) binding")
+                                .disabled(module.managedKeys.contains(action.managedKey) || busyAction != nil)
+                        }
+                    }
+                }
+                Menu("Add voice binding") {
+                    ForEach(actionList.availableActions, id: \.self) { action in
+                        Button(action.title) { add(action) }
+                            .accessibilityLabel("Add \(action.title) binding")
+                    }
+                }
+                .disabled(actionList.availableActions.isEmpty || busyAction != nil)
+                .accessibilityHint("Adds one of the currently unbound Voice actions and starts shortcut capture")
                 Text("Escape alone cancels capture; Control–Escape and Fn–Escape are bindable. macOS Keyboard settings for Globe/Fn may intercept some Fn events before XMT.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
@@ -50,7 +75,10 @@ struct VoiceSettingsView: View {
             if module.status == .pending { Section("Recovery") { Button("Retry Recording") { module.retryPending() }; Button("Delete Recording", role: .destructive) { module.deletePending() } } }
             Section("Configuration") { HStack { Button("Reload Configuration") { module.reloadConfig() }; if let diagnostic = module.configDiagnostic { Text(diagnostic).foregroundStyle(.red) } } }
         }.formStyle(.grouped)
-            .onAppear { module.refreshDevices(); module.refreshLocalesAndAssets() }
+            .onAppear {
+                module.refreshDevices(); module.refreshLocalesAndAssets()
+                actionList.replace(with: VoiceBindingAction.all.filter { module.effectiveVoiceBinding(for: $0) != .unbound })
+            }
             .onDisappear {
                 module.cancelVoiceBindingCapture()
                 captureToken = nil; busyAction = nil
@@ -70,6 +98,7 @@ struct VoiceSettingsView: View {
                 bindingRecorder.receive(.cancel(action))
                 if let token = captureToken { module.releaseVoiceBindingCapture(token) }
                 captureToken = nil; busyAction = nil
+                if module.effectiveVoiceBinding(for: action) == .unbound { actionList.remove(action) }
             },
             commit: { binding in
                 let token = captureToken ?? module.acquireVoiceBindingCapture()
@@ -83,6 +112,35 @@ struct VoiceSettingsView: View {
                 module.releaseVoiceBindingCapture(token)
                 if captureToken == token { captureToken = nil; busyAction = nil }
                 return diagnostic
+            },
+            didCommit: { binding in
+                if binding == .unbound { actionList.remove(action) }
             })
+    }
+
+    private func add(_ action: VoiceBindingAction) {
+        guard actionList.add(action) else { return }
+        captureToken = module.acquireVoiceBindingCapture(); busyAction = action
+        bindingRecorder.receive(.begin(action))
+    }
+
+    private func remove(_ action: VoiceBindingAction) {
+        let token = module.acquireVoiceBindingCapture(); busyAction = action
+        Task { @MainActor in
+            let diagnostic = await module.commitVoiceBinding(.unbound, action: action)
+            module.releaseVoiceBindingCapture(token)
+            if diagnostic == nil { actionList.remove(action) }
+            if captureToken == nil { busyAction = nil }
+        }
+    }
+}
+
+private extension VoiceBindingAction {
+    static let all: [Self] = [.holdToTalk, .toggleRecording, .cancel]
+    var title: String {
+        switch self { case .holdToTalk: "Hold to talk"; case .toggleRecording: "Toggle recording"; case .cancel: "Cancel" }
+    }
+    var managedKey: EffectiveSettings.Key {
+        switch self { case .holdToTalk: .holdToTalkShortcut; case .toggleRecording: .toggleRecordingShortcut; case .cancel: .cancelShortcut }
     }
 }

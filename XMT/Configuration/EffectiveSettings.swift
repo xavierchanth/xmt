@@ -24,6 +24,23 @@ struct VoiceBindingCaptureLease: Equatable, Sendable {
 }
 enum VoiceBindingPolicyError: Error, Equatable, Sendable { case modifierOnlyRequiresHold; case unsafeUnmodifiedKey }
 struct VoiceBindingPolicy {
+    struct LocatedBinding: Equatable, Sendable {
+        let path: String
+        let action: VoiceBindingAction
+        let binding: ShortcutDTO
+    }
+
+    /// Returns the later entry involved in the first overlap. Keeping this policy
+    /// pure makes duplicate-within-action and cross-action behavior deterministic.
+    static func firstOverlap(in bindings: [LocatedBinding]) -> (later: String, earlier: String)? {
+        for later in bindings.indices {
+            for earlier in 0..<later where bindings[later].binding.conflicts(with: bindings[earlier].binding) {
+                return (bindings[later].path, bindings[earlier].path)
+            }
+        }
+        return nil
+    }
+
     static func validate(_ binding: ShortcutDTO, for action: VoiceBindingAction) -> VoiceBindingPolicyError? {
         switch binding {
         case .unbound: return nil
@@ -37,12 +54,20 @@ struct VoiceBindingPolicy {
 }
 
 struct VoiceBindingPersistence {
-    /// Migrates the former KeyboardShortcuts storage. An explicit marker with no
-    /// library shortcut represented explicit unbound; it must never become Fn.
-    static func localValue(explicit: Bool, canonicalData: Data?, legacyValue: ShortcutDTO?) -> ShortcutDTO? {
+    /// Canonical storage is an ordered array. During the one-release migration,
+    /// scalar canonical data and the former KeyboardShortcuts value remain readable.
+    static func localBindings(explicit: Bool, canonicalData: Data?, legacyValue: ShortcutDTO?) -> [ShortcutDTO]? {
         guard explicit else { return nil }
-        if let canonicalData, let decoded = try? JSONDecoder().decode(ShortcutDTO.self, from: canonicalData) { return decoded }
-        return legacyValue ?? .unbound
+        if let canonicalData {
+            if let values = try? JSONDecoder().decode([ShortcutDTO].self, from: canonicalData) { return values }
+            if let value = try? JSONDecoder().decode(ShortcutDTO.self, from: canonicalData) { return [value] }
+        }
+        return legacyValue.map { [$0] } ?? []
+    }
+
+    static func localValue(explicit: Bool, canonicalData: Data?, legacyValue: ShortcutDTO?) -> ShortcutDTO? {
+        guard let bindings = localBindings(explicit: explicit, canonicalData: canonicalData, legacyValue: legacyValue) else { return nil }
+        return bindings.first ?? .unbound
     }
 }
 
@@ -218,9 +243,9 @@ struct EffectiveSettings: Equatable, Sendable {
             windowMoverEnabled: pick(config?.windowMover.enabled, local.windowMoverEnabled, builtIn.windowMoverEnabled),
             windowMoverShortcut: pick(config?.windowMover.shortcut, local.windowMoverShortcut, builtIn.windowMoverShortcut),
             voiceEnabled: pick(config?.voice.enabled, local.voiceEnabled, builtIn.voiceEnabled),
-            holdToTalkShortcut: pick(config?.voice.holdToTalkShortcut ?? config?.voice.shortcut, local.holdToTalkShortcut, builtIn.holdToTalkShortcut),
-            toggleRecordingShortcut: pick(config?.voice.toggleRecordingShortcut, local.toggleRecordingShortcut, builtIn.toggleRecordingShortcut),
-            cancelShortcut: pick(config?.voice.cancelShortcut, local.cancelShortcut, builtIn.cancelShortcut),
+            holdToTalkShortcut: pick(config?.voice.holdToTalkBindings.map { $0.first ?? .unbound } ?? config?.voice.holdToTalkShortcut ?? config?.voice.shortcut, local.holdToTalkShortcut, builtIn.holdToTalkShortcut),
+            toggleRecordingShortcut: pick(config?.voice.toggleRecordingBindings.map { $0.first ?? .unbound } ?? config?.voice.toggleRecordingShortcut, local.toggleRecordingShortcut, builtIn.toggleRecordingShortcut),
+            cancelShortcut: pick(config?.voice.cancelBindings.map { $0.first ?? .unbound } ?? config?.voice.cancelShortcut, local.cancelShortcut, builtIn.cancelShortcut),
             pasteLatestTranscriptShortcut: pick(config?.voice.pasteLatestTranscriptShortcut, local.pasteLatestTranscriptShortcut, builtIn.pasteLatestTranscriptShortcut),
             outputMode: pick(config?.voice.outputMode ?? config?.voice.autoPaste.map { $0 ? .pasteImmediately : .clipboardOnly }, local.outputMode ?? local.autoPaste.map { $0 ? .pasteImmediately : .clipboardOnly }, builtIn.outputMode),
             historyEnabled: pick(config?.voice.history?.enabled, local.historyEnabled, builtIn.historyEnabled),

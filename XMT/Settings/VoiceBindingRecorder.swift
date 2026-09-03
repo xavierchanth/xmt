@@ -13,6 +13,7 @@ struct VoiceBindingRecorder: View {
     let begin: () -> Void
     let cancel: () -> Void
     let commit: (ShortcutDTO) async -> String?
+    var didCommit: (ShortcutDTO) -> Void = { _ in }
 
     @State private var diagnostic: String?
     @State private var isCommitting = false
@@ -53,6 +54,7 @@ struct VoiceBindingRecorder: View {
         isCommitting = true
         Task { @MainActor in
             diagnostic = await commit(shortcut)
+            if diagnostic == nil { didCommit(shortcut) }
             isCommitting = false
         }
     }

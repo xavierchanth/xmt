@@ -32,6 +32,8 @@
 		B000001 /* FnEventObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100001 /* FnEventObserver.swift */; };
 		B000002 /* TriggerArbitrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100002 /* TriggerArbitrator.swift */; };
 		B000003 /* TriggerEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100003 /* TriggerEvents.swift */; };
+		VR000001 /* VoiceBindingRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = VR100001 /* VoiceBindingRouter.swift */; };
+		VR000002 /* VoiceBindingRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = VR100001 /* VoiceBindingRouter.swift */; };
 		B000004 /* ConfigFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100004 /* ConfigFile.swift */; };
 		B000005 /* EffectiveSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100005 /* EffectiveSettings.swift */; };
 		B000006 /* ConfigReloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100006 /* ConfigReloader.swift */; };
@@ -144,6 +146,7 @@
 		B100001 /* FnEventObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FnEventObserver.swift; sourceTree = "<group>"; };
 		B100002 /* TriggerArbitrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriggerArbitrator.swift; sourceTree = "<group>"; };
 		B100003 /* TriggerEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriggerEvents.swift; sourceTree = "<group>"; };
+		VR100001 /* VoiceBindingRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceBindingRouter.swift; sourceTree = "<group>"; };
 		B100004 /* ConfigFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigFile.swift; sourceTree = "<group>"; };
 		B100005 /* EffectiveSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectiveSettings.swift; sourceTree = "<group>"; };
 		B100006 /* ConfigReloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigReloader.swift; sourceTree = "<group>"; };
@@ -369,6 +372,7 @@
 				B100001 /* FnEventObserver.swift */,
 				B100002 /* TriggerArbitrator.swift */,
 				B100003 /* TriggerEvents.swift */,
+				VR100001 /* VoiceBindingRouter.swift */,
 			);
 			path = Triggers;
 			sourceTree = "<group>";
@@ -627,6 +631,7 @@
 				B000001 /* FnEventObserver.swift in Sources */,
 				B000002 /* TriggerArbitrator.swift in Sources */,
 				B000003 /* TriggerEvents.swift in Sources */,
+				VR000001 /* VoiceBindingRouter.swift in Sources */,
 				B000004 /* ConfigFile.swift in Sources */,
 				B000005 /* EffectiveSettings.swift in Sources */,
 				B000006 /* ConfigReloader.swift in Sources */,
@@ -679,6 +684,7 @@
 				B000029 /* FnEventObserver.swift in Sources */,
 				B000030 /* TriggerArbitrator.swift in Sources */,
 				B000031 /* TriggerEvents.swift in Sources */,
+				VR000002 /* VoiceBindingRouter.swift in Sources */,
 				B000032 /* ConfigFile.swift in Sources */,
 				B000033 /* EffectiveSettings.swift in Sources */,
 				B000034 /* ConfigReloader.swift in Sources */,
