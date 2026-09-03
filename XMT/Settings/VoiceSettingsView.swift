@@ -168,7 +168,7 @@ struct VoiceSettingsView: View {
     private func add(_ action: VoiceBindingAction) {
         let previous = lists[action] ?? []
         var values = previous; values.append(.unbound); lists[action] = values
-        begin(action, values.count - 1, rollback: .init(action: action, bindings: previous))
+        _ = begin(action, values.count - 1, rollback: .init(action: action, bindings: previous))
     }
     private func remove(_ action: VoiceBindingAction, _ index: Int) {
         var values = lists[action] ?? []
