@@ -553,6 +553,14 @@ final class ConfigTests: XCTestCase {
         VoiceBindingPersistence.saveManagedBackup(array, in: defaults, key: prefix)
         XCTAssertEqual(VoiceBindingPersistence.restoreManagedBackup(in: defaults, key: prefix), array)
 
+        defaults.set(try JSONEncoder().encode(array), forKey: "\(prefix).backup")
+        VoiceBindingPersistence.saveManagedBackup(nil, in: defaults, key: prefix)
+        XCTAssertNil(defaults.data(forKey: "\(prefix).backup"), "a nil local value must clear a stale backup")
+        XCTAssertEqual(VoiceBindingPersistence.restoreManagedBackup(in: defaults, key: prefix), [])
+
+        VoiceBindingPersistence.saveManagedBackup([], in: defaults, key: prefix)
+        XCTAssertEqual(VoiceBindingPersistence.restoreManagedBackup(in: defaults, key: prefix), [], "explicit unbound must not restore stale bindings")
+
         defaults.set(try JSONEncoder().encode(scalar), forKey: "\(prefix).backup")
         XCTAssertNil(VoiceBindingPersistence.restoreManagedBackup(in: defaults, key: prefix))
         XCTAssertNil(defaults.data(forKey: "\(prefix).backup"), "inactive stale backup must be removed")

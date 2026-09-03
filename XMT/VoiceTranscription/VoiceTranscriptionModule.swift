@@ -869,16 +869,19 @@ final class VoiceTranscriptionModule: ObservableObject {
 
     private func applyManagedVoiceBindings(_ binding: ResolvedSetting<[ShortcutDTO]>, action: VoiceBindingAction,
                                            key: String, unmanaged: [ShortcutDTO]?) -> [ShortcutDTO]? {
-        let defaults = UserDefaults.standard, activeKey = "voice.binding.\(key).backupActive", dataKey = "voice.binding.\(key).backup"
+        let defaults = UserDefaults.standard
+        let persistenceKey = "voice.binding.\(key)"
         var local = unmanaged
-        if binding.isManaged && !defaults.bool(forKey: activeKey) {
-            defaults.set(true, forKey: activeKey)
-            if let local, let data = try? JSONEncoder().encode(local) { defaults.set(data, forKey: dataKey) }
-        } else if !binding.isManaged && defaults.bool(forKey: activeKey) {
-            local = defaults.data(forKey: dataKey).flatMap { try? JSONDecoder().decode([ShortcutDTO].self, from: $0) }
-            defaults.set(local != nil, forKey: "voice.binding.\(key).explicit")
-            if let local, let data = try? JSONEncoder().encode(local) { defaults.set(data, forKey: "voice.binding.\(key).value") }
-            defaults.removeObject(forKey: dataKey); defaults.set(false, forKey: activeKey)
+        if binding.isManaged && !defaults.bool(forKey: "\(persistenceKey).backupActive") {
+            VoiceBindingPersistence.saveManagedBackup(local, in: defaults, key: persistenceKey)
+        } else if !binding.isManaged && defaults.bool(forKey: "\(persistenceKey).backupActive") {
+            local = VoiceBindingPersistence.restoreManagedBackup(in: defaults, key: persistenceKey)
+            defaults.set(local != nil, forKey: "\(persistenceKey).explicit")
+            if let local, let data = try? JSONEncoder().encode(local) {
+                defaults.set(data, forKey: "\(persistenceKey).value")
+            } else {
+                defaults.removeObject(forKey: "\(persistenceKey).value")
+            }
         }
         let active = binding.isManaged ? binding.value : (local ?? binding.value)
         for index in 0..<KeyboardShortcuts.Name.voiceBindingSlotCount {
