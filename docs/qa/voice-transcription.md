@@ -67,7 +67,7 @@ Pure and coordinator tests exercise binding decoding, legacy aliases, effective 
 
 ### Voice binding capture checks
 
-- In each Voice binding row choose Record and verify bare Escape is captured rather than cancelling editing; repeat with Control-Escape. Use the explicit Cancel button and verify the prior binding remains unchanged, then Clear and verify Unbound survives reload.
+- In each Voice binding row choose Record and verify bare Escape cancels editing without changing the prior binding; verify Control-Escape and Fn-Escape are captured. Use the explicit Cancel button with the same rollback result, then Clear and verify Unbound survives reload.
 - For Hold to Talk choose Fn and verify the UI, local preference, effective setting, and Fn observer change without relaunch. Verify Fn is not offered for Toggle or Cancel.
 - Attempt bare letters, bare Escape, and Shift-only chords for Hold and Toggle and verify an inline safety diagnostic appears without changing or briefly registering the binding. Verify bare Escape remains accepted for phase-scoped Cancel.
 - Attempt a chord already owned by another Voice action, Window Mover, or Paste Latest and verify the old effective binding and live registration remain unchanged.

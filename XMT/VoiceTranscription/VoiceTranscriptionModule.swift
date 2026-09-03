@@ -79,6 +79,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     private var assetProgressObservation: NSKeyValueObservation?
     private var isPastingLatest = false
     private var bindingCommitTail: Task<String?, Never>?
+    private var bindingCaptureActive = false
     private var historyLatestObserver: NSObjectProtocol?
     private static let pasteLatestShortcutBackupActiveKey = "voice.pasteLatestShortcutBackupActive"
     private static let pasteLatestShortcutBackupDataKey = "voice.pasteLatestShortcutBackupData"
@@ -339,6 +340,18 @@ final class VoiceTranscriptionModule: ObservableObject {
 
     func reloadConfig() { Task { await loadConfig() } }
 
+    func setVoiceBindingCaptureActive(_ active: Bool) {
+        guard bindingCaptureActive != active else { return }
+        bindingCaptureActive = active
+        if active {
+            observation?.cancel(); observation = nil; observer = nil
+            KeyboardShortcuts.disable(.voiceHoldToTalk); KeyboardShortcuts.disable(.voiceToggleRecording); KeyboardShortcuts.disable(.voiceCancel)
+        } else {
+            observerThresholdMs = nil; observerHoldBinding = nil; observerToggleBinding = nil; observerCancelBinding = nil
+            recoverDegradedAndObserve()
+        }
+    }
+
     func effectiveVoiceBinding(for action: VoiceBindingAction) -> ShortcutDTO {
         switch action { case .holdToTalk: return effective.holdToTalkShortcut.value; case .toggleRecording: return effective.toggleRecordingShortcut.value; case .cancel: return effective.cancelShortcut.value }
     }
@@ -480,6 +493,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     private func startObserving() {
+        guard !bindingCaptureActive else { return }
         guard isEnabled, observation == nil else { if isEnabled, status == .disabled { status = .idle }; return }
         let bareHold: Bool = { if case .modifierHold = effective.holdToTalkShortcut.value { return true }; return false }()
         var chords: [Int64: FnChordAction] = [:]
@@ -840,12 +854,17 @@ final class VoiceTranscriptionModule: ObservableObject {
         guard defaults.bool(forKey: "voice.binding.\(key).explicit") else { return nil }
         if let data = defaults.data(forKey: "voice.binding.\(key).value"), let value = try? JSONDecoder().decode(ShortcutDTO.self, from: data) { return value }
         // One-release migration from the former KeyboardShortcuts-owned storage.
-        let migrated = KeyboardShortcuts.getShortcut(for: name).flatMap(ShortcutDTO.fromKeyboardShortcut) ?? .unbound
+        let migrated = KeyboardShortcuts.getShortcut(for: name).flatMap(ShortcutDTO.fromKeyboardShortcut)
+            ?? (key == "hold" ? .modifierHold("fn") : .unbound)
         if let data = try? JSONEncoder().encode(migrated) { defaults.set(data, forKey: "voice.binding.\(key).value") }
         return migrated
     }
 
     private func reconcileShortcutActivation() {
+        if bindingCaptureActive {
+            KeyboardShortcuts.disable(.voiceHoldToTalk); KeyboardShortcuts.disable(.voiceToggleRecording); KeyboardShortcuts.disable(.voiceCancel)
+            return
+        }
         let phase: VoiceInteractionPhase
         switch status { case .arming: phase = .arming; case .recording: phase = .recording; case .finalizing: phase = .finalizing; case .idle, .noSpeech, .pasteFailed, .degraded: phase = .idle; default: phase = .unavailable }
         let policy = VoiceShortcutActivationPolicy.decide(moduleEnabled: isEnabled, phase: phase)

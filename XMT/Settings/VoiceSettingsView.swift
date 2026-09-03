@@ -53,15 +53,17 @@ struct VoiceSettingsView: View {
     private func bindingRow(_ title: String, action: VoiceBindingAction, managed: EffectiveSettings.Key) -> some View {
         VoiceBindingRecorder(title: title, action: action, value: module.effectiveVoiceBinding(for: action),
             isManaged: module.managedKeys.contains(managed), isRecording: bindingRecorder.activeAction == action,
-            begin: { bindingRecorder.receive(.begin(action)) },
-            cancel: { bindingRecorder.receive(.cancel(action)) },
+            begin: { module.setVoiceBindingCaptureActive(true); bindingRecorder.receive(.begin(action)) },
+            cancel: { bindingRecorder.receive(.cancel(action)); module.setVoiceBindingCaptureActive(false) },
             commit: { binding in
                 switch binding {
                 case .unbound: bindingRecorder.receive(.clear(action))
                 case .modifierHold where action == .holdToTalk: bindingRecorder.receive(.selectFn)
                 default: bindingRecorder.receive(.captured(action, binding))
                 }
-                return await module.commitVoiceBinding(binding, action: action)
+                let diagnostic = await module.commitVoiceBinding(binding, action: action)
+                module.setVoiceBindingCaptureActive(false)
+                return diagnostic
             })
     }
 }

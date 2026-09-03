@@ -77,6 +77,7 @@ final class FnEventObserver {
     }
 
     private let threshold: TimeInterval
+    private let bareHoldEnabled: Bool
     private var handlers: [UUID: Subscriber] = [:]
     private var arbitrator = TriggerArbitrator()
     private var tap: CFMachPort?
@@ -88,11 +89,13 @@ final class FnEventObserver {
 
     init(holdThreshold: TimeInterval = 0.35, allowsFnSpaceToggle: Bool = true) {
         threshold = holdThreshold
+        bareHoldEnabled = true
         physicalEvents = FnPhysicalEventMapper(allowsFnSpaceToggle: allowsFnSpaceToggle)
     }
 
     init(holdThreshold: TimeInterval, bareHoldEnabled: Bool, chords: [Int64: FnChordAction]) {
         threshold = holdThreshold
+        self.bareHoldEnabled = bareHoldEnabled
         physicalEvents = FnPhysicalEventMapper(chords: chords)
         arbitrator = TriggerArbitrator(bareHoldEnabled: bareHoldEnabled)
     }
@@ -219,7 +222,7 @@ final class FnEventObserver {
     private func updateTimer() {
         timer?.invalidate()
         timer = nil
-        guard arbitrator.state == .fnPending else { return }
+        guard bareHoldEnabled, arbitrator.state == .fnPending else { return }
         let timer = Timer(timeInterval: threshold, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.process(.holdThresholdElapsed) }
         }
