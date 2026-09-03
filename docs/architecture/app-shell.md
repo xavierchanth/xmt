@@ -4,7 +4,7 @@ The app shell is the single user-visible app and UI that coordinates every XMT m
 
 ## Shape
 
-XMT is one `LSUIElement` SwiftUI application. It has no Dock icon, one menu bar item, and one reusable settings window that is presented at launch and whenever the app is reopened. Ordinary modules run inside this process and share its main actor. Keyboard Customization is the explicit safety exception: the app coordinates its isolated seizure owner, HIDDriverKit system extension, XPC lease, and independent watchdog. They are built-in implementation components, not plugins or additional apps; their target design is in [Keyboard Customization architecture](keyboard-customization.md#protected-input-architecture).
+XMT is one `LSUIElement` application with a SwiftUI settings surface. It has no Dock icon, one AppKit `NSStatusItem`, and one reusable settings window that is presented at launch and whenever the app is reopened. The application delegate strongly owns the status-item controller for the process lifetime; closing Settings does not release it or terminate XMT. Ordinary modules run inside this process and share its main actor. Keyboard Customization is the explicit safety exception: the app coordinates its isolated seizure owner, HIDDriverKit system extension, XPC lease, and independent watchdog. They are built-in implementation components, not plugins or additional apps; their target design is in [Keyboard Customization architecture](keyboard-customization.md#protected-input-architecture).
 
 The shell owns exactly four things:
 
@@ -62,9 +62,9 @@ The commitment is behavioral, not numeric. XMT does not publish a memory or CPU 
 
 The rules the shell follows:
 
-- **No idle work.** With no trigger firing, XMT does no polling, no periodic timers, and no background scanning. Idle cost is the cost of a registered shortcut and a menu bar item.
+- **No idle work.** With no trigger firing, XMT does no polling, no periodic timers, and no background scanning. The native menu refreshes from published state changes and immediately before opening. Idle cost is the cost of a registered shortcut and a menu bar item.
 - **Nothing acquired before it is needed.** Modules acquire OS resources at start, not at registration, and heavyweight OS sessions are acquired per action where the API allows it.
-- **The recovery UI is bounded.** XMT creates and presents one reusable Settings window at launch so a clipped status item cannot make the app unreachable. Closing it hides the retained AppKit window and SwiftUI host; reopening XMT presents that same window rather than accumulating windows.
+- **The recovery UI is bounded.** XMT creates and presents one reusable Settings window at launch so a clipped status item cannot make the app unreachable. Closing it hides the retained AppKit window and SwiftUI host without terminating the accessory app; reopening XMT from Finder presents that same window rather than accumulating windows. macOS can still clip XMT when physical menu-bar space is exhausted (including around a notch). XMT uses only its own public `NSStatusItem`; it cannot control notch allocation or move/remove another application's items.
 - **Deterministic release.** Everything acquired at start is released at stop, per [module lifecycle](#module-lifecycle).
 
 These rules explain why resource use stays small. They do not promise a number.

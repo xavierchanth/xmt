@@ -2,6 +2,7 @@ import XCTest
 import KeyboardShortcuts
 
 final class ConfigTests: XCTestCase {
+
     private func decode(_ json: String) throws -> ConfigFile { try ConfigFile.decode(Data(json.utf8)) }
 
     func testPartialNixStyleJSONAndUnknownKeys() throws {

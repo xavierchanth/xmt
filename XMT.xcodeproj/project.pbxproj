@@ -18,7 +18,7 @@
 		AA000009 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100009 /* SettingsView.swift */; };
 		AA000010 /* WindowMoverSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100010 /* WindowMoverSettingsView.swift */; };
 		AA000011 /* GeneralSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100011 /* GeneralSettingsView.swift */; };
-		AA000012 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100012 /* MenuBarView.swift */; };
+		AA000012 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100012 /* MenuBarController.swift */; };
 		AA000013 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA100013 /* Assets.xcassets */; };
 		AA000014 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = AA200014 /* KeyboardShortcuts */; };
 		AA000015 /* WindowGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100016 /* WindowGeometry.swift */; };
@@ -132,7 +132,7 @@
 		AA100009 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		AA100010 /* WindowMoverSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowMoverSettingsView.swift; sourceTree = "<group>"; };
 		AA100011 /* GeneralSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsView.swift; sourceTree = "<group>"; };
-		AA100012 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
+		AA100012 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
 		AA100013 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA100014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA100015 /* XMT.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = XMT.entitlements; sourceTree = "<group>"; };
@@ -315,7 +315,7 @@
 		AA400060 /* MenuBar */ = {
 			isa = PBXGroup;
 			children = (
-				AA100012 /* MenuBarView.swift */,
+				AA100012 /* MenuBarController.swift */,
 			);
 			path = MenuBar;
 			sourceTree = "<group>";
@@ -631,7 +631,7 @@
 				AA000023 /* SettingsWindowController.swift in Sources */,
 				AA000024 /* AccessibilityStatusView.swift in Sources */,
 				AA000025 /* WindowMoverModule.swift in Sources */,
-				AA000012 /* MenuBarView.swift in Sources */,
+				AA000012 /* MenuBarController.swift in Sources */,
 				B000001 /* FnEventObserver.swift in Sources */,
 				B000002 /* TriggerArbitrator.swift in Sources */,
 				B000003 /* TriggerEvents.swift in Sources */,
