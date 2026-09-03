@@ -11,14 +11,18 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let history = TranscriptHistoryViewModel.shared
     private let windowMover = WindowMoverModule.shared
     private let statusItem: NSStatusItem
+    private let menu = NSMenu(title: "XMT")
+    private var updatePolicy = MenuUpdateDeferralPolicy()
     private var cancellables: Set<AnyCancellable> = []
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
+        menu.delegate = self
+        statusItem.menu = menu // Assigned exactly once; this menu remains stable for our lifetime.
         configureButton()
         observeState()
-        rebuildMenu()
+        populate(menu)
     }
 
     private func configureButton() {
@@ -71,21 +75,34 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         [voice.objectWillChange.eraseToAnyPublisher(), history.objectWillChange.eraseToAnyPublisher(),
          windowMover.objectWillChange.eraseToAnyPublisher()].forEach { publisher in
             publisher.receive(on: RunLoop.main).sink { [weak self] _ in
-                // Published values are assigned after objectWillChange; rebuild on the next turn.
-                DispatchQueue.main.async { self?.rebuildMenu() }
+                // Published values are assigned after objectWillChange; update on the next turn.
+                DispatchQueue.main.async { self?.requestStructuralUpdate() }
             }.store(in: &cancellables)
         }
     }
 
-    func menuWillOpen(_ menu: NSMenu) {
-        rebuildMenu()
+    func menuWillOpen(_ suppliedMenu: NSMenu) {
+        precondition(suppliedMenu === menu, "XMT received an unexpected status menu")
+        updatePolicy.beginTracking()
+        // AppKit explicitly provides this callback for synchronous refresh before tracking. Remove
+        // and repopulate the supplied stable instance; never replace statusItem.menu here.
+        populate(suppliedMenu)
         guard history.isHistoryEnabled else { return }
         Task { await history.reload(limit: TranscriptHistorySnapshot.menuPreviewCount) }
     }
 
-    private func rebuildMenu() {
-        let menu = NSMenu(title: "XMT")
-        menu.delegate = self
+    func menuDidClose(_ suppliedMenu: NSMenu) {
+        precondition(suppliedMenu === menu, "XMT received an unexpected status menu")
+        if updatePolicy.endTracking() { populate(menu) }
+    }
+
+    private func requestStructuralUpdate() {
+        guard updatePolicy.requestUpdate() else { return }
+        populate(menu)
+    }
+
+    private func populate(_ menu: NSMenu) {
+        menu.removeAllItems()
         addWindowMoverItems(to: menu)
         menu.addItem(.separator())
         addVoiceItems(to: menu)
@@ -95,7 +112,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(item("Settings…", action: #selector(showSettings), key: ","))
         menu.addItem(.separator())
         menu.addItem(item("Quit XMT", action: #selector(quit), key: "q"))
-        statusItem.menu = menu
     }
 
     private func addWindowMoverItems(to menu: NSMenu) {

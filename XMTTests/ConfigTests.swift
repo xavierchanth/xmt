@@ -2,6 +2,20 @@ import XCTest
 import KeyboardShortcuts
 
 final class ConfigTests: XCTestCase {
+    func testMenuUpdatesAreDeferredUntilTrackingEnds() {
+        var policy = MenuUpdateDeferralPolicy()
+        XCTAssertTrue(policy.requestUpdate())
+        policy.beginTracking()
+        XCTAssertFalse(policy.requestUpdate())
+        XCTAssertFalse(policy.requestUpdate())
+        XCTAssertTrue(policy.isTracking)
+        XCTAssertTrue(policy.hasDeferredUpdate)
+        XCTAssertTrue(policy.endTracking())
+        XCTAssertFalse(policy.isTracking)
+        XCTAssertFalse(policy.hasDeferredUpdate)
+        XCTAssertTrue(policy.requestUpdate())
+        XCTAssertFalse(policy.endTracking())
+    }
 
     private func decode(_ json: String) throws -> ConfigFile { try ConfigFile.decode(Data(json.utf8)) }
 

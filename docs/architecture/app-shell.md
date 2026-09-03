@@ -62,7 +62,7 @@ The commitment is behavioral, not numeric. XMT does not publish a memory or CPU 
 
 The rules the shell follows:
 
-- **No idle work.** With no trigger firing, XMT does no polling, no periodic timers, and no background scanning. The native menu refreshes from published state changes and immediately before opening. Idle cost is the cost of a registered shortcut and a menu bar item.
+- **No idle work.** With no trigger firing, XMT does no polling, no periodic timers, and no background scanning. The native menu refreshes from published state changes and immediately before opening. Its `NSMenu` identity remains stable: the open callback synchronously repopulates that same menu, state changes during AppKit tracking are deferred, and one coalesced structural refresh runs after close. Idle cost is the cost of a registered shortcut and a menu bar item.
 - **Nothing acquired before it is needed.** Modules acquire OS resources at start, not at registration, and heavyweight OS sessions are acquired per action where the API allows it.
 - **The recovery UI is bounded.** XMT creates and presents one reusable Settings window at launch so a clipped status item cannot make the app unreachable. Closing it hides the retained AppKit window and SwiftUI host without terminating the accessory app; reopening XMT from Finder presents that same window rather than accumulating windows. macOS can still clip XMT when physical menu-bar space is exhausted (including around a notch). XMT uses only its own public `NSStatusItem`; it cannot control notch allocation or move/remove another application's items.
 - **Deterministic release.** Everything acquired at start is released at stop, per [module lifecycle](#module-lifecycle).

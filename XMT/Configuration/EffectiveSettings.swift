@@ -1,5 +1,26 @@
 import Foundation
 
+/// Pure state machine preventing structural menu updates during AppKit tracking.
+struct MenuUpdateDeferralPolicy: Equatable {
+    private(set) var isTracking = false
+    private(set) var hasDeferredUpdate = false
+
+    mutating func beginTracking() { isTracking = true }
+
+    /// Returns true when the caller may update menu structure immediately.
+    mutating func requestUpdate() -> Bool {
+        guard !isTracking else { hasDeferredUpdate = true; return false }
+        return true
+    }
+
+    /// Returns true when one or more requests accumulated while tracking.
+    mutating func endTracking() -> Bool {
+        isTracking = false
+        defer { hasDeferredUpdate = false }
+        return hasDeferredUpdate
+    }
+}
+
 enum VoiceOutputMode: String, Codable, CaseIterable, Equatable, Sendable { case pasteImmediately, clipboardOnly }
 
 enum VoiceBindingAction: String, CaseIterable, Equatable, Hashable, Sendable {
