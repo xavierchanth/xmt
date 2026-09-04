@@ -14,7 +14,7 @@ Window Mover registers exactly one global shortcut.
 - Default binding: **Option-Space**.
 - The shortcut is user-rebindable on the Window Mover settings page and may be managed by the declarative configuration file. XMT preserves and restores the prior recorder binding when file management begins and ends.
 - Window Mover has one persisted enabled setting, which defaults to enabled. Changing it takes effect without restarting XMT.
-- When disabled, XMT disables the shortcut registration through KeyboardShortcuts, releasing the active global hot key. Re-enabling reacquires it without restarting XMT. The current implementation leaves the library callback installed and retains an enabled-state guard so a queued or unexpected callback returns before action coordination, permission checks, or window work. KeyboardShortcuts does provide callback removal, but Window Mover does not currently call it.
+- When disabled, XMT asks the shell-owned standard-shortcut provider to disable the KeyboardShortcuts name, releasing the active global hot key. Re-enabling reacquires it without restarting XMT. The provider leaves its callback installed while disabled and rejects delivery before semantic dispatch, permission checks, or window work; app termination and route replacement remove the handler.
 - The handler fires on **key up**, not key down. A press-and-hold produces one action when the key is released.
 
 Key-up firing means the action is never repeated by key auto-repeat and never fires while the user is still composing a chord.

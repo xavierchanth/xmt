@@ -106,13 +106,13 @@ Applying a snapshot also applies module lifecycle: a Voice module that resolves 
 
 Loading is explicit and event-driven; nothing watches the file and nothing polls it. A load happens:
 
-- once at launch, when the Voice module registers;
+- once at launch, when the app-shell configuration coordinator registers the modules;
 - whenever the app becomes active, which is the practical way an edited file takes effect;
-- when `Reload Configuration` is pressed in Voice settings.
+- when `Reload Configuration` is pressed in General or Voice settings.
 
 Reloads are serialized: a reload started while another is publishing waits for it, including its asynchronous apply callbacks, so two snapshots cannot interleave. Publication delivers one complete snapshot along with the set of keys whose resolved value or source changed.
 
-A failed load leaves the previously published effective settings in force and records a diagnostic, which Voice settings shows next to the reload button. A subsequent successful load clears it. A missing file is not a failure.
+A failed load leaves the previously published effective settings in force and records a shell-owned diagnostic, which General and Voice settings show next to their reload buttons. A subsequent successful load clears it. A missing file is not a failure.
 
 Configuration loading never starts a recording, acquires a microphone, or begins speech analysis. Those remain gesture-scoped.
 

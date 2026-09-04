@@ -13,7 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarController = MenuBarController()
         logger.notice("AppKit status item installed")
         // Install callbacks and apply persisted state without prompting for permission.
-        VoiceTranscriptionModule.shared.register()
+        ModuleRegistry.shared.register()
+        ConfigurationCoordinator.shared.register()
         // A crowded macOS 26 menu bar can clip status items. Always provide a visible
         // recovery surface when the user explicitly launches XMT.
         SettingsWindowController.shared.show()
@@ -22,8 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidBecomeActive(_ notification: Notification) {
         Task { @MainActor in
             AccessibilityService.shared.refresh()
-            VoiceTranscriptionModule.shared.refreshDevices()
-            VoiceTranscriptionModule.shared.reloadConfig()
+            ModuleRegistry.shared.applicationDidBecomeActive()
+            ConfigurationCoordinator.shared.reload()
         }
     }
 
@@ -36,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         logger.notice("XMT will terminate")
-        WindowMoverModule.shared.stop()
-        VoiceTranscriptionModule.shared.stop()
+        InputRoutingCoordinator.shared.stop()
+        ModuleRegistry.shared.stopAll()
     }
 }

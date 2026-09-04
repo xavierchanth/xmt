@@ -2,6 +2,7 @@ import AVFoundation
 import AudioToolbox
 import CoreAudio
 import Foundation
+import OSLog
 
 public enum AudioCaptureError: Error {
     case unknownDeviceUID(String)
@@ -29,6 +30,7 @@ public final class AudioCaptureService: @unchecked Sendable {
     }
 
     private let control = DispatchQueue(label: "XMT.AudioCapture.control")
+    private let logger = Logger(subsystem: "com.xavierchanth.xmt", category: "VoiceCapture")
     private let controlKey = DispatchSpecificKey<UInt8>()
     private var engine: AVAudioEngine?
     private var handoff: BoundedAudioQueue<AVAudioPCMBuffer>?
@@ -53,6 +55,7 @@ public final class AudioCaptureService: @unchecked Sendable {
     public func start(device: AudioInputDevice, recoveryURL: URL,
                       queueCapacity: Int = 32, firstBufferDeadline: TimeInterval = 1) throws -> Session {
         try control.sync {
+            logger.notice("Audio capture start requested")
             guard engine == nil, !draining else { throw AudioCaptureError.busy }
             let id = try deviceID(forUID: device.uid)
             let engine = AVAudioEngine(); let input = engine.inputNode
@@ -96,6 +99,7 @@ public final class AudioCaptureService: @unchecked Sendable {
                     self.control.async { [weak self] in
                         guard let self, generation == token, !firstBufferSeen else { return }
                         firstBufferSeen = true; deadline?.cancel(); deadline = nil
+                        logger.notice("Audio capture received its first buffer")
                     }
                 case .success: break
                 case .failure(let error):
@@ -131,7 +135,14 @@ public final class AudioCaptureService: @unchecked Sendable {
                 requestFailureOnControl(.firstBufferDeadline(recoveryURL: recoveryURL))
             } }
             deadline = item; DispatchQueue.global().asyncAfter(deadline: .now() + firstBufferDeadline, execute: item)
-            do { try engine.start() } catch { beginStop(.engineStartFailed(error)); throw AudioCaptureError.engineStartFailed(error) }
+            do {
+                try engine.start()
+                logger.notice("Audio capture engine started")
+            } catch {
+                logger.error("Audio capture engine failed to start")
+                beginStop(.engineStartFailed(error))
+                throw AudioCaptureError.engineStartFailed(error)
+            }
             return Session(device: device, recoveryURL: recoveryURL, buffers: output)
         }
     }
@@ -152,12 +163,16 @@ public final class AudioCaptureService: @unchecked Sendable {
     private func requestFailure(_ error: AudioCaptureError, token: UInt64) {
         control.async { [weak self] in guard let self, generation == token else { return }; requestFailureOnControl(error) }
     }
-    private func requestFailureOnControl(_ error: AudioCaptureError) { beginStop(error) }
+    private func requestFailureOnControl(_ error: AudioCaptureError) {
+        logger.error("Audio capture failed: \(Self.failureName(error), privacy: .public)")
+        beginStop(error)
+    }
 
     /// Stops producers immediately, then lets the sole worker drain every accepted buffer.
     private func beginStop(_ error: AudioCaptureError?) {
         if terminalError == nil { terminalError = error }
         guard let engine else { return }
+        logger.notice("Audio capture stopping")
         self.engine = nil; draining = true
         deadline?.cancel(); deadline = nil
         if let observer { NotificationCenter.default.removeObserver(observer); self.observer = nil }
@@ -168,6 +183,11 @@ public final class AudioCaptureService: @unchecked Sendable {
     private func workerFinished(_ workerError: AudioCaptureError?, token: UInt64) {
         guard generation == token else { return }
         let error = terminalError ?? workerError
+        if let error {
+            logger.error("Audio capture drain completed with failure: \(Self.failureName(error), privacy: .public)")
+        } else {
+            logger.notice("Audio capture drain completed")
+        }
         if let error { output?.finish(throwing: error) } else { output?.finish() }
         output = nil; worker = nil; url = nil; boundDeviceID = kAudioObjectUnknown
         terminalError = nil; draining = false
@@ -221,5 +241,23 @@ public final class AudioCaptureService: @unchecked Sendable {
         guard status == noErr else { throw AudioCaptureError.deviceBindingFailed(status) }
         guard id != kAudioObjectUnknown else { throw AudioCaptureError.unknownDeviceUID(uid) }
         return id
+    }
+
+    private static func failureName(_ error: AudioCaptureError) -> String {
+        switch error {
+        case .unknownDeviceUID: "unknown-device-uid"
+        case .busy: "busy"
+        case .invalidAudioUnit: "invalid-audio-unit"
+        case .invalidFormat: "invalid-format"
+        case .deviceBindingFailed: "device-binding-failed"
+        case .engineStartFailed: "engine-start-failed"
+        case .recoveryFileFailed: "recovery-file-failed"
+        case .realtimeCopyFailed: "realtime-copy-failed"
+        case .firstBufferDeadline: "first-buffer-deadline"
+        case .deviceLost: "device-lost"
+        case .configurationChanged: "configuration-changed"
+        case .handoffOverflow: "handoff-overflow"
+        case .outputOverflow: "output-overflow"
+        }
     }
 }

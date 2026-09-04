@@ -1,4 +1,5 @@
 import XCTest
+import KeyboardShortcuts
 
 final class TriggerArbitratorTests: XCTestCase {
     func testIdleFnDownBecomesPendingWithoutOutput() {
@@ -219,6 +220,235 @@ final class TriggerArbitratorTests: XCTestCase {
                        events: [.pushToTalkBegan, .pushToTalkEnded])
     }
 
+    func testInputRouteSnapshotRejectsDuplicatePhysicalOwner() throws {
+        let source = inputSource("standard.command-k")
+        XCTAssertThrowsError(try InputRouteSnapshot([
+            .init(source: source, action: action("window", "move"), activation: .release),
+            .init(source: source, action: action("voice", "toggle"), activation: .press)
+        ])) { error in
+            XCTAssertEqual(error as? InputRouteSnapshotError, .duplicateSource(source))
+        }
+    }
+
+    func testInputRoutingSeparatesPressReleaseAndHoldActivation() throws {
+        let press = inputSource("standard.press")
+        let release = inputSource("standard.release")
+        let hold = inputSource("standard.hold")
+        let pressAction = action("voice", "toggle")
+        let releaseAction = action("window", "move")
+        let holdAction = action("voice", "hold")
+        var state = InputRoutingState(snapshot: try .init([
+            .init(source: press, action: pressAction, activation: .press),
+            .init(source: release, action: releaseAction, activation: .release),
+            .init(source: hold, action: holdAction, activation: .hold)
+        ]))
+        let generation = state.generation
+
+        XCTAssertEqual(state.receive(.down(press, isRepeat: false), generation: generation), [.invoked(pressAction)])
+        XCTAssertEqual(state.receive(.up(press), generation: generation), [])
+        XCTAssertEqual(state.receive(.down(release, isRepeat: false), generation: generation), [])
+        XCTAssertEqual(state.receive(.up(release), generation: generation), [.invoked(releaseAction)])
+        XCTAssertEqual(state.receive(.down(hold, isRepeat: false), generation: generation), [.began(holdAction)])
+        XCTAssertEqual(state.receive(.up(hold), generation: generation), [.ended(holdAction, reason: .released)])
+    }
+
+    func testInputRoutingCollapsesRepeatsAndDuplicateDown() throws {
+        let source = inputSource("standard.toggle")
+        let target = action("voice", "toggle")
+        var state = InputRoutingState(snapshot: try .init([
+            .init(source: source, action: target, activation: .press)
+        ]))
+        let generation = state.generation
+
+        XCTAssertEqual(state.receive(.down(source, isRepeat: true), generation: generation), [])
+        XCTAssertEqual(state.receive(.down(source, isRepeat: false), generation: generation), [.invoked(target)])
+        XCTAssertEqual(state.receive(.down(source, isRepeat: false), generation: generation), [])
+        XCTAssertEqual(state.receive(.down(source, isRepeat: true), generation: generation), [])
+        XCTAssertEqual(state.receive(.up(source), generation: generation), [])
+    }
+
+    func testInputRoutingHoldIsOwnedByItsBeginningSource() throws {
+        let first = inputSource("standard.hold.0")
+        let second = inputSource("standard.hold.1")
+        let target = action("voice", "hold")
+        var state = InputRoutingState(snapshot: try .init([
+            .init(source: first, action: target, activation: .hold),
+            .init(source: second, action: target, activation: .hold)
+        ]))
+        let generation = state.generation
+
+        XCTAssertEqual(state.receive(.down(first, isRepeat: false), generation: generation), [.began(target)])
+        XCTAssertEqual(state.receive(.down(second, isRepeat: false), generation: generation), [])
+        XCTAssertEqual(state.receive(.up(second), generation: generation), [])
+        XCTAssertEqual(state.receive(.up(first), generation: generation), [.ended(target, reason: .released)])
+    }
+
+    func testInputRoutingSupportsIndependentHoldsAndEndsDeterministically() throws {
+        let voiceSource = inputSource("standard.voice-hold")
+        let otherSource = inputSource("standard.other-hold")
+        let voiceAction = action("voice", "hold")
+        let otherAction = action("other", "hold")
+        var state = InputRoutingState(snapshot: try .init([
+            .init(source: voiceSource, action: voiceAction, activation: .hold),
+            .init(source: otherSource, action: otherAction, activation: .hold)
+        ]))
+        let generation = state.generation
+
+        XCTAssertEqual(state.receive(.down(voiceSource, isRepeat: false), generation: generation), [.began(voiceAction)])
+        XCTAssertEqual(state.receive(.down(otherSource, isRepeat: false), generation: generation), [.began(otherAction)])
+        XCTAssertEqual(state.interrupt(.providerLost), [
+            .ended(otherAction, reason: .interrupted(.providerLost)),
+            .ended(voiceAction, reason: .interrupted(.providerLost))
+        ])
+        XCTAssertTrue(state.holdOwners.isEmpty)
+        XCTAssertTrue(state.pressedSources.isEmpty)
+    }
+
+    func testInputRoutingReconfigurationBalancesHoldAndRejectsStaleCallbacks() throws {
+        let oldSource = inputSource("standard.old")
+        let newSource = inputSource("standard.new")
+        let target = action("voice", "hold")
+        var state = InputRoutingState(snapshot: try .init([
+            .init(source: oldSource, action: target, activation: .hold)
+        ]))
+        let oldGeneration = state.generation
+        XCTAssertEqual(state.receive(.down(oldSource, isRepeat: false), generation: oldGeneration), [.began(target)])
+
+        XCTAssertEqual(state.reconfigure(try .init([
+            .init(source: newSource, action: target, activation: .hold)
+        ])), [.ended(target, reason: .interrupted(.reconfigured))])
+        XCTAssertEqual(state.receive(.up(oldSource), generation: oldGeneration), [])
+        XCTAssertEqual(state.receive(.down(oldSource, isRepeat: false), generation: oldGeneration), [])
+        XCTAssertEqual(state.receive(.down(newSource, isRepeat: false), generation: state.generation), [.began(target)])
+    }
+
+    func testInputRoutingIdentifiersRejectEmptyAndPaddedValues() {
+        XCTAssertNil(ModuleID(""))
+        XCTAssertNil(ModuleID(" voice"))
+        XCTAssertNil(InputSourceID("standard "))
+        XCTAssertNil(ModuleActionID(module: module("voice"), rawValue: ""))
+        XCTAssertNotNil(ModuleActionID(module: module("voice"), rawValue: "toggle"))
+    }
+
+    func testBuiltInModuleCatalogDeclaresCompleteActionOwnership() {
+        let catalog = XMTModuleCatalog.builtIn
+        XCTAssertEqual(catalog.descriptors.map(\.id), [.voiceTranscription, .windowMover])
+        XCTAssertEqual(catalog.descriptor(for: .windowMover)?.permissions, [.accessibility])
+        XCTAssertEqual(
+            Set(catalog.descriptor(for: .voiceTranscription)?.actions ?? []),
+            [.voiceHoldToTalk, .voiceToggleRecording, .voiceCancel, .voicePasteLatest]
+        )
+    }
+
+    func testModuleDescriptorRejectsCrossModuleAndDuplicateActions() throws {
+        XCTAssertThrowsError(try XMTModuleDescriptor(
+            id: .windowMover,
+            displayName: "Window Mover",
+            permissions: [],
+            actions: [.voiceCancel]
+        )) { error in
+            XCTAssertEqual(
+                error as? XMTModuleCatalogError,
+                .actionBelongsToDifferentModule(action: .voiceCancel, expected: .windowMover)
+            )
+        }
+        XCTAssertThrowsError(try XMTModuleDescriptor(
+            id: .windowMover,
+            displayName: "Window Mover",
+            permissions: [],
+            actions: [.moveWindowToNextScreen, .moveWindowToNextScreen]
+        )) { error in
+            XCTAssertEqual(error as? XMTModuleCatalogError, .duplicateAction(.moveWindowToNextScreen))
+        }
+    }
+
+    func testModuleCatalogRejectsDuplicateModuleIdentity() throws {
+        let descriptor = try XMTModuleDescriptor(
+            id: .windowMover,
+            displayName: "Window Mover",
+            permissions: [.accessibility],
+            actions: [.moveWindowToNextScreen]
+        )
+        XCTAssertThrowsError(try XMTModuleCatalog([descriptor, descriptor])) { error in
+            XCTAssertEqual(error as? XMTModuleCatalogError, .duplicateModule(.windowMover))
+        }
+    }
+
+    @MainActor
+    func testStandardShortcutProviderRoutesReleaseAndSuppressesDuplicateDown() throws {
+        let backend = FakeStandardShortcutBackend()
+        let source = inputSource("standard.window")
+        let name = KeyboardShortcuts.Name("test.standard.window")
+        var events: [SemanticActionEvent] = []
+        let provider = StandardShortcutProvider(backend: backend) { events.append($0) }
+        try provider.reconcile([.init(
+            name: name,
+            route: .init(source: source, action: .moveWindowToNextScreen, activation: .release),
+            isEnabled: true
+        )])
+
+        backend.keyDown(name)
+        backend.keyDown(name)
+        backend.keyUp(name)
+
+        XCTAssertEqual(events, [.invoked(.moveWindowToNextScreen)])
+    }
+
+    @MainActor
+    func testStandardShortcutProviderInterruptsHoldAndAcceptsLaterCallbacks() throws {
+        let backend = FakeStandardShortcutBackend()
+        let source = inputSource("standard.voice.hold")
+        let name = KeyboardShortcuts.Name("test.standard.voice.hold")
+        var events: [SemanticActionEvent] = []
+        let provider = StandardShortcutProvider(backend: backend) { events.append($0) }
+        try provider.reconcile([.init(
+            name: name,
+            route: .init(source: source, action: .voiceHoldToTalk, activation: .hold),
+            isEnabled: true
+        )])
+
+        backend.keyDown(name)
+        provider.setEnabled(false, sources: [source], interruption: .captureBegan)
+        backend.keyUp(name)
+        provider.setEnabled(true, sources: [source])
+        backend.keyDown(name)
+        backend.keyUp(name)
+
+        XCTAssertEqual(events, [
+            .began(.voiceHoldToTalk),
+            .ended(.voiceHoldToTalk, reason: .interrupted(.captureBegan)),
+            .began(.voiceHoldToTalk),
+            .ended(.voiceHoldToTalk, reason: .released)
+        ])
+    }
+
+    @MainActor
+    func testStandardShortcutProviderRejectsRemovedHandlerCallbacks() throws {
+        let backend = FakeStandardShortcutBackend()
+        let oldSource = inputSource("standard.old")
+        let newSource = inputSource("standard.new")
+        let oldName = KeyboardShortcuts.Name("test.standard.old")
+        let newName = KeyboardShortcuts.Name("test.standard.new")
+        var events: [SemanticActionEvent] = []
+        let provider = StandardShortcutProvider(backend: backend) { events.append($0) }
+        try provider.reconcile([.init(
+            name: oldName,
+            route: .init(source: oldSource, action: .moveWindowToNextScreen, activation: .press),
+            isEnabled: true
+        )])
+        let removedHandler = backend.downHandlers[oldName]?.last
+
+        try provider.reconcile([.init(
+            name: newName,
+            route: .init(source: newSource, action: .voicePasteLatest, activation: .press),
+            isEnabled: true
+        )])
+        removedHandler?()
+        backend.keyDown(newName)
+
+        XCTAssertEqual(events, [.invoked(.voicePasteLatest)])
+    }
+
     private let inputs: [TriggerInput] = [
         .fnDown, .fnUp, .spaceDown, .chordDown(source: 49, action: .toggle), .chordUp(source: 49, action: .toggle), .otherKeyDown, .holdThresholdElapsed,
         .tapDisabled, .secureInputInterrupted
@@ -235,5 +465,55 @@ final class TriggerArbitratorTests: XCTestCase {
         let events = inputs.flatMap { machine.receive($0) }
         XCTAssertEqual(machine.state, state, file: file, line: line)
         XCTAssertEqual(events, expected, file: file, line: line)
+    }
+
+    private func module(_ value: String) -> ModuleID {
+        guard let result = ModuleID(value) else { fatalError("invalid test module") }
+        return result
+    }
+
+    private func action(_ moduleValue: String, _ actionValue: String) -> ModuleActionID {
+        guard let result = ModuleActionID(module: module(moduleValue), rawValue: actionValue) else {
+            fatalError("invalid test action")
+        }
+        return result
+    }
+
+    private func inputSource(_ value: String) -> InputSourceID {
+        guard let result = InputSourceID(value) else { fatalError("invalid test input source") }
+        return result
+    }
+}
+
+@MainActor
+private final class FakeStandardShortcutBackend: StandardShortcutBackend {
+    private(set) var downHandlers: [KeyboardShortcuts.Name: [@MainActor () -> Void]] = [:]
+    private(set) var upHandlers: [KeyboardShortcuts.Name: [@MainActor () -> Void]] = [:]
+    private(set) var enabled: [KeyboardShortcuts.Name: Bool] = [:]
+
+    func onKeyDown(for name: KeyboardShortcuts.Name, action: @escaping @MainActor () -> Void) {
+        downHandlers[name, default: []].append(action)
+    }
+
+    func onKeyUp(for name: KeyboardShortcuts.Name, action: @escaping @MainActor () -> Void) {
+        upHandlers[name, default: []].append(action)
+    }
+
+    func removeHandler(for name: KeyboardShortcuts.Name) {
+        enabled[name] = false
+    }
+
+    func setEnabled(_ enabled: Bool, for name: KeyboardShortcuts.Name) {
+        self.enabled[name] = enabled
+    }
+
+    func keyDown(_ name: KeyboardShortcuts.Name) {
+        guard enabled[name] == true else { return }
+        downHandlers[name]?.last?()
+    }
+
+    func keyUp(_ name: KeyboardShortcuts.Name) {
+        guard enabled[name] == true else { return }
+        upHandlers[name]?.last?()
     }
 }

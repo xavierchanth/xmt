@@ -4,7 +4,7 @@ This page records what was actually observed while running the build-only, no-li
 
 ## Scope of this run
 
-Only the HIDDriverKit virtual keyboard was attempted. No keyboard was opened, seized, enumerated, or inspected; no extension was submitted for activation; no system extension state was queried or changed. The task-scoped IOHID seizure owner, the XPC lease, and the independent watchdog were not built and remain unproven.
+The HIDDriverKit virtual keyboard and two inert process boundaries were built. No keyboard was opened, seized, enumerated, or inspected; no extension was submitted for activation; no system extension state was queried or changed. The owner and watchdog compile the shared versioned contract but start no listener or monitoring loop and exit immediately. Real XPC transport, task-scoped IOHID ownership, watchdog enforcement, and virtual-output connection remain unproven.
 
 ## Environment observed
 
@@ -18,19 +18,21 @@ Only the HIDDriverKit virtual keyboard was attempted. No keyboard was opened, se
 | Code-signing identities | One: `Apple Development: xchan9339@gmail.com (P3UVRT5BG6)`, team `Z36DBP87WY` |
 | Developer ID identity | None |
 | Provisioning profiles | None installed |
-| `DEVELOPMENT_TEAM` in the Xcode project | Not set on any target |
+| `DEVELOPMENT_TEAM` in the Xcode project | `Z36DBP87WY` on the shipping app; absent from unsigned feasibility targets |
 
 ## Target and identifier boundaries
 
-The spike adds one target and touches no existing target's product.
+The spike adds three build-only targets and touches no existing target's product.
 
 | Target | Product | Bundle identifier | Notes |
 |---|---|---|---|
 | `XMT` | `XMT.app` | `com.xavierchanth.xmt` | Unchanged. Does not embed, depend on, or reference the extension. |
 | `XMTTests` | `XMTTests.xctest` | `com.xavierchanth.xmtTests` | Unchanged. |
+| `XMTKeyboardOwner` | `XMTKeyboardOwner` | None; command-line product | Universal build-only owner boundary. Exits without opening XPC or HID. |
+| `XMTKeyboardWatchdog` | `XMTKeyboardWatchdog` | None; command-line product | Universal build-only watchdog boundary. Contains no monitoring loop. |
 | `XMTVirtualKeyboard` | `XMTVirtualKeyboard.dext` | `com.xavierchanth.xmt.virtualkeyboard` | New. Not in the shared `XMT` scheme, not a dependency of any other target, and not copied into the app bundle. |
 
-Because the extension is not embedded, `just build`, `just test`, and `just check` behave exactly as before and never build it. Building it is an explicit, separate `xcodebuild -target XMTVirtualKeyboard` invocation.
+Because the feasibility products are not embedded, `just build`, `just test`, and `just check` never build them. `just build-dext` builds only the dext; `just build-keyboard-feasibility` explicitly builds all three through the separate `XMTKeyboardFeasibility` scheme.
 
 ## Entitlements: requested, not granted
 
@@ -48,16 +50,18 @@ Apple's approval process for the DriverKit family is a request that Apple may de
 
 ## Build result: go, unsigned only
 
-Building the extension unsigned succeeds.
+Building the complete inert feasibility scheme unsigned succeeds.
 
 ```
-xcodebuild build -project XMT.xcodeproj -target XMTVirtualKeyboard -configuration Release
+just build-keyboard-feasibility
 ...
 ** BUILD SUCCEEDED **
 ```
 
 Observed properties of the produced bundle:
 
+- `XMTKeyboardOwner` and `XMTKeyboardWatchdog` are universal command-line executables with `arm64` and `x86_64` slices. Each reports wire protocol version `1` through its only diagnostic argument and otherwise exits immediately.
+- The shared contract rejects oversized payloads, unsupported versions, incorrect peer roles, cross-session lease use, malformed strict policy, and stale policy revisions in unit tests.
 - `iig` generated the interface from `XMTVirtualKeyboardDevice.iig` and the C++ implementation compiled and linked against `DriverKit` and `HIDDriverKit`.
 - The product is a universal `XMTVirtualKeyboard.dext` containing `arm64` and `x86_64` slices.
 - `codesign -dvvv` on the freshly built product reports `code object is not signed at all`, which is the intended result of `CODE_SIGNING_ALLOWED = NO`.
@@ -79,11 +83,12 @@ An ad-hoc signature (`codesign --sign -`) can be applied and will list the entit
 
 ## What is deliberately inert
 
-The skeleton cannot activate, by construction and not merely by convention:
+The products cannot activate, by construction and not merely by convention:
 
 - The bundle declares no `IOKitPersonalities`, so nothing can match it and the system cannot load it even if it were signed and installed.
 - The extension is not embedded in `XMT.app`, so it cannot be discovered for activation.
 - No code in the app requests activation, and the app carries no system-extension entitlement.
+- Neither helper is embedded, installed, registered with launchd, or reachable from the app. Both have an immediate-exit entry point and no XPC listener.
 - The driver class implements only `init`, `free`, `Start`, `Stop`, `newDeviceDescription`, and `newReportDescriptor`. It sends no report and opens nothing.
 
 Adding personalities, embedding the extension, or adding activation code are each separate changes that need the authorization the roadmap describes.

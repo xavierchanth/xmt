@@ -9,6 +9,16 @@ This checklist defines the deferred manual exercise for Voice behavior that cann
 - Preserve any pending Voice recovery files before destructive recovery checks.
 - Record the XMT build identifier, macOS version, devices, keyboard layouts, permission state, and observed result for every run.
 
+## Diagnostic capture
+
+Capture the `Voice` and `VoiceCapture` categories while exercising a scenario so a failed hardware run can be located at an effect boundary without retaining dictated content or hardware identity:
+
+```bash
+log stream --style compact --level info --predicate 'subsystem == "com.xavierchanth.xmt"'
+```
+
+Voice diagnostics report trigger, permission, asset, input-transport, capture, finalization, recovery, commit, and automatic-paste outcomes. They deliberately omit transcript text, device names and UIDs, target application identity, session identifiers, and recovery paths. An automatic-paste success means only that XMT posted the verified Command-V event; the receiving application must still be observed to confirm insertion.
+
 ## Launch and permissions
 
 - Confirm launch causes no TCC prompt, microphone acquisition, speech-asset download, or recording.

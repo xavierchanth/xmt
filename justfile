@@ -80,6 +80,17 @@ build-dext:
         SYMROOT="$PWD/{{build_dir}}/dext/sym" \
         SHARED_PRECOMPS_DIR="$PWD/{{build_dir}}/dext/pch"
 
+# Build the inert owner, watchdog, and DriverKit feasibility targets without signing or running.
+build-keyboard-feasibility:
+    xcodebuild build \
+        -project "{{project}}" \
+        -scheme XMTKeyboardFeasibility \
+        -configuration Release \
+        -destination "generic/platform=macOS" \
+        -derivedDataPath "{{build_dir}}/keyboard-feasibility" \
+        CODE_SIGNING_ALLOWED=NO \
+        CODE_SIGNING_REQUIRED=NO
+
 # Validate the documentation tree: headings, links, fragments, and index reachability.
 docs-check:
     node assets/check-docs.mjs

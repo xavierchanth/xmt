@@ -4,11 +4,14 @@ import ApplicationServices
 import Combine
 import Foundation
 import KeyboardShortcuts
+import OSLog
 
 /// Main-actor lifecycle and effect coordinator for Voice Transcription.
 @MainActor
 final class VoiceTranscriptionModule: ObservableObject {
     static let shared = VoiceTranscriptionModule()
+
+    private let logger = Logger(subsystem: "com.xavierchanth.xmt", category: "Voice")
 
     enum Status: Equatable {
         case disabled, idle, arming, recording, finalizing, pending, noSpeech, pasteFailed(String), degraded(String), failed(String)
@@ -20,7 +23,6 @@ final class VoiceTranscriptionModule: ObservableObject {
     @Published private(set) var availableDevices: [AudioInputDevice] = []
     @Published private(set) var assetStatus = "Not checked"
     @Published private(set) var supportedLocaleIdentifiers: [String] = []
-    @Published private(set) var configDiagnostic: String?
     @Published private(set) var managedKeys: Set<EffectiveSettings.Key> = []
     @Published private(set) var settingsRevision: UInt64 = 0
     @Published private(set) var temporaryFeedback: String?
@@ -64,24 +66,19 @@ final class VoiceTranscriptionModule: ObservableObject {
     private let store = PendingRecordingStore()
     private let assets = VoiceAssetManager()
     private var effective = EffectiveSettings.resolve(config: nil)
-    private var reloader: ConfigReloader?
     private var applying = false
-    private var hasAppliedConfiguration = false
     /// History remains unpublished until the first effective configuration and startup prune finish.
     private var hasResolvedInitialHistory = false
-    private var isPasteLatestHandlerInstalled = false
     private var unmanagedHoldBindings: [ShortcutDTO]?
     private var unmanagedToggleBindings: [ShortcutDTO]?
     private var unmanagedCancelBindings: [ShortcutDTO]?
     private var unmanagedPasteLatestShortcut: KeyboardShortcuts.Shortcut?
-    private var unmanagedWindowMoverShortcut: KeyboardShortcuts.Shortcut?
     private var feedbackGeneration: UInt64 = 0
     private var assetStatusGeneration: UInt64 = 0
     private var assetProgressObservation: NSKeyValueObservation?
     private var isPastingLatest = false
     private var bindingCommitTail: Task<String?, Never>?
     private var bindingCaptureLease = VoiceBindingCaptureLease()
-    private var bindingRouter = VoiceBindingRouter()
     private var historyLatestObserver: NSObjectProtocol?
     private static let pasteLatestShortcutBackupActiveKey = "voice.pasteLatestShortcutBackupActive"
     private static let pasteLatestShortcutBackupDataKey = "voice.pasteLatestShortcutBackupData"
@@ -110,15 +107,14 @@ final class VoiceTranscriptionModule: ObservableObject {
         } else {
             unmanagedPasteLatestShortcut = KeyboardShortcuts.getShortcut(for: .pasteLatestTranscript)
         }
-        unmanagedWindowMoverShortcut = KeyboardShortcuts.getShortcut(for: .moveToNextScreen)
         unmanagedHoldBindings = Self.localVoiceBindings(.voiceHoldToTalk, key: "hold")
         unmanagedToggleBindings = Self.localVoiceBindings(.voiceToggleRecording, key: "toggle")
         unmanagedCancelBindings = Self.localVoiceBindings(.voiceCancel, key: "cancel")
     }
 
     func register() {
+        logger.notice("Registering Voice Transcription")
         reconcileRecovery()
-        registerPasteLatestShortcut()
         if historyLatestObserver == nil {
             historyLatestObserver = NotificationCenter.default.addObserver(
                 forName: .transcriptHistoryLatestChanged, object: nil, queue: .main
@@ -126,9 +122,6 @@ final class VoiceTranscriptionModule: ObservableObject {
                 Task { @MainActor in self?.lastTranscript = note.object as? String ?? "" }
             }
         }
-        // One authoritative launch task. Surfaces are born disabled and remain inert until managed
-        // configuration is resolved and enabled storage has been opened and pruned.
-        Task { await configureAndReload() }
     }
 
     /// Applies legacy retention only after effective configuration has resolved. Enabled history is
@@ -145,15 +138,16 @@ final class VoiceTranscriptionModule: ObservableObject {
             // A migration that could not read the old cache is reported as such. History itself
             // opened and loaded, so it must not be described as unavailable.
             if let migration = reconciliation.migrationDiagnostic {
-                configDiagnostic = configDiagnostic ?? migration
+                ConfigurationCoordinator.shared.reportIfEmpty(migration)
             }
         } catch {
-            configDiagnostic = configDiagnostic ?? (historyEnabled
+            ConfigurationCoordinator.shared.reportIfEmpty(historyEnabled
                 ? "Transcript history is unavailable" : "Legacy transcript cleanup failed")
         }
     }
 
     func stop() {
+        logger.notice("Stopping Voice Transcription")
         lifecycleGeneration &+= 1
         armGeneration &+= 1
         observer?.setRecordingActive(false)
@@ -182,21 +176,30 @@ final class VoiceTranscriptionModule: ObservableObject {
                     try? store.clearActive(); pending = nil
                 }
                 if let pending {
+                    logger.error("Lifecycle stop promoted an interrupted recording to recovery")
                     machine = VoiceSessionMachine()
                     _ = machine.handle(.recovered(.init(id: pending.metadata.sessionID, audioURL: pending.audioURL)))
                     status = .pending
                 }
                 captureTeardownTask = nil
+                logger.notice("Voice capture teardown completed")
             }
         }
-        KeyboardShortcuts.disable(.pasteLatestTranscript)
-        disableAllVoiceStandardSlots()
+        InputRoutingCoordinator.shared.setVoiceActivation(
+            moduleEnabled: false,
+            policy: .decide(moduleEnabled: false, phase: .unavailable),
+            captureIsActive: bindingCaptureLease.isActive
+        )
         if status != .pending { machine = VoiceSessionMachine(); status = .disabled }
     }
 
     func requestPermissions() {
+        logger.notice("Requesting Voice permissions contextually")
         AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
-            Task { @MainActor in if granted { self?.recoverDegradedAndObserve() } }
+            Task { @MainActor in
+                self?.logger.notice("Microphone permission request completed: granted=\(granted, privacy: .public)")
+                if granted { self?.recoverDegradedAndObserve() }
+            }
         }
         if CGRequestListenEventAccess() { recoverDegradedAndObserve() }
         AccessibilityService.shared.requestIfNeeded()
@@ -216,10 +219,13 @@ final class VoiceTranscriptionModule: ObservableObject {
         assetStatusGeneration &+= 1
         let generation = assetStatusGeneration
         let locale = requestedLocale
+        logger.notice("Refreshing speech asset status")
         Task {
-            let result = describe(await assets.status(locale: locale))
+            let snapshot = await assets.status(locale: locale)
+            let result = describe(snapshot)
             guard generation == assetStatusGeneration, locale.identifier == requestedLocale.identifier else { return }
             assetStatus = result
+            logger.notice("Speech asset status refreshed: \(Self.assetStatusName(snapshot), privacy: .public)")
         }
     }
     func downloadAssets() {
@@ -228,12 +234,15 @@ final class VoiceTranscriptionModule: ObservableObject {
         let generation = assetStatusGeneration
         let locale = requestedLocale
         assetStatus = "Downloading"
+        logger.notice("Starting user-requested speech asset download")
         Task {
-            let result = describe(await assets.install(locale: locale) { [weak self] progress in
+            let snapshot = await assets.install(locale: locale) { [weak self] progress in
                 Task { @MainActor in self?.observeAssetProgress(progress, generation: generation) }
-            })
+            }
+            let result = describe(snapshot)
             guard generation == assetStatusGeneration, locale.identifier == requestedLocale.identifier else { return }
             assetProgressObservation = nil; assetStatus = result
+            logger.notice("Speech asset download completed: \(Self.assetStatusName(snapshot), privacy: .public)")
         }
     }
 
@@ -340,7 +349,7 @@ final class VoiceTranscriptionModule: ObservableObject {
         else { interpret(machine.handle(.pushToTalkEnded)) }
     }
 
-    func reloadConfig() { Task { await loadConfig() } }
+    func reloadConfig() { ConfigurationCoordinator.shared.reload() }
 
     var hasManagedVoiceBindings: Bool {
         !VoiceBindingRestorePolicy.allows(managedKeys: managedKeys)
@@ -364,31 +373,38 @@ final class VoiceTranscriptionModule: ObservableObject {
         guard !hasManagedVoiceBindings else {
             return "Default bindings cannot be restored while a Voice binding list is managed by configuration."
         }
-        guard let reloader else { return "Configuration is not ready." }
         let builtIn = BuiltInSettings.standard
-        let staged = currentLocalSettings().restoringDefaultVoiceBindings(builtIn)
+        logger.notice("Restoring default Voice bindings")
         do {
-            _ = try await reloader.stageAndReload(
-                local: staged,
+            _ = try await ConfigurationCoordinator.shared.stageAndReload(
                 requiringUnmanaged: VoiceBindingAction.allCases,
                 beforePublish: { @MainActor [weak self] _ in
                     guard let self else { throw CancellationError() }
                     try self.persistDefaultVoiceBindings(builtIn)
+                },
+                updatingLocal: { staged in
+                    staged = staged.restoringDefaultVoiceBindings(builtIn)
                 }
             )
-            configDiagnostic = nil
+            ConfigurationCoordinator.shared.clearDiagnostic()
+            logger.notice("Default Voice bindings restored")
             return nil
         } catch {
+            logger.error("Default Voice binding restore failed: \(Self.errorKind(error), privacy: .public)")
             let message = "Could not restore default bindings: \(String(describing: error))"
-            configDiagnostic = message
+            ConfigurationCoordinator.shared.report(message)
             return message
         }
     }
 
     func acquireVoiceBindingCapture() -> VoiceBindingCaptureLease.Token {
+        // Capturing a replacement binding is a privacy boundary. Finish any current session before
+        // the lease starts; otherwise the lease's own stale-callback guard would also suppress the
+        // balanced hold end emitted while live routes are suspended.
+        cancelVoiceInteraction()
         let token = bindingCaptureLease.acquire()
         observation?.cancel(); observation = nil; observer = nil
-        disableAllVoiceStandardSlots()
+        reconcileShortcutActivation()
         return token
     }
 
@@ -439,16 +455,26 @@ final class VoiceTranscriptionModule: ObservableObject {
                 ? "Hold and Toggle require Control, Option, or Command; Shift alone is unsafe."
                 : "Fn modifier-only is available only for Hold to Talk."
         }
-        guard let reloader else { return "Configuration is not ready." }
-        var staged = currentLocalSettings()
-        switch action { case .holdToTalk: staged.holdToTalkBindings = bindings; case .toggleRecording: staged.toggleRecordingBindings = bindings; case .cancel: staged.cancelBindings = bindings }
         let result: ConfigLoadResult
         do {
-            result = try await reloader.stageAndReload(local: staged, requiringUnmanaged: [action])
+            result = try await ConfigurationCoordinator.shared.stageAndReload(
+                requiringUnmanaged: [action],
+                updatingLocal: { staged in
+                    switch action {
+                    case .holdToTalk: staged.holdToTalkBindings = bindings
+                    case .toggleRecording: staged.toggleRecordingBindings = bindings
+                    case .cancel: staged.cancelBindings = bindings
+                    }
+                }
+            )
         } catch let diagnostic as ConfigDiagnostic {
-            configDiagnostic = String(describing: diagnostic); return configDiagnostic
+            let message = String(describing: diagnostic)
+            ConfigurationCoordinator.shared.report(message)
+            return message
         } catch {
-            configDiagnostic = "Could not validate the binding."; return configDiagnostic
+            let message = "Could not validate the binding."
+            ConfigurationCoordinator.shared.report(message)
+            return message
         }
         let accepted: ResolvedSetting<[ShortcutDTO]>
         switch action { case .holdToTalk: accepted = result.effective.holdToTalkBindings; case .toggleRecording: accepted = result.effective.toggleRecordingBindings; case .cancel: accepted = result.effective.cancelBindings }
@@ -458,61 +484,27 @@ final class VoiceTranscriptionModule: ObservableObject {
         let defaults = UserDefaults.standard
         defaults.set(true, forKey: "voice.binding.\(key).explicit")
         if let data = try? JSONEncoder().encode(bindings) { defaults.set(data, forKey: "voice.binding.\(key).value") }
-        configDiagnostic = nil
+        ConfigurationCoordinator.shared.clearDiagnostic()
         return nil
     }
 
-    func userChangedPasteLatestShortcut(_ shortcut: KeyboardShortcuts.Shortcut?) {
-        let activeWindowShortcut = try? effective.windowMoverShortcut.value.keyboardShortcut()
-        guard shortcut != activeWindowShortcut else {
-            KeyboardShortcuts.setShortcut(unmanagedPasteLatestShortcut, for: .pasteLatestTranscript)
-            return
-        }
-        unmanagedPasteLatestShortcut = shortcut
-        reloadConfig()
+    func restoreEffectivePasteLatestShortcut(_ shortcut: ResolvedSetting<ShortcutDTO>) {
+        let restored = try? shortcut.value.keyboardShortcut()
+        KeyboardShortcuts.setShortcut(restored, for: .pasteLatestTranscript)
+        if !shortcut.isManaged { unmanagedPasteLatestShortcut = restored }
     }
 
-    func userChangedWindowMoverShortcut(_ shortcut: KeyboardShortcuts.Shortcut?) {
-        let activePasteShortcut = try? effective.pasteLatestTranscriptShortcut.value.keyboardShortcut()
-        guard shortcut != activePasteShortcut else {
-            KeyboardShortcuts.setShortcut(unmanagedWindowMoverShortcut, for: .moveToNextScreen)
-            return
-        }
-        unmanagedWindowMoverShortcut = shortcut
-        reloadConfig()
-    }
-
-    private func configureAndReload() async {
-        let local = SettingsValues(voiceEnabled: isEnabled, outputMode: outputMode,
-                                   historyEnabled: historyEnabled, historyRetentionDays: historyRetentionDays,
-                                   historyMaxEntries: historyMaxEntries, locale: localeIdentifier, inputDevicePriority: devicePriority,
-                                   fallbackToSystemDefault: fallbackToSystemDefault)
-        let loader = ConfigReloader(local: local)
-        reloader = loader
-        await loader.addApplyCallback { [weak self] result in await self?.apply(result.effective) }
-        await loadConfig()
-        if !hasAppliedConfiguration {
-            // An invalid initial file must not leave modules unconfigured, but no trigger is started
-            // until the file has first been read and rejected atomically.
-            apply(EffectiveSettings.resolve(config: nil, local: local))
-        }
+    func completeInitialConfiguration() async {
         await reconcileLegacyTranscriptForEffectiveHistory()
         hasResolvedInitialHistory = true
         TranscriptHistoryViewModel.shared.setHistoryEnabled(historyEnabled)
         if historyEnabled {
             await TranscriptHistoryViewModel.shared.reload(limit: TranscriptHistorySnapshot.menuPreviewCount)
         }
+        logger.notice("Voice Transcription registration completed")
     }
 
-    private func loadConfig() async {
-        guard let reloader else { return }
-        await reloader.updateLocal(currentLocalSettings())
-        do { _ = try await reloader.reload(); configDiagnostic = nil }
-        catch { configDiagnostic = String(describing: error) }
-    }
-
-    private func apply(_ value: EffectiveSettings) {
-        hasAppliedConfiguration = true
+    func applyConfiguration(_ value: EffectiveSettings) {
         let changed = value.changedKeys(from: effective)
         effective = value; managedKeys = Set(EffectiveSettings.Key.allCases.filter { key in
             switch key { case .voiceEnabled: return value.voiceEnabled.isManaged
@@ -536,14 +528,12 @@ final class VoiceTranscriptionModule: ObservableObject {
         applying = false
         if !changed.isDisjoint(with: [.holdToTalkShortcut, .toggleRecordingShortcut, .cancelShortcut]) {
             // Rebinding is a cancellation boundary; no stale handler may complete a private session.
-            routeBindingEvents(bindingRouter.reconfigure())
             cancelVoiceInteraction()
         }
         applyVoiceShortcuts(value)
         applyPasteLatestShortcut(value.pasteLatestTranscriptShortcut)
         applyHistorySettings(changedKeys: changed)
         if isEnabled { recoverDegradedAndObserve() } else { stop() }
-        WindowMoverModule.shared.applyManaged(enabled: value.windowMoverEnabled, shortcut: value.windowMoverShortcut)
         settingsRevision &+= 1
     }
 
@@ -561,21 +551,38 @@ final class VoiceTranscriptionModule: ObservableObject {
         var chords: [Int64: FnChordAction] = [:]
         func add(_ binding: ShortcutDTO, _ action: FnChordAction) { if case .fnChord(let key) = binding, let code = ShortcutDTO.keyCodes[key.lowercased()] { chords[code] = action } }
         effective.holdToTalkBindings.value.forEach { add($0, .hold) }; effective.toggleRecordingBindings.value.forEach { add($0, .toggle) }; effective.cancelBindings.value.forEach { add($0, .cancel) }
-        guard bareHold || !chords.isEmpty else { if status == .disabled { status = .idle }; return }
-        guard CGPreflightListenEventAccess() else { status = .degraded("Input Monitoring access is required"); return }
-        guard AXIsProcessTrusted() else { status = .degraded("Accessibility access is required for Fn shortcuts"); return }
+        guard bareHold || !chords.isEmpty else {
+            logger.notice("Fn observation is unnecessary because no Fn bindings are active")
+            if status == .disabled { status = .idle }
+            return
+        }
+        guard CGPreflightListenEventAccess() else {
+            logger.error("Fn observation blocked by missing Input Monitoring access")
+            status = .degraded("Input Monitoring access is required")
+            return
+        }
+        guard AXIsProcessTrusted() else {
+            logger.error("Fn observation blocked by missing Accessibility access")
+            status = .degraded("Accessibility access is required for Fn shortcuts")
+            return
+        }
         let observer = FnEventObserver(holdThreshold: Double(effective.fnHoldThresholdMs.value) / 1000, bareHoldEnabled: bareHold, chords: chords)
         do {
             observation = try observer.observe { [weak self] event in self?.handle(event) }
             self.observer = observer; observerThresholdMs = effective.fnHoldThresholdMs.value; observerHoldBindings = effective.holdToTalkBindings.value; observerToggleBindings = effective.toggleRecordingBindings.value; observerCancelBindings = effective.cancelBindings.value
             if status == .disabled { status = .idle }
-        } catch { status = .degraded("Input Monitoring access is required") }
+            logger.notice("Fn observation started")
+        } catch {
+            logger.error("Fn observation could not create its event tap: \(Self.errorKind(error), privacy: .public)")
+            status = .degraded("Input Monitoring access is required")
+        }
     }
 
     private func handle(_ event: TriggerEvent) {
         // Observation teardown can already have queued delivery on the main queue.
         // Never let such a live shortcut affect recording while its key is being captured.
         guard isEnabled, !bindingCaptureLease.isActive else { return }
+        logger.notice("Voice trigger received: \(Self.triggerName(event), privacy: .public)")
         if case .degraded = machine.state { _ = machine.handle(.resetDegraded) }
         if case .degraded = status { status = .idle }
         switch event {
@@ -584,6 +591,7 @@ final class VoiceTranscriptionModule: ObservableObject {
         case .toggleRequested: begin(mode: .latched)
         case .cancelRequested: cancelVoiceInteraction()
         case .secureInputBegan:
+            logger.error("Secure input interrupted the active Voice interaction")
             observer?.setRecordingActive(false)
             interpret(machine.handle(.interrupted))
         }
@@ -610,6 +618,7 @@ final class VoiceTranscriptionModule: ObservableObject {
     }
 
     private func cancelArming(_ session: VoiceSessionMachine.Session) {
+        logger.notice("Voice arming cancelled")
         armGeneration &+= 1
         armTask?.cancel()
         armTask = nil
@@ -623,8 +632,10 @@ final class VoiceTranscriptionModule: ObservableObject {
         }
         guard armTask == nil, captureTeardownTask == nil, cancellationCleanupTask == nil else { return }
         guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
+            logger.error("Voice arming refused because Microphone access is unavailable")
             _ = machine.handle(.armingRefused(session, .permissionDenied)); status = .degraded("Microphone access is required"); return
         }
+        logger.notice("Voice arming started: mode=\(Self.modeName(mode), privacy: .public)")
         status = .arming; armGeneration &+= 1; let generation = armGeneration
         let lifecycle = lifecycleGeneration
         armTask = Task { [weak self] in
@@ -633,9 +644,12 @@ final class VoiceTranscriptionModule: ObservableObject {
             do {
                 let device = try DeviceSelector(devices: DeviceTable(), bluetooth: BluetoothLinkOracle()).select(
                     priorities: devicePriority.map { AudioDevicePreference(uid: $0.uid, exactName: $0.name) }, allowSystemDefaultFallback: fallbackToSystemDefault)
+                logger.notice("Voice input selected: transport=\(Self.transportName(device.transport), privacy: .public)")
                 let requested = requestedLocale
                 guard let locale = await assets.resolve(requested) else { throw VoiceSessionMachine.DegradedReason.unsupportedLocale }
+                logger.notice("Speech locale resolved")
                 guard await assets.status(locale: locale) == .installed else { throw VoiceSessionMachine.DegradedReason.assetsMissing }
+                logger.notice("Required speech asset is installed")
                 try Task.checkCancellation(); guard generation == armGeneration, lifecycle == lifecycleGeneration, isEnabled else { throw CancellationError() }
                 let transcriber = try await TranscriberSession(locale: locale)
                 do {
@@ -660,6 +674,7 @@ final class VoiceTranscriptionModule: ObservableObject {
                 armingCapture = nil
                 observer?.setRecordingActive(true)
                 status = .recording; armTask = nil
+                logger.notice("Voice recording started")
                 analysisTask = Task { [weak self, capture] in
                     do { try await transcriber.start(buffers: stream.buffers) { update in Task { @MainActor in
                         guard let self else { return }
@@ -676,6 +691,7 @@ final class VoiceTranscriptionModule: ObservableObject {
             } catch {
                 if let armingCapture { await armingCapture.stopAndWait() }
                 guard generation == armGeneration, lifecycle == lifecycleGeneration, isEnabled, !(error is CancellationError) else { return }
+                logger.error("Voice arming failed: \(Self.errorKind(error), privacy: .public)")
                 armTask = nil; _ = machine.handle(.armingRefused(session, Self.degradedReason(error)))
                 status = .degraded(Self.degradedMessage(error))
             }
@@ -684,6 +700,7 @@ final class VoiceTranscriptionModule: ObservableObject {
 
     private func finish(_ session: VoiceSessionMachine.Session) {
         guard status == .recording, finalizationTask == nil else { return }
+        logger.notice("Voice recording stopping for finalization")
         status = .finalizing
         observer?.setRecordingActive(false)
         maxTimer?.invalidate(); maxTimer = nil
@@ -703,12 +720,14 @@ final class VoiceTranscriptionModule: ObservableObject {
                 try Task.checkCancellation()
                 guard generation == lifecycleGeneration else { return }
                 _ = machine.handle(.finalized(session))
+                logger.notice("Speech finalization completed")
                 try await commit(text, target: pasteTarget, recovery: .active, sessionID: session.id,
                                  localeIdentifier: self.transcriberResolvedLocaleIdentifier ?? session.localeIdentifier, generation: generation)
             } catch is CancellationError {
                 // Lifecycle teardown owns state and recovery.
             } catch {
                 guard generation == lifecycleGeneration else { return }
+                logger.error("Voice finalization failed: \(Self.errorKind(error), privacy: .public)")
                 await captureFailed(error)
             }
             if generation == lifecycleGeneration { finalizationTask = nil }
@@ -764,6 +783,7 @@ final class VoiceTranscriptionModule: ObservableObject {
         let verifiedTarget = CapturedTargetVerifier(dependencies: .live).verify(target).pid
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else {
+            logger.notice("Voice commit completed with no recognized speech")
             switch recovery {
             case .active: try store.clearActive()
             case .pending: try store.deletePending(); try store.clearActive()
@@ -775,6 +795,7 @@ final class VoiceTranscriptionModule: ObservableObject {
             return
         }
         let shouldAutoPaste = outputMode == .pasteImmediately
+        logger.notice("Voice commit started: history=\(self.historyEnabled, privacy: .public), autoPaste=\(shouldAutoPaste, privacy: .public)")
         let result = try await TranscriptCommitter().commit(
             clean,
             settings: .init(autoPaste: false,
@@ -789,9 +810,15 @@ final class VoiceTranscriptionModule: ObservableObject {
         if shouldAutoPaste {
             switch CapturedTargetVerifier(dependencies: .live).verify(target) {
             case .valid(let pid):
-                do { try await PasteService().paste(text: clean, targetPID: pid) }
-                catch { pasteError = error }
+                do {
+                    try await PasteService().paste(text: clean, targetPID: pid)
+                    logger.notice("Automatic paste event posted to the verified target")
+                } catch {
+                    logger.error("Automatic paste failed: \(Self.errorKind(error), privacy: .public)")
+                    pasteError = error
+                }
             case .rejected:
+                logger.error("Automatic paste refused because the captured target is no longer trusted")
                 pasteError = PasteError.noTargetApplication
             }
         }
@@ -800,13 +827,18 @@ final class VoiceTranscriptionModule: ObservableObject {
         if historyEnabled { await TranscriptHistoryViewModel.shared.reload() }
         partialTranscript = ""; _ = machine.handle(.committed)
         if let error = pasteError {
+            logger.error("Voice commit completed with a paste failure: \(Self.errorKind(error), privacy: .public)")
             status = .pasteFailed(error.localizedDescription)
             Task { try? await Task.sleep(for: .seconds(3)); if case .pasteFailed = status { status = .idle } }
-        } else { status = .idle }
+        } else {
+            logger.notice("Voice commit completed")
+            status = .idle
+        }
         transcriber = nil; reconcileObservation()
     }
 
     private func captureFailed(_ error: Error) async {
+        logger.error("Voice capture or analysis failed: \(Self.errorKind(error), privacy: .public)")
         capture?.stop()
         _ = await analysisTask?.value
         capture = nil; analysisTask = nil
@@ -815,19 +847,25 @@ final class VoiceTranscriptionModule: ObservableObject {
         maxTimer?.invalidate(); maxTimer = nil
         let pending = ((try? store.loadPending()) ?? nil) ?? (try? store.promoteActive(failureReason: String(describing: error)))
         if let pending {
+            logger.error("Voice failure preserved one pending recovery recording")
             _ = machine.handle(.failed(.init(id: pending.metadata.sessionID, audioURL: pending.audioURL))); status = .pending
-        } else { status = .failed(error.localizedDescription) }
+        } else {
+            logger.error("Voice failure could not preserve a pending recovery recording")
+            status = .failed(error.localizedDescription)
+        }
         partialTranscript = ""
     }
 
     private func reconcileRecovery() {
         if case .pending(let p) = try? Reconciliation.run(store: store) {
+            logger.notice("Recovered one pending Voice recording at launch")
             _ = machine.handle(.recovered(.init(id: p.metadata.sessionID, audioURL: p.audioURL))); status = .pending
         }
     }
 
     private func stopForMaximumDuration() {
         guard case .recording(let mode, let session) = machine.state else { return }
+        logger.notice("Voice recording reached its configured maximum duration")
         interpret(machine.handle(VoiceSessionMachine.maximumStopEvent(mode: mode, session: session)))
     }
 
@@ -850,77 +888,41 @@ final class VoiceTranscriptionModule: ObservableObject {
         unmanagedCancelBindings = builtIn.cancelBindings
     }
 
-    private func currentLocalSettings() -> SettingsValues {
+    func readVoiceLocalSettings() -> VoiceLocalSettings {
         let defaults = UserDefaults.standard
         let persistedDevices = defaults.data(forKey: "voice.devices")
             .flatMap { try? JSONDecoder().decode([InputDeviceDTO].self, from: $0) } ?? []
-        return SettingsValues(windowMoverEnabled: WindowMoverModule.shared.persistedEnabled,
-                              windowMoverShortcut: unmanagedWindowMoverShortcut.flatMap(ShortcutDTO.fromKeyboardShortcut),
-                              voiceEnabled: defaults.bool(forKey: "voice.enabled"), holdToTalkBindings: unmanagedHoldBindings,
-                              toggleRecordingBindings: unmanagedToggleBindings, cancelBindings: unmanagedCancelBindings,
-                              pasteLatestTranscriptShortcut: persistedPasteLatestTranscriptShortcut,
-                              outputMode: VoiceOutputMode(rawValue: defaults.string(forKey: "voice.outputMode") ?? "") ?? .pasteImmediately,
-                              historyEnabled: defaults.bool(forKey: VoiceHistoryPreferences.enabledKey),
-                              historyRetentionDays: defaults.integer(forKey: VoiceHistoryPreferences.retentionDaysKey),
-                              historyMaxEntries: defaults.integer(forKey: VoiceHistoryPreferences.maxEntriesKey),
-                              locale: defaults.string(forKey: "voice.locale") ?? "system",
-                              inputDevicePriority: persistedDevices,
-                              fallbackToSystemDefault: defaults.bool(forKey: "voice.fallback"))
+        return VoiceLocalSettings(
+            enabled: defaults.bool(forKey: "voice.enabled"),
+            holdToTalkBindings: unmanagedHoldBindings,
+            toggleRecordingBindings: unmanagedToggleBindings,
+            cancelBindings: unmanagedCancelBindings,
+            pasteLatestTranscriptShortcut: persistedPasteLatestTranscriptShortcut,
+            outputMode: VoiceOutputMode(rawValue: defaults.string(forKey: "voice.outputMode") ?? "") ?? .pasteImmediately,
+            historyEnabled: defaults.bool(forKey: VoiceHistoryPreferences.enabledKey),
+            historyRetentionDays: defaults.integer(forKey: VoiceHistoryPreferences.retentionDaysKey),
+            historyMaxEntries: defaults.integer(forKey: VoiceHistoryPreferences.maxEntriesKey),
+            locale: defaults.string(forKey: "voice.locale") ?? "system",
+            inputDevicePriority: persistedDevices,
+            fallbackToSystemDefault: defaults.bool(forKey: "voice.fallback")
+        )
     }
 
     private func recoverDegradedAndObserve() {
-        KeyboardShortcuts.enable(.pasteLatestTranscript)
         reconcileShortcutActivation()
         if case .degraded = machine.state { _ = machine.handle(.resetDegraded) }
         if case .degraded = status { status = .idle }
         reconcileObservation()
     }
 
-    private func registerPasteLatestShortcut() {
-        guard !isPasteLatestHandlerInstalled else { return }
-        isPasteLatestHandlerInstalled = true
-        for action in [VoiceBindingAction.holdToTalk, .toggleRecording, .cancel] {
-            for index in 0..<KeyboardShortcuts.Name.voiceBindingSlotCount {
-                let routed: VoiceBindingRouter.Action = action == .holdToTalk ? .hold : (action == .toggleRecording ? .toggle : .cancel)
-                registerStandardBinding(.voiceBindingSlot(action: action, index: index), source: .init("standard.\(action.rawValue).\(index)"), action: routed)
-            }
-        }
-        KeyboardShortcuts.onKeyUp(for: .pasteLatestTranscript) { [weak self] in
-            Task { @MainActor in
-                guard let self, self.isEnabled else { return }
-                self.pasteLatestTranscript()
-            }
-        }
-        if isEnabled { KeyboardShortcuts.enable(.pasteLatestTranscript) }
-        else { KeyboardShortcuts.disable(.pasteLatestTranscript) }
-    }
-
-    private func registerStandardBinding(_ name: KeyboardShortcuts.Name, source: VoiceBindingRouter.Source,
-                                         action: VoiceBindingRouter.Action) {
-        KeyboardShortcuts.onKeyDown(for: name) { [weak self] in
-            let generation = MainActor.assumeIsolated { self?.bindingRouter.generation }
-            Task { @MainActor in
-                guard let self, let generation, !self.bindingCaptureLease.isActive else { return }
-                self.routeBindingEvents(self.bindingRouter.receive(.down(source, action), generation: generation))
-            }
-        }
-        KeyboardShortcuts.onKeyUp(for: name) { [weak self] in
-            let generation = MainActor.assumeIsolated { self?.bindingRouter.generation }
-            Task { @MainActor in
-                guard let self, let generation, !self.bindingCaptureLease.isActive else { return }
-                self.routeBindingEvents(self.bindingRouter.receive(.up(source), generation: generation))
-            }
-        }
-    }
-
-    private func routeBindingEvents(_ events: [VoiceBindingRouter.Event]) {
-        for event in events {
-            switch event {
-            case .holdBegan: begin(mode: .pushToTalk)
-            case .holdEnded: interpret(machine.handle(.pushToTalkEnded))
-            case .toggleRequested: begin(mode: .latched)
-            case .cancelRequested: cancelVoiceInteraction()
-            }
+    func handleStandardBindingEvent(_ event: VoiceBindingRouter.Event) {
+        guard isEnabled, !bindingCaptureLease.isActive else { return }
+        logger.notice("Standard Voice binding event: \(Self.bindingEventName(event), privacy: .public)")
+        switch event {
+        case .holdBegan: begin(mode: .pushToTalk)
+        case .holdEnded: interpret(machine.handle(.pushToTalkEnded))
+        case .toggleRequested: begin(mode: .latched)
+        case .cancelRequested: cancelVoiceInteraction()
         }
     }
 
@@ -969,29 +971,15 @@ final class VoiceTranscriptionModule: ObservableObject {
         return migrated
     }
 
-    private func disableAllVoiceStandardSlots() {
-        for action in [VoiceBindingAction.holdToTalk, .toggleRecording, .cancel] {
-            for index in 0..<KeyboardShortcuts.Name.voiceBindingSlotCount {
-                KeyboardShortcuts.disable(.voiceBindingSlot(action: action, index: index))
-            }
-        }
-    }
-
     private func reconcileShortcutActivation() {
-        if bindingCaptureLease.isActive {
-            disableAllVoiceStandardSlots()
-            return
-        }
         let phase: VoiceInteractionPhase
         switch status { case .arming: phase = .arming; case .recording: phase = .recording; case .finalizing: phase = .finalizing; case .idle, .noSpeech, .pasteFailed, .degraded: phase = .idle; default: phase = .unavailable }
         let policy = VoiceShortcutActivationPolicy.decide(moduleEnabled: isEnabled, phase: phase)
-        for action in [VoiceBindingAction.holdToTalk, .toggleRecording, .cancel] {
-            let enabled = action == .holdToTalk ? policy.holdEnabled : (action == .toggleRecording ? policy.toggleEnabled : policy.cancelEnabled)
-            for index in 0..<KeyboardShortcuts.Name.voiceBindingSlotCount {
-                let name = KeyboardShortcuts.Name.voiceBindingSlot(action: action, index: index)
-                enabled ? KeyboardShortcuts.enable(name) : KeyboardShortcuts.disable(name)
-            }
-        }
+        InputRoutingCoordinator.shared.setVoiceActivation(
+            moduleEnabled: isEnabled,
+            policy: policy,
+            captureIsActive: bindingCaptureLease.isActive
+        )
     }
 
     private func applyPasteLatestShortcut(_ shortcut: ResolvedSetting<ShortcutDTO>) {
@@ -1081,10 +1069,67 @@ final class VoiceTranscriptionModule: ObservableObject {
         return error.localizedDescription
     }
 
+    private static func triggerName(_ event: TriggerEvent) -> String {
+        switch event {
+        case .pushToTalkBegan: "push-to-talk-began"
+        case .pushToTalkEnded: "push-to-talk-ended"
+        case .toggleRequested: "toggle-requested"
+        case .cancelRequested: "cancel-requested"
+        case .secureInputBegan: "secure-input-began"
+        }
+    }
+
+    private static func modeName(_ mode: VoiceSessionMachine.Mode) -> String {
+        switch mode { case .pushToTalk: "push-to-talk"; case .latched: "latched" }
+    }
+
+    private static func bindingEventName(_ event: VoiceBindingRouter.Event) -> String {
+        switch event {
+        case .holdBegan: "hold-began"
+        case .holdEnded: "hold-ended"
+        case .toggleRequested: "toggle-requested"
+        case .cancelRequested: "cancel-requested"
+        }
+    }
+
+    private static func transportName(_ transport: AudioInputDevice.Transport) -> String {
+        switch transport { case .builtIn: "built-in"; case .usb: "usb"; case .bluetooth: "bluetooth"; case .other: "other" }
+    }
+
+    private static func assetStatusName(_ status: VoiceAssetManager.Status) -> String {
+        switch status {
+        case .unsupported: "unsupported"
+        case .missing: "missing"
+        case .downloading: "downloading"
+        case .installed: "installed"
+        case .failure: "failure"
+        }
+    }
+
+    /// Error values can contain device names, paths, or framework diagnostics. Logs retain only
+    /// the concrete error type so a hardware run is diagnosable without recording user data.
+    private static func errorKind(_ error: Error) -> String {
+        String(reflecting: type(of: error))
+    }
+
     private func persist(_ key: String, _ value: Any) { if !applying { UserDefaults.standard.set(value, forKey: key) } }
     private func persistAndReconfigure(_ key: String, _ value: Bool) { persist(key, value); if !applying { value ? recoverDegradedAndObserve() : stop() } }
     private func saveDevices() { if !applying, let data = try? JSONEncoder().encode(devicePriority) { UserDefaults.standard.set(data, forKey: "voice.devices") } }
     private func describe(_ value: VoiceAssetManager.Status) -> String {
         switch value { case .unsupported: return "Unsupported language"; case .missing: return "Download required"; case .downloading: return "Downloading"; case .installed: return "Installed"; case .failure(let message): return "Download failed: \(message)" }
+    }
+}
+
+extension VoiceTranscriptionModule: VoiceLocalSettingsAdapter {
+    func acceptUnmanagedVoicePasteLatestShortcut(_ shortcut: KeyboardShortcuts.Shortcut?) {
+        unmanagedPasteLatestShortcut = shortcut
+    }
+
+    func restoreUnmanagedVoicePasteLatestShortcut() {
+        KeyboardShortcuts.setShortcut(unmanagedPasteLatestShortcut, for: .pasteLatestTranscript)
+    }
+
+    func restoreVoicePasteLatestShortcut(_ shortcut: ResolvedSetting<ShortcutDTO>) {
+        restoreEffectivePasteLatestShortcut(shortcut)
     }
 }

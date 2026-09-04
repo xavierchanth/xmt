@@ -6,18 +6,22 @@ The app shell is the single user-visible app and UI that coordinates every XMT m
 
 XMT is one `LSUIElement` application with a SwiftUI settings surface. It has no Dock icon, one AppKit `NSStatusItem`, and one reusable settings window that is presented at launch and whenever the app is reopened. The application delegate strongly owns the status-item controller for the process lifetime; closing Settings does not release it or terminate XMT. Ordinary modules run inside this process and share its main actor. Keyboard Customization is the explicit safety exception: the app coordinates its isolated seizure owner, HIDDriverKit system extension, XPC lease, and independent watchdog. They are built-in implementation components, not plugins or additional apps; their target design is in [Keyboard Customization architecture](keyboard-customization.md#protected-input-architecture).
 
-The shell owns exactly four things:
+The shell owns exactly six things:
 
 - **Presence** — the menu bar item and its menu.
-- **Settings** — the tabbed settings window and its lifecycle.
+- **Presentation** — the tabbed settings window, menu, and their lifecycle. Modules contribute semantic state and actions; views do not own runtime input resources.
+- **Configuration** — loading, validating, and publishing one effective cross-module snapshot.
 - **Permissions** — acquisition, status, and re-request flows for the macOS permissions modules depend on.
 - **Module lifecycle** — deciding when each module starts, stops, and releases resources.
+- **Input routing** — reconciling module-owned binding declarations with shared input providers and dispatching semantic actions to started modules.
 
 Everything else belongs to a module. The shell must not encode a module's domain logic, and a module must not reach around the shell to install its own menu bar item or permission prompt.
 
 ## Dependency direction
 
 Modules depend on the shell. The shell does not depend on any specific module beyond a registration list, and modules do not depend on each other. A module that needs a capability another module also needs takes it from shared infrastructure rather than from its neighbour, so removing a module cannot break an unrelated one.
+
+The dependency direction is also a runtime data flow. Presentation submits user intent and renders published state. The configuration boundary resolves that intent together with persisted and file-managed values. Input providers reconcile the resulting binding declarations and emit semantic action transitions. A module receives only its own actions and performs its own effects. Presentation never registers shortcuts, owns event taps, or calls another module to change shared configuration.
 
 ## Permission gating
 
@@ -71,9 +75,24 @@ These rules explain why resource use stays small. They do not promise a number.
 
 ## Trigger providers
 
-The shell coordinates two trigger providers behind one event vocabulary. The shortcut provider owns ordinary configurable global shortcuts. The Fn provider observes the Function key transitions needed for hold-Fn push-to-talk and the Fn-Space toggle without pretending those gestures are ordinary shortcut-library bindings. Providers acquire and release their registrations together with the consuming module and publish events to an arbitrator; neither starts module work directly. Arbitration suppresses duplicate or contradictory transitions and preserves the single-flight rule.
+The shell coordinates two trigger providers behind one routing boundary. The shortcut provider owns ordinary configurable global shortcuts. The Fn provider observes the Function key transitions needed for hold-Fn push-to-talk and Fn chords without pretending those gestures are ordinary shortcut-library bindings. Providers publish physical-source transitions; the routing boundary maps those transitions to semantic module actions. Neither provider starts module work directly.
+
+Modules declare bindings in terms of semantic actions and activation shape: a one-shot action fires once per press, while a hold action has a balanced begin and end owned by the same physical source. The control plane validates the complete cross-module binding snapshot before changing any live registration. A rejected snapshot leaves both the previous effective configuration and its registrations intact.
+
+Live routing preserves these invariants:
+
+- one physical binding has at most one semantic owner, except that bare Fn and an Fn chord deliberately coexist as one arbitrated gesture family;
+- only a started module can receive an action;
+- repeat events do not create repeated one-shot actions or additional hold owners;
+- reconfiguration, provider loss, permission loss, module stop, and shortcut capture interrupt active routing and emit at most one required hold end;
+- callbacks carry a registration generation, so delayed callbacks from an older snapshot are inert;
+- one provider owns each physical registration and releases it deterministically when its final consumer stops.
 
 The active Fn observer is an Input Monitoring and Accessibility boundary because it consumes Fn-Space. Voice Transcription declares both permissions in addition to capture permission; observing Fn must not grant the module broader keyboard-remapping ownership. Configurable alternatives remain with the shortcut provider, and the declarative representation of those alternatives remains independent of the shortcut library's private storage.
+
+Keyboard Customization is not a third trigger provider. It transforms events from explicitly included physical devices below this routing boundary and emits resolved events through its virtual keyboard. Those output events rejoin the ordinary macOS input stream and may naturally form a configured Window Mover or Voice shortcut. The keyboard module never dispatches another module's semantic action, and the ordinary providers never acquire or seize a physical keyboard.
+
+Shortcut capture is a control-plane lease, not a view-owned mode. While a capture lease is active, live routes that could consume the candidate gesture are suspended. Ending, cancelling, invalidating, or losing that exact lease reconciles the current effective snapshot; a stale view callback cannot reactivate an older registration.
 
 ## Configuration resolution
 

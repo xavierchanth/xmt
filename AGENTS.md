@@ -4,11 +4,11 @@ Conventions for anyone — human or agent — changing XMT. This page covers wha
 
 ## What this repository is
 
-A single macOS app: XMT — Xavier's macOS Tweaks, a menu bar utility hosting two compiled-in modules, Window Mover and Voice Transcription. The Xcode project, target, scheme, module, and app product are named `XMT`; the bundle identifier is `com.xavierchanth.xmt`. One further target exists, `XMTVirtualKeyboard`, an inert DriverKit build-only feasibility skeleton that ships in nothing: it is outside the `XMT` scheme, is not embedded in the app, and cannot load. See [the build-only evidence](docs/qa/keyboard-driverkit-feasibility.md).
+A single macOS app: XMT — Xavier's macOS Tweaks, a menu bar utility hosting two compiled-in modules, Window Mover and Voice Transcription. The Xcode project, target, scheme, module, and app product are named `XMT`; the bundle identifier is `com.xavierchanth.xmt`. Three further targets are inert Keyboard Customization feasibility products: the `XMTKeyboardOwner` and `XMTKeyboardWatchdog` command-line boundaries and the `XMTVirtualKeyboard` DriverKit skeleton. They are outside the `XMT` scheme, are not embedded in the app, and perform no input work. See [the build-only evidence](docs/qa/keyboard-driverkit-feasibility.md).
 
 Swift 5, SwiftUI plus AppKit, macOS 26 minimum (`MACOSX_DEPLOYMENT_TARGET = 26.0`), one Swift package dependency (`KeyboardShortcuts`). Voice Transcription additionally uses `Speech`, `AVFoundation`, `CoreAudio`, and `IOBluetooth` from the SDK, and the macOS 26 speech types are used without an availability fallback. The app is not sandboxed. The Xcode project is the build system; there is no `Package.swift`.
 
-Source layout by area: `XMT/App`, `XMT/WindowManagement`, `XMT/VoiceTranscription` (with `Audio`, `Session`, `Output`), `XMT/KeyboardCustomization`, `XMT/Triggers`, `XMT/Configuration`, `XMT/HotKeys`, `XMT/Services`, `XMT/Settings`, `XMT/MenuBar`, `XMT/Resources`, and `XMTTests`. Keyboard Customization currently contains only compiled pure resolver, safety-lifecycle, and synthetic identity-matcher models; none is connected to live HID. `XMTVirtualKeyboard` is a separate inert, unsigned-build-only dext skeleton outside the app scheme and bundle.
+Source layout by area: `XMT/App`, `XMT/WindowManagement`, `XMT/VoiceTranscription` (with `Audio`, `Session`, `Output`), `XMT/KeyboardCustomization`, `XMT/Triggers`, `XMT/Configuration`, `XMT/HotKeys`, `XMT/Services`, `XMT/Settings`, `XMT/MenuBar`, `XMT/Resources`, and `XMTTests`. Keyboard Customization currently contains compiled pure resolver, tokenized safety-lifecycle, strict policy, versioned wire-contract, and fake transformation-pipeline models; none is connected to live HID. `XMTKeyboardOwner`, `XMTKeyboardWatchdog`, and `XMTVirtualKeyboard` are separate inert, unsigned build-only targets outside the app scheme and bundle.
 
 ## Building and testing
 
@@ -21,6 +21,7 @@ just install      # build, replace /Applications/XMT.app, launch
 just run          # build and launch without installing
 just clean        # remove .build/xcode
 just build-dext   # build the inert DriverKit spike target, unsigned; not part of `check`
+just build-keyboard-feasibility # build all three inert keyboard feasibility targets
 ```
 
 `just` recipes are thin wrappers around `xcodebuild` and one Node script; read the justfile and run the command directly if `just` is unavailable. `docs-check` requires only Node — no install step, no lockfile — and `node assets/check-docs.mjs` with no arguments checks the same files the recipe does.

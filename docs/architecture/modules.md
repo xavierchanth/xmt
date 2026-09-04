@@ -26,7 +26,7 @@ Each module provides to the shell:
 
 - **Identity** — a stable name used in settings and shortcut storage.
 - **Declared permissions** — the macOS grants it needs, surfaced and re-requestable in Settings. See [permission gating](app-shell.md#permission-gating).
-- **Triggers** — the shortcuts or events that invoke it, registered at start and removed at stop.
+- **Actions and bindings** — semantic actions with configurable bindings and activation shape. The shell owns physical registration and resolves conflicts across the complete application.
 - **Lifecycle handlers** — start, stop, and teardown, following [module lifecycle](app-shell.md#module-lifecycle).
 - **Settings content** — its own section of the settings window; never its own window.
 
@@ -36,6 +36,8 @@ Each module must:
 - treat OS calls as failure-prone and return without action on an unexpected result;
 - run at most one action at a time and drop, not queue, overlapping triggers;
 - avoid mutable state shared with another module.
+
+A module action is not a keyboard event. Input providers translate physical-source transitions into semantic actions at the shell boundary, and only then does the shell dispatch to a started module. This keeps module behavior testable without a shortcut library or event tap and prevents one module from reaching through another to mutate shared registrations.
 
 ## Module inventory
 

@@ -19,7 +19,6 @@ final class WindowMoverModule: ObservableObject {
         let shortcut = isShortcutManaged ? unmanagedShortcut : KeyboardShortcuts.getShortcut(for: .moveToNextScreen)
         return shortcut.flatMap(ShortcutDTO.fromKeyboardShortcut)
     }
-    private var isHandlerInstalled = false
     private var unmanagedShortcut: KeyboardShortcuts.Shortcut?
 
     private init() {
@@ -35,35 +34,17 @@ final class WindowMoverModule: ObservableObject {
     }
 
     func register() {
-        reconcileHandler()
-    }
-
-    private func installHandler() {
-        guard !isHandlerInstalled else { return }
-        isHandlerInstalled = true
-        KeyboardShortcuts.onKeyUp(for: .moveToNextScreen) { [weak self] in
-            Task { @MainActor in
-                guard let self, self.isEnabled else { return }
-                WindowActionCoordinator.shared.perform {
-                    await WindowMover.moveFocusedWindowToNextScreen()
-                }
-            }
-        }
-        applyShortcutState()
+        InputRoutingCoordinator.shared.setWindowEnabled(isEnabled)
     }
 
     func stop() {
         WindowActionCoordinator.shared.cancel()
-        KeyboardShortcuts.disable(.moveToNextScreen)
-        if isHandlerInstalled {
-            KeyboardShortcuts.removeHandler(for: .moveToNextScreen)
-            isHandlerInstalled = false
-        }
+        InputRoutingCoordinator.shared.setWindowEnabled(false)
     }
 
     private func reconcileHandler() {
-        if isEnabled { installHandler() }
-        else { stop() }
+        if !isEnabled { WindowActionCoordinator.shared.cancel() }
+        InputRoutingCoordinator.shared.setWindowEnabled(isEnabled)
     }
 
     func setEnabled(_ enabled: Bool) {
@@ -75,6 +56,28 @@ final class WindowMoverModule: ObservableObject {
         if enabled {
             AccessibilityService.shared.refresh()
         }
+    }
+
+    func acceptUnmanagedShortcut(_ shortcut: KeyboardShortcuts.Shortcut?) {
+        guard !isShortcutManaged else { return }
+        unmanagedShortcut = shortcut
+    }
+
+    func restoreUnmanagedShortcut() {
+        guard !isShortcutManaged else { return }
+        restoreActiveShortcut(unmanagedShortcut)
+    }
+
+    func restoreActiveShortcut(_ shortcut: KeyboardShortcuts.Shortcut?) {
+        KeyboardShortcuts.setShortcut(shortcut, for: .moveToNextScreen)
+        applyShortcutState()
+    }
+
+    func restoreEffectiveShortcut(_ shortcut: ResolvedSetting<ShortcutDTO>) {
+        let restored = try? shortcut.value.keyboardShortcut()
+        KeyboardShortcuts.setShortcut(restored, for: .moveToNextScreen)
+        if !shortcut.isManaged { unmanagedShortcut = restored }
+        applyShortcutState()
     }
 
     func applyManaged(enabled: ResolvedSetting<Bool>, shortcut: ResolvedSetting<ShortcutDTO>) {
@@ -103,8 +106,8 @@ final class WindowMoverModule: ObservableObject {
         } else {
             unmanagedShortcut = KeyboardShortcuts.getShortcut(for: .moveToNextScreen)
         }
-        // `setShortcut` registers immediately inside KeyboardShortcuts. Re-apply lifecycle state so
-        // a disabled module never reserves and swallows its chord.
+        // `setShortcut` can reactivate library storage. Re-apply shell-owned lifecycle state so a
+        // disabled module never reserves and swallows its chord.
         reconcileHandler()
     }
 
@@ -124,10 +127,31 @@ final class WindowMoverModule: ObservableObject {
     }
 
     private func applyShortcutState() {
-        if isEnabled {
-            KeyboardShortcuts.enable(.moveToNextScreen)
-        } else {
-            KeyboardShortcuts.disable(.moveToNextScreen)
+        InputRoutingCoordinator.shared.setWindowEnabled(isEnabled)
+    }
+
+    func performRoutedAction() {
+        guard isEnabled else { return }
+        WindowActionCoordinator.shared.perform {
+            await WindowMover.moveFocusedWindowToNextScreen()
         }
+    }
+}
+
+extension WindowMoverModule: WindowMoverLocalSettingsAdapter {
+    func readWindowMoverLocalSettings() -> WindowMoverLocalSettings {
+        .init(enabled: persistedEnabled, shortcut: persistedShortcut)
+    }
+
+    func acceptUnmanagedWindowMoverShortcut(_ shortcut: KeyboardShortcuts.Shortcut?) {
+        acceptUnmanagedShortcut(shortcut)
+    }
+
+    func restoreUnmanagedWindowMoverShortcut() {
+        restoreUnmanagedShortcut()
+    }
+
+    func restoreWindowMoverShortcut(_ shortcut: ResolvedSetting<ShortcutDTO>) {
+        restoreEffectiveShortcut(shortcut)
     }
 }

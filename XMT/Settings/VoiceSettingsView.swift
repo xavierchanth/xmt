@@ -3,6 +3,7 @@ import SwiftUI
 
 struct VoiceSettingsView: View {
     @ObservedObject private var module = VoiceTranscriptionModule.shared
+    @ObservedObject private var configuration = ConfigurationCoordinator.shared
     @State private var lists: [VoiceBindingAction: [ShortcutDTO]] = [:]
     @State private var active: Row?
     @State private var transaction = VoiceBindingCaptureTransaction()
@@ -57,7 +58,7 @@ struct VoiceSettingsView: View {
                 Picker("Completed transcript", selection: $module.outputMode) { Text("Paste immediately").tag(VoiceOutputMode.pasteImmediately); Text("Clipboard only").tag(VoiceOutputMode.clipboardOnly) }.disabled(module.managedKeys.contains(.outputMode))
                 Picker("Language", selection: $module.localeIdentifier) { Text("System Language").tag("system"); ForEach(module.supportedLocaleIdentifiers, id: \.self) { id in Text(Locale.current.localizedString(forIdentifier: id) ?? id).tag(id) } }.disabled(module.managedKeys.contains(.locale))
                 Button("Copy Last Transcript") { module.copyLastTranscript() }.disabled(module.lastTranscript.isEmpty)
-                KeyboardShortcuts.Recorder("Paste latest transcript:", name: .pasteLatestTranscript, onChange: { module.userChangedPasteLatestShortcut($0) }).disabled(module.managedKeys.contains(.pasteLatestTranscriptShortcut))
+                KeyboardShortcuts.Recorder("Paste latest transcript:", name: .pasteLatestTranscript, onChange: { configuration.userChangedVoicePasteLatestShortcut($0) }).disabled(module.managedKeys.contains(.pasteLatestTranscriptShortcut))
             }
             Section("Transcript history") {
                 Toggle("Save transcript history", isOn: $module.historyEnabled).disabled(module.managedKeys.contains(.historyEnabled))
@@ -65,7 +66,7 @@ struct VoiceSettingsView: View {
                 TextField("Maximum entries", value: $module.historyMaxEntries, format: .number).disabled(!module.historyEnabled || module.managedKeys.contains(.historyMaxEntries))
             }
             Section("Input priority") { DevicePriorityListView(module: module, priorityManaged: module.managedKeys.contains(.inputDevicePriority), fallbackManaged: module.managedKeys.contains(.fallbackToSystemDefault)) }
-            Section("Configuration") { Button("Reload Configuration") { module.reloadConfig() }; if let diagnostic = module.configDiagnostic { Text(diagnostic).foregroundStyle(.red) } }
+            Section("Configuration") { Button("Reload Configuration") { configuration.reload() }; if let diagnostic = configuration.diagnostic { Text(diagnostic).foregroundStyle(.red) } }
         }.formStyle(.grouped).onAppear { module.refreshDevices(); module.refreshLocalesAndAssets(); reloadLists() }
           .onChange(of: module.settingsRevision) { reloadLists(invalidatingCaptureFor: module.settingsRevision) }
           .alert("Restore Default Bindings?", isPresented: $showingDefaultBindingConfirmation) {

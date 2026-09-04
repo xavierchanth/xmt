@@ -2,6 +2,7 @@ import ServiceManagement
 import SwiftUI
 
 struct GeneralSettingsView: View {
+    @ObservedObject private var configuration = ConfigurationCoordinator.shared
     @State private var launchAtLoginStatus = SMAppService.mainApp.status
     @State private var registrationError: String?
 
@@ -25,6 +26,13 @@ struct GeneralSettingsView: View {
 
             Section("Permissions") {
                 AccessibilityStatusView(consumerDescription: "Window Mover uses Accessibility to move windows. Voice Transcription uses it only for optional Auto-paste; Fn gestures use Input Monitoring and recording uses Microphone access.")
+            }
+
+            Section("Configuration") {
+                Button("Reload Configuration") { configuration.reload() }
+                if let diagnostic = configuration.diagnostic {
+                    Text(diagnostic).foregroundStyle(.red)
+                }
             }
         }
         .formStyle(.grouped)

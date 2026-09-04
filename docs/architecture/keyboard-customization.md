@@ -34,6 +34,8 @@ Capturing and replacing physical keyboard input is a narrow safety exception to 
 3. The app grants work through an XPC lease. Losing or revoking the lease causes the seizure owner to tear down its task-scoped ownership.
 4. An independent watchdog observes lease and owner health and can trigger teardown without depending on the app process.
 
+The control contract is versioned and bounded. Session, lease, output, watchdog, policy-revision, and acquisition-attempt identities travel with every asynchronous acknowledgement that can affect ownership; a delayed message from an earlier process lifetime is inert. Wire DTOs are decoded and validated once at the receiving boundary before strict policy reaches the resolver. Raw physical key events stay inside the seizure owner and are never forwarded to the app or watchdog.
+
 Process termination is expected to release an IOHID seizure, but the design makes no guarantee and claims no release-time bound. Explicit teardown, lease loss, and the independent watchdog are all required rather than relying on termination behavior.
 
 The system extension is isolated implementation machinery for this one built-in module. It is not a plugin, does not create a second app or settings experience, and cannot own arbitrary modules. Direct DriverKit-extension ownership of the built-in keyboard is rejected: the extension supplies the virtual output device, while task-scoped IOHID ownership remains outside the dext. XMT never attempts login-window or FileVault interception.
@@ -43,6 +45,8 @@ The system extension is isolated implementation machinery for this one built-in 
 The shared declarative configuration represents capability enablement, explicit device inclusion/exclusion, and per-device/per-key timing overrides. Validation is atomic; invalid or ambiguous device policy leaves the last known-good policy active and does not broaden scope.
 
 The module owns physical-key transformation, state resolution, Caps Lock reconciliation, the XPC lease, and coordination of its isolated helper components. The shell owns the single settings surface and user-visible lifecycle. The module does not interpret application context, expand text, control pointer behavior, or manage other applications' menu bar items.
+
+Keyboard Customization is below, and separate from, the shell's semantic input-routing boundary. It never registers a Window Mover or Voice action and never calls those modules. Resolved virtual-keyboard output rejoins the normal macOS input stream; shared shortcut and Fn providers may then recognize it exactly as they recognize output from any other keyboard. This one-way composition avoids a special cross-module path and keeps seizure ownership out of ordinary trigger infrastructure.
 
 ## Related documentation
 

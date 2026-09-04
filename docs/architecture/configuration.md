@@ -14,6 +14,8 @@ An omitted file value therefore leaves the corresponding persisted value in forc
 
 The file has a required top-level schema version. Readers accept only versions they understand and do not guess at migrations. Device priority is represented as an ordered list, while fallback to the current system-default input is a separate Boolean choice rather than an implicit final list entry. Shortcut values use a serialized data representation at this boundary rather than exposing a shortcut library's storage format as configuration format.
 
+Each module exposes persisted values through its own settings adapter. A shell-owned aggregate composes those partial values into the local snapshot used by resolution and delegates rollback to the adapter that owns the affected storage. The configuration coordinator therefore depends on neither a neighbouring module nor a shortcut library's persistence details.
+
 ## Loading and reloads
 
 At launch, absence of the file is a valid state and resolution continues from defaults and persisted settings. A present file is decoded and validated completely before any value is published. An unsupported version, unreadable file, or invalid field leaves the last known-good effective settings in place; on the first invalid launch, that means defaults plus persisted settings.

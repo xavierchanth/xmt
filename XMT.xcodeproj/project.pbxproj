@@ -9,6 +9,9 @@
 /* Begin PBXBuildFile section */
 		AA000001 /* XMTApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100001 /* XMTApp.swift */; };
 		AA000002 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100002 /* AppDelegate.swift */; };
+		MR000001 /* ModuleCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = MR100001 /* ModuleCatalog.swift */; };
+		MR000002 /* ModuleCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = MR100001 /* ModuleCatalog.swift */; };
+		MR000003 /* ModuleRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = MR100002 /* ModuleRegistry.swift */; };
 		AA000003 /* HotKeyNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100003 /* HotKeyNames.swift */; };
 		AA000004 /* AXWindowInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100004 /* AXWindowInfo.swift */; };
 		AA000005 /* ScreenCoordinates.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100005 /* ScreenCoordinates.swift */; };
@@ -34,10 +37,20 @@
 		B000003 /* TriggerEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100003 /* TriggerEvents.swift */; };
 		VR000001 /* VoiceBindingRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = VR100001 /* VoiceBindingRouter.swift */; };
 		VR000002 /* VoiceBindingRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = VR100001 /* VoiceBindingRouter.swift */; };
+		IR000001 /* InputRoutingState.swift in Sources */ = {isa = PBXBuildFile; fileRef = IR100001 /* InputRoutingState.swift */; };
+		IR000002 /* InputRoutingState.swift in Sources */ = {isa = PBXBuildFile; fileRef = IR100001 /* InputRoutingState.swift */; };
+		IR000003 /* StandardShortcutProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = IR100002 /* StandardShortcutProvider.swift */; };
+		IR000004 /* StandardShortcutProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = IR100002 /* StandardShortcutProvider.swift */; };
+		IR000005 /* InputRoutingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = IR100003 /* InputRoutingCoordinator.swift */; };
 		B000004 /* ConfigFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100004 /* ConfigFile.swift */; };
 		B000005 /* EffectiveSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100005 /* EffectiveSettings.swift */; };
 		B000006 /* ConfigReloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100006 /* ConfigReloader.swift */; };
 		B000007 /* ShortcutDTO.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100007 /* ShortcutDTO.swift */; };
+		CC000001 /* ConfigurationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100001 /* ConfigurationCoordinator.swift */; };
+		LS000001 /* LocalSettingsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = LS100001 /* LocalSettingsRepository.swift */; };
+		LS000002 /* LocalSettingsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = LS100001 /* LocalSettingsRepository.swift */; };
+		LS000003 /* LiveLocalSettingsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = LS100002 /* LiveLocalSettingsRepository.swift */; };
+		LS000004 /* LocalSettingsRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = LS100003 /* LocalSettingsRepositoryTests.swift */; };
 		B000008 /* DeviceSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100008 /* DeviceSelector.swift */; };
 		B000009 /* DeviceTable.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100009 /* DeviceTable.swift */; };
 		B000010 /* BluetoothLinkOracle.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100010 /* BluetoothLinkOracle.swift */; };
@@ -81,6 +94,32 @@
 		C000001 /* KeyboardSafetyLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C100001 /* KeyboardSafetyLifecycle.swift */; };
 		C000002 /* KeyboardSafetyLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C100001 /* KeyboardSafetyLifecycle.swift */; };
 		C000003 /* KeyboardSafetyLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C100002 /* KeyboardSafetyLifecycleTests.swift */; };
+		KS000001 /* KeyboardSafetyRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = KS100001 /* KeyboardSafetyRuntime.swift */; };
+		KS000002 /* KeyboardSafetyRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = KS100001 /* KeyboardSafetyRuntime.swift */; };
+		KP000001 /* KeyboardPolicyContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = KP100001 /* KeyboardPolicyContract.swift */; };
+		KP000002 /* KeyboardPolicyContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = KP100001 /* KeyboardPolicyContract.swift */; };
+		KW000001 /* KeyboardWireContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = KW100001 /* KeyboardWireContract.swift */; };
+		KW000002 /* KeyboardWireContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = KW100001 /* KeyboardWireContract.swift */; };
+		KT000001 /* KeyboardTransformationPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = KT100001 /* KeyboardTransformationPipeline.swift */; };
+		KT000002 /* KeyboardTransformationPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = KT100001 /* KeyboardTransformationPipeline.swift */; };
+		KC000001 /* KeyboardContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = KC100001 /* KeyboardContractTests.swift */; };
+		KO000001 /* OwnerMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = KO100001 /* OwnerMain.swift */; };
+		KO000002 /* KeyboardSafetyLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C100001 /* KeyboardSafetyLifecycle.swift */; };
+		KO000003 /* KeyboardSafetyRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = KS100001 /* KeyboardSafetyRuntime.swift */; };
+		KO000004 /* KeyboardDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE10001 /* KeyboardDomain.swift */; };
+		KO000005 /* KeyboardConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE10002 /* KeyboardConfiguration.swift */; };
+		KO000006 /* TapHoldResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE10003 /* TapHoldResolver.swift */; };
+		KO000007 /* DeviceIdentityMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF10001 /* DeviceIdentityMatcher.swift */; };
+		KO000008 /* KeyboardPolicyContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = KP100001 /* KeyboardPolicyContract.swift */; };
+		KO000009 /* KeyboardWireContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = KW100001 /* KeyboardWireContract.swift */; };
+		KO000010 /* KeyboardTransformationPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = KT100001 /* KeyboardTransformationPipeline.swift */; };
+		KQ000001 /* WatchdogMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = KQ100001 /* WatchdogMain.swift */; };
+		KQ000002 /* KeyboardSafetyLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C100001 /* KeyboardSafetyLifecycle.swift */; };
+		KQ000003 /* KeyboardDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE10001 /* KeyboardDomain.swift */; };
+		KQ000004 /* KeyboardConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE10002 /* KeyboardConfiguration.swift */; };
+		KQ000005 /* DeviceIdentityMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF10001 /* DeviceIdentityMatcher.swift */; };
+		KQ000006 /* KeyboardPolicyContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = KP100001 /* KeyboardPolicyContract.swift */; };
+		KQ000007 /* KeyboardWireContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = KW100001 /* KeyboardWireContract.swift */; };
 		D000001 /* XMTVirtualKeyboardDevice.iig in Sources */ = {isa = PBXBuildFile; fileRef = D100001 /* XMTVirtualKeyboardDevice.iig */; };
 		D000002 /* XMTVirtualKeyboardDevice.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D100002 /* XMTVirtualKeyboardDevice.cpp */; };
 		EE00001 /* KeyboardDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE10001 /* KeyboardDomain.swift */; };
@@ -124,6 +163,8 @@
 /* Begin PBXFileReference section */
 		AA100001 /* XMTApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XMTApp.swift; sourceTree = "<group>"; };
 		AA100002 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		MR100001 /* ModuleCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModuleCatalog.swift; sourceTree = "<group>"; };
+		MR100002 /* ModuleRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModuleRegistry.swift; sourceTree = "<group>"; };
 		AA100003 /* HotKeyNames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyNames.swift; sourceTree = "<group>"; };
 		AA100004 /* AXWindowInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXWindowInfo.swift; sourceTree = "<group>"; };
 		AA100005 /* ScreenCoordinates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCoordinates.swift; sourceTree = "<group>"; };
@@ -149,10 +190,17 @@
 		B100002 /* TriggerArbitrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriggerArbitrator.swift; sourceTree = "<group>"; };
 		B100003 /* TriggerEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriggerEvents.swift; sourceTree = "<group>"; };
 		VR100001 /* VoiceBindingRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceBindingRouter.swift; sourceTree = "<group>"; };
+		IR100001 /* InputRoutingState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputRoutingState.swift; sourceTree = "<group>"; };
+		IR100002 /* StandardShortcutProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardShortcutProvider.swift; sourceTree = "<group>"; };
+		IR100003 /* InputRoutingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputRoutingCoordinator.swift; sourceTree = "<group>"; };
 		B100004 /* ConfigFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigFile.swift; sourceTree = "<group>"; };
 		B100005 /* EffectiveSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectiveSettings.swift; sourceTree = "<group>"; };
 		B100006 /* ConfigReloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigReloader.swift; sourceTree = "<group>"; };
 		B100007 /* ShortcutDTO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutDTO.swift; sourceTree = "<group>"; };
+		CC100001 /* ConfigurationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationCoordinator.swift; sourceTree = "<group>"; };
+		LS100001 /* LocalSettingsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalSettingsRepository.swift; sourceTree = "<group>"; };
+		LS100002 /* LiveLocalSettingsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveLocalSettingsRepository.swift; sourceTree = "<group>"; };
+		LS100003 /* LocalSettingsRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalSettingsRepositoryTests.swift; sourceTree = "<group>"; };
 		B100008 /* DeviceSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSelector.swift; sourceTree = "<group>"; };
 		B100009 /* DeviceTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceTable.swift; sourceTree = "<group>"; };
 		B100010 /* BluetoothLinkOracle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothLinkOracle.swift; sourceTree = "<group>"; };
@@ -179,6 +227,15 @@
 		B100028 /* CommitSequenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommitSequenceTests.swift; sourceTree = "<group>"; };
 		C100001 /* KeyboardSafetyLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardSafetyLifecycle.swift; sourceTree = "<group>"; };
 		C100002 /* KeyboardSafetyLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardSafetyLifecycleTests.swift; sourceTree = "<group>"; };
+		KS100001 /* KeyboardSafetyRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardSafetyRuntime.swift; sourceTree = "<group>"; };
+		KP100001 /* KeyboardPolicyContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardPolicyContract.swift; sourceTree = "<group>"; };
+		KW100001 /* KeyboardWireContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardWireContract.swift; sourceTree = "<group>"; };
+		KT100001 /* KeyboardTransformationPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardTransformationPipeline.swift; sourceTree = "<group>"; };
+		KC100001 /* KeyboardContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardContractTests.swift; sourceTree = "<group>"; };
+		KO100001 /* OwnerMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerMain.swift; sourceTree = "<group>"; };
+		KO100099 /* XMTKeyboardOwner */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = XMTKeyboardOwner; sourceTree = BUILT_PRODUCTS_DIR; };
+		KQ100001 /* WatchdogMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchdogMain.swift; sourceTree = "<group>"; };
+		KQ100099 /* XMTKeyboardWatchdog */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = XMTKeyboardWatchdog; sourceTree = BUILT_PRODUCTS_DIR; };
 		D100001 /* XMTVirtualKeyboardDevice.iig */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.iig; path = XMTVirtualKeyboardDevice.iig; sourceTree = "<group>"; };
 		D100002 /* XMTVirtualKeyboardDevice.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = XMTVirtualKeyboardDevice.cpp; sourceTree = "<group>"; };
 		D100003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -225,6 +282,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		KO300001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		KQ300001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -234,6 +305,8 @@
 				AA400001 /* XMT */,
 				AA400080 /* XMTTests */,
 				D400001 /* XMTVirtualKeyboard */,
+				KO400001 /* XMTKeyboardOwner */,
+				KQ400001 /* XMTKeyboardWatchdog */,
 				AA400099 /* Products */,
 				AA400100 /* Frameworks */,
 			);
@@ -262,6 +335,8 @@
 			children = (
 				AA100001 /* XMTApp.swift */,
 				AA100002 /* AppDelegate.swift */,
+				MR100001 /* ModuleCatalog.swift */,
+				MR100002 /* ModuleRegistry.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -349,6 +424,8 @@
 				EE10022 /* TapHoldResolverPropertyTests.swift */,
 				FF10002 /* DeviceIdentityMatcherTests.swift */,
 				C100002 /* KeyboardSafetyLifecycleTests.swift */,
+				KC100001 /* KeyboardContractTests.swift */,
+				LS100003 /* LocalSettingsRepositoryTests.swift */,
 			);
 			path = XMTTests;
 			sourceTree = "<group>";
@@ -359,6 +436,8 @@
 				AA100099 /* XMT.app */,
 				AA100020 /* XMTTests.xctest */,
 				D100099 /* XMTVirtualKeyboard.dext */,
+				KO100099 /* XMTKeyboardOwner */,
+				KQ100099 /* XMTKeyboardWatchdog */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -377,6 +456,9 @@
 				B100002 /* TriggerArbitrator.swift */,
 				B100003 /* TriggerEvents.swift */,
 				VR100001 /* VoiceBindingRouter.swift */,
+				IR100001 /* InputRoutingState.swift */,
+				IR100002 /* StandardShortcutProvider.swift */,
+				IR100003 /* InputRoutingCoordinator.swift */,
 			);
 			path = Triggers;
 			sourceTree = "<group>";
@@ -388,6 +470,9 @@
 				B100005 /* EffectiveSettings.swift */,
 				B100006 /* ConfigReloader.swift */,
 				B100007 /* ShortcutDTO.swift */,
+				CC100001 /* ConfigurationCoordinator.swift */,
+				LS100001 /* LocalSettingsRepository.swift */,
+				LS100002 /* LiveLocalSettingsRepository.swift */,
 			);
 			path = Configuration;
 			sourceTree = "<group>";
@@ -459,6 +544,10 @@
 			isa = PBXGroup;
 			children = (
 				C100001 /* KeyboardSafetyLifecycle.swift */,
+				KS100001 /* KeyboardSafetyRuntime.swift */,
+				KP100001 /* KeyboardPolicyContract.swift */,
+				KW100001 /* KeyboardWireContract.swift */,
+				KT100001 /* KeyboardTransformationPipeline.swift */,
 				EE10001 /* KeyboardDomain.swift */,
 				EE10002 /* KeyboardConfiguration.swift */,
 				EE10003 /* TapHoldResolver.swift */,
@@ -476,6 +565,22 @@
 				D100004 /* XMTVirtualKeyboard.entitlements */,
 			);
 			path = XMTVirtualKeyboard;
+			sourceTree = "<group>";
+		};
+		KO400001 /* XMTKeyboardOwner */ = {
+			isa = PBXGroup;
+			children = (
+				KO100001 /* OwnerMain.swift */,
+			);
+			path = XMTKeyboardOwner;
+			sourceTree = "<group>";
+		};
+		KQ400001 /* XMTKeyboardWatchdog */ = {
+			isa = PBXGroup;
+			children = (
+				KQ100001 /* WatchdogMain.swift */,
+			);
+			path = XMTKeyboardWatchdog;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -538,6 +643,42 @@
 			productReference = D100099 /* XMTVirtualKeyboard.dext */;
 			productType = "com.apple.product-type.driver-extension";
 		};
+		KO500001 /* XMTKeyboardOwner */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = KO700001 /* Build configuration list for PBXNativeTarget "XMTKeyboardOwner" */;
+			buildPhases = (
+				KO300000 /* Sources */,
+				KO300001 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = XMTKeyboardOwner;
+			packageProductDependencies = (
+			);
+			productName = XMTKeyboardOwner;
+			productReference = KO100099 /* XMTKeyboardOwner */;
+			productType = "com.apple.product-type.tool";
+		};
+		KQ500001 /* XMTKeyboardWatchdog */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = KQ700001 /* Build configuration list for PBXNativeTarget "XMTKeyboardWatchdog" */;
+			buildPhases = (
+				KQ300000 /* Sources */,
+				KQ300001 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = XMTKeyboardWatchdog;
+			packageProductDependencies = (
+			);
+			productName = XMTKeyboardWatchdog;
+			productReference = KQ100099 /* XMTKeyboardWatchdog */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -555,6 +696,12 @@
 						CreatedOnToolsVersion = 15.3;
 					};
 					D500001 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					KO500001 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					KQ500001 = {
 						CreatedOnToolsVersion = 26.6;
 					};
 				};
@@ -578,6 +725,8 @@
 				AA500001 /* XMT */,
 				AA500002 /* XMTTests */,
 				D500001 /* XMTVirtualKeyboard */,
+				KO500001 /* XMTKeyboardOwner */,
+				KQ500001 /* XMTKeyboardWatchdog */,
 			);
 		};
 /* End PBXProject section */
@@ -617,6 +766,8 @@
 				H100025 /* TranscriptHistoryPanelView.swift in Sources */,
 				AA000001 /* XMTApp.swift in Sources */,
 				AA000002 /* AppDelegate.swift in Sources */,
+				MR000001 /* ModuleCatalog.swift in Sources */,
+				MR000003 /* ModuleRegistry.swift in Sources */,
 				AA000003 /* HotKeyNames.swift in Sources */,
 				AA000004 /* AXWindowInfo.swift in Sources */,
 				AA000005 /* ScreenCoordinates.swift in Sources */,
@@ -636,10 +787,16 @@
 				B000002 /* TriggerArbitrator.swift in Sources */,
 				B000003 /* TriggerEvents.swift in Sources */,
 				VR000001 /* VoiceBindingRouter.swift in Sources */,
+				IR000001 /* InputRoutingState.swift in Sources */,
+				IR000003 /* StandardShortcutProvider.swift in Sources */,
+				IR000005 /* InputRoutingCoordinator.swift in Sources */,
 				B000004 /* ConfigFile.swift in Sources */,
 				B000005 /* EffectiveSettings.swift in Sources */,
 				B000006 /* ConfigReloader.swift in Sources */,
 				B000007 /* ShortcutDTO.swift in Sources */,
+				CC000001 /* ConfigurationCoordinator.swift in Sources */,
+				LS000001 /* LocalSettingsRepository.swift in Sources */,
+				LS000003 /* LiveLocalSettingsRepository.swift in Sources */,
 				B000008 /* DeviceSelector.swift in Sources */,
 				B000009 /* DeviceTable.swift in Sources */,
 				B000010 /* BluetoothLinkOracle.swift in Sources */,
@@ -655,6 +812,10 @@
 				B000020 /* VoiceTranscriptionModule.swift in Sources */,
 				F000001 /* VoiceRecordingOverlay.swift in Sources */,
 				C000001 /* KeyboardSafetyLifecycle.swift in Sources */,
+				KS000001 /* KeyboardSafetyRuntime.swift in Sources */,
+				KP000001 /* KeyboardPolicyContract.swift in Sources */,
+				KW000001 /* KeyboardWireContract.swift in Sources */,
+				KT000001 /* KeyboardTransformationPipeline.swift in Sources */,
 				B000021 /* VoiceSettingsView.swift in Sources */,
 				F000002 /* VoiceBindingRecorder.swift in Sources */,
 				F000003 /* VoiceActionListModel.swift in Sources */,
@@ -690,10 +851,14 @@
 				B000030 /* TriggerArbitrator.swift in Sources */,
 				B000031 /* TriggerEvents.swift in Sources */,
 				VR000002 /* VoiceBindingRouter.swift in Sources */,
+				IR000002 /* InputRoutingState.swift in Sources */,
+				MR000002 /* ModuleCatalog.swift in Sources */,
+				IR000004 /* StandardShortcutProvider.swift in Sources */,
 				B000032 /* ConfigFile.swift in Sources */,
 				B000033 /* EffectiveSettings.swift in Sources */,
 				B000034 /* ConfigReloader.swift in Sources */,
 				B000035 /* ShortcutDTO.swift in Sources */,
+				LS000002 /* LocalSettingsRepository.swift in Sources */,
 				B000036 /* DeviceSelector.swift in Sources */,
 				B000037 /* BoundedAudioQueue.swift in Sources */,
 				B000039 /* VoiceSessionMachine.swift in Sources */,
@@ -702,7 +867,13 @@
 				B000042 /* TranscriptCommitter.swift in Sources */,
 				B000043 /* PasteService.swift in Sources */,
 				C000002 /* KeyboardSafetyLifecycle.swift in Sources */,
+				KS000002 /* KeyboardSafetyRuntime.swift in Sources */,
+				KP000002 /* KeyboardPolicyContract.swift in Sources */,
+				KW000002 /* KeyboardWireContract.swift in Sources */,
+				KT000002 /* KeyboardTransformationPipeline.swift in Sources */,
 				C000003 /* KeyboardSafetyLifecycleTests.swift in Sources */,
+				KC000001 /* KeyboardContractTests.swift in Sources */,
+				LS000004 /* LocalSettingsRepositoryTests.swift in Sources */,
 				B000023 /* TriggerArbitratorTests.swift in Sources */,
 				B000024 /* ConfigTests.swift in Sources */,
 				B000025 /* DeviceSelectorTests.swift in Sources */,
@@ -728,6 +899,37 @@
 			files = (
 				D000001 /* XMTVirtualKeyboardDevice.iig in Sources */,
 				D000002 /* XMTVirtualKeyboardDevice.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		KO300000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				KO000001 /* OwnerMain.swift in Sources */,
+				KO000002 /* KeyboardSafetyLifecycle.swift in Sources */,
+				KO000003 /* KeyboardSafetyRuntime.swift in Sources */,
+				KO000004 /* KeyboardDomain.swift in Sources */,
+				KO000005 /* KeyboardConfiguration.swift in Sources */,
+				KO000006 /* TapHoldResolver.swift in Sources */,
+				KO000007 /* DeviceIdentityMatcher.swift in Sources */,
+				KO000008 /* KeyboardPolicyContract.swift in Sources */,
+				KO000009 /* KeyboardWireContract.swift in Sources */,
+				KO000010 /* KeyboardTransformationPipeline.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		KQ300000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				KQ000001 /* WatchdogMain.swift in Sources */,
+				KQ000002 /* KeyboardSafetyLifecycle.swift in Sources */,
+				KQ000003 /* KeyboardDomain.swift in Sources */,
+				KQ000004 /* KeyboardConfiguration.swift in Sources */,
+				KQ000005 /* DeviceIdentityMatcher.swift in Sources */,
+				KQ000006 /* KeyboardPolicyContract.swift in Sources */,
+				KQ000007 /* KeyboardWireContract.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -978,6 +1180,50 @@
 			};
 			name = Release;
 		};
+		KO800001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		KO800002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		KQ800001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		KQ800002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1013,6 +1259,24 @@
 			buildConfigurations = (
 				D800001 /* Debug */,
 				D800002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		KO700001 /* Build configuration list for PBXNativeTarget "XMTKeyboardOwner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				KO800001 /* Debug */,
+				KO800002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		KQ700001 /* Build configuration list for PBXNativeTarget "XMTKeyboardWatchdog" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				KQ800001 /* Debug */,
+				KQ800002 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

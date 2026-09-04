@@ -73,7 +73,10 @@ struct KeyboardConfiguration: Equatable, Sendable {
     func validated() throws -> KeyboardConfiguration {
         for device in devices.keys.sorted() {
             guard let policy = devices[device] else { continue }
-            guard !device.rawValue.isEmpty else { throw KeyboardConfigurationError.emptyDeviceIdentity }
+            guard !device.rawValue.isEmpty,
+                  device.rawValue == device.rawValue.trimmingCharacters(in: .whitespacesAndNewlines) else {
+                throw KeyboardConfigurationError.emptyDeviceIdentity
+            }
             try Self.check(policy.timing, device: device, key: nil)
             for key in policy.keys.keys.sorted() {
                 guard let behavior = policy.keys[key] else { continue }
