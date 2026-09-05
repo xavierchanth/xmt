@@ -13,10 +13,15 @@ struct SettingsView: View {
                     Label("Window Mover", systemImage: "rectangle.on.rectangle")
                 }
 
+            KeyboardSettingsView()
+                .tabItem { Label("Keyboard", systemImage: "keyboard") }
+
+            #if XMT_VOICE
             VoiceSettingsView()
                 .tabItem {
                     Label("Voice", systemImage: "waveform")
                 }
+            #endif
         }
         .frame(width: 620, height: 560)
         .padding(20)

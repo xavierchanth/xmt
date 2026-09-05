@@ -42,18 +42,24 @@ protocol VoiceLocalSettingsAdapter: AnyObject {
 @MainActor
 final class LocalSettingsRepository {
     private let windowMover: any WindowMoverLocalSettingsAdapter
-    private let voice: any VoiceLocalSettingsAdapter
+    private let voice: (any VoiceLocalSettingsAdapter)?
+    private let keyboard: (any KeyboardLocalSettingsAdapter)?
 
     init(windowMover: any WindowMoverLocalSettingsAdapter,
-         voice: any VoiceLocalSettingsAdapter) {
+         voice: (any VoiceLocalSettingsAdapter)?, keyboard: (any KeyboardLocalSettingsAdapter)? = nil) {
         self.windowMover = windowMover
         self.voice = voice
+        self.keyboard = keyboard
     }
 
     func snapshot() -> SettingsValues {
         let window = windowMover.readWindowMoverLocalSettings()
-        let voice = voice.readVoiceLocalSettings()
+        guard let voiceAdapter = voice else {
+            return SettingsValues(keyboardCustomization: keyboard?.readKeyboardLocalSettings(), windowMoverEnabled: window.enabled, windowMoverShortcut: window.shortcut)
+        }
+        let voice = voiceAdapter.readVoiceLocalSettings()
         return SettingsValues(
+            keyboardCustomization: keyboard?.readKeyboardLocalSettings(),
             windowMoverEnabled: window.enabled,
             windowMoverShortcut: window.shortcut,
             voiceEnabled: voice.enabled,
@@ -80,7 +86,7 @@ final class LocalSettingsRepository {
             return false
         }
         let activePasteShortcut = try? effective.pasteLatestTranscriptShortcut.value.keyboardShortcut()
-        guard shortcut != activePasteShortcut else {
+        guard voice == nil || shortcut != activePasteShortcut else {
             windowMover.restoreUnmanagedWindowMoverShortcut()
             return false
         }
@@ -90,6 +96,7 @@ final class LocalSettingsRepository {
 
     func acceptVoicePasteLatestShortcut(_ shortcut: KeyboardShortcuts.Shortcut?,
                                         effective: EffectiveSettings) -> Bool {
+        guard let voice else { return false }
         guard !effective.pasteLatestTranscriptShortcut.isManaged else {
             voice.restoreVoicePasteLatestShortcut(effective.pasteLatestTranscriptShortcut)
             return false
@@ -105,6 +112,11 @@ final class LocalSettingsRepository {
 
     func restoreShortcutStorage(from effective: EffectiveSettings) {
         windowMover.restoreWindowMoverShortcut(effective.windowMoverShortcut)
-        voice.restoreVoicePasteLatestShortcut(effective.pasteLatestTranscriptShortcut)
+        voice?.restoreVoicePasteLatestShortcut(effective.pasteLatestTranscriptShortcut)
+    }
+
+    func persistKeyboardSettings(_ value: KeyboardCustomizationDTO) throws {
+        guard let keyboard else { throw KeyboardSettingsError.unavailable }
+        try keyboard.persistKeyboardLocalSettings(value)
     }
 }

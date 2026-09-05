@@ -12,6 +12,29 @@ struct KeyboardPolicyDTO: Codable, Equatable, Sendable {
         let identity: Identity
         let timing: Timing
         let keys: [Key]
+        let productSemantics: Bool
+
+        init(id: String, identity: Identity, timing: Timing, keys: [Key],
+             productSemantics: Bool = false) {
+            self.id = id
+            self.identity = identity
+            self.timing = timing
+            self.keys = keys
+            self.productSemantics = productSemantics
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, identity, timing, keys, productSemantics
+        }
+
+        init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            id = try values.decode(String.self, forKey: .id)
+            identity = try values.decode(Identity.self, forKey: .identity)
+            timing = try values.decode(Timing.self, forKey: .timing)
+            keys = try values.decode([Key].self, forKey: .keys)
+            productSemantics = try values.decodeIfPresent(Bool.self, forKey: .productSemantics) ?? false
+        }
     }
 
     struct Identity: Codable, Equatable, Hashable, Sendable {
@@ -140,7 +163,8 @@ struct ValidatedKeyboardOwnerPolicy: Equatable, Sendable {
                     timing: key.timing.map(Self.timing)
                 )
             }
-            configuration[id] = DeviceKeyboardPolicy(timing: defaultTiming, keys: keys)
+            configuration[id] = DeviceKeyboardPolicy(timing: defaultTiming, keys: keys,
+                                                      productSemantics: device.productSemantics)
             devices.append(.init(
                 id: id,
                 identityRule: KeyboardDeviceRule(

@@ -19,11 +19,13 @@ struct ConfigFile: Codable, Equatable, Sendable {
     let version: Int
     var windowMover: WindowMover = .init()
     var voice: Voice = .init()
+    var keyboardCustomization: KeyboardCustomizationDTO = .init()
 
-    private enum CodingKeys: String, CodingKey { case version, windowMover, voice }
+    private enum CodingKeys: String, CodingKey { case version, windowMover, voice, keyboardCustomization }
 
-    init(version: Int, windowMover: WindowMover = .init(), voice: Voice = .init()) {
+    init(version: Int, windowMover: WindowMover = .init(), voice: Voice = .init(), keyboardCustomization: KeyboardCustomizationDTO = .init()) {
         self.version = version; self.windowMover = windowMover; self.voice = voice
+        self.keyboardCustomization = keyboardCustomization
     }
 
     init(from decoder: Decoder) throws {
@@ -31,6 +33,7 @@ struct ConfigFile: Codable, Equatable, Sendable {
         version = try box.decode(Int.self, forKey: .version)
         windowMover = try box.decodeIfPresent(WindowMover.self, forKey: .windowMover) ?? .init()
         voice = try box.decodeIfPresent(Voice.self, forKey: .voice) ?? .init()
+        keyboardCustomization = try box.decodeIfPresent(KeyboardCustomizationDTO.self, forKey: .keyboardCustomization) ?? .init()
     }
 
     struct WindowMover: Codable, Equatable, Sendable {
@@ -178,6 +181,7 @@ struct ConfigFile: Codable, Equatable, Sendable {
     }
 
     func validate() throws {
+        try keyboardCustomization.validate()
         if let shortcut = windowMover.shortcut {
             if case .unbound = shortcut { throw ConfigDiagnostic.invalidValue(path: "windowMover.shortcut", reason: "must be a key shortcut; unbound is not supported") }
             guard case .key = shortcut else { throw ConfigDiagnostic.invalidValue(path: "windowMover.shortcut", reason: "must be a standard key shortcut") }

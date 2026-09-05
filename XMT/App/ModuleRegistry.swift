@@ -16,12 +16,12 @@ final class ModuleRegistry {
         guard !hasRegistered else { return }
         hasRegistered = true
         WindowMoverModule.shared.register()
-        VoiceTranscriptionModule.shared.register()
+        if XMTBuildFeatures.voice { VoiceTranscriptionModule.shared.register() }
         logger.notice("Registered \(self.catalog.descriptors.count, privacy: .public) compiled-in modules")
     }
 
     func applyConfiguration(_ value: EffectiveSettings) {
-        VoiceTranscriptionModule.shared.applyConfiguration(value)
+        if XMTBuildFeatures.voice { VoiceTranscriptionModule.shared.applyConfiguration(value) }
         WindowMoverModule.shared.applyManaged(
             enabled: value.windowMoverEnabled,
             shortcut: value.windowMoverShortcut
@@ -29,11 +29,11 @@ final class ModuleRegistry {
     }
 
     func applicationDidBecomeActive() {
-        VoiceTranscriptionModule.shared.refreshDevices()
+        if XMTBuildFeatures.voice { VoiceTranscriptionModule.shared.refreshDevices() }
     }
 
     func configurationDidBecomeReady() async {
-        await VoiceTranscriptionModule.shared.completeInitialConfiguration()
+        if XMTBuildFeatures.voice { await VoiceTranscriptionModule.shared.completeInitialConfiguration() }
     }
 
     func dispatch(_ event: SemanticActionEvent) {
@@ -62,7 +62,7 @@ final class ModuleRegistry {
 
     func stopAll() {
         WindowMoverModule.shared.stop()
-        VoiceTranscriptionModule.shared.stop()
+        if XMTBuildFeatures.voice { VoiceTranscriptionModule.shared.stop() }
         hasRegistered = false
     }
 }

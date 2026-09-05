@@ -32,6 +32,8 @@ A validated compiled-in catalog now declares module identities, permissions, and
 
 ## Voice Transcription validation gaps
 
+Voice is disabled by default through the build-time `XMT_VOICE` feature gate. Enable it with `XMT_FEATURES=XMT_VOICE` for the validation below; this gate does not close any hardware-validation gaps.
+
 The module is implemented, wired into the app delegate, the menu, Settings, and configuration, and it builds into the Release target. What is missing is evidence that it works. **Nothing below has been observed on hardware**, and the [specification](../specification/voice-transcription.md) states only what the code does, never what a device did.
 
 Unvalidated by manual exercise:
@@ -67,6 +69,10 @@ A Raycast client is also deferred. It must consume an app-owned, stable JSON bou
 - **Reload is explicit, not observed.** [Declarative configuration](../architecture/configuration.md#loading-and-reloads) intends file-system observation with coalescing. The implementation reloads at launch, whenever the app becomes active, and on a Settings button. Nothing watches the file, which is the intended design's remaining delta and not a defect in the current behavior.
 
 ## Keyboard Customization feasibility
+
+The non-live product layer now includes the [Keyboard settings surface](../specification/keyboard-customization.md), explicit profiles, per-device/per-key editable timings, managed-source resolution, and a pure Hyper/home-row policy compiler. Registration reconciliation, modifier composition, selective gesture updates, stale/duplicate acknowledgements, and bounded output execution have regression coverage. These are configuration/model capabilities, not an operational keyboard backend. The Settings tab explicitly reports unavailable and opens no devices.
+
+Remaining implementation and evidence gates include full HID-interface forwarding preflight, physical acquisition with neutral handover, authenticated live transport, independent watchdog enforcement, Caps/Fn state and LED handling, signing/packaging, and separately authorized external/built-in keyboard trials. A noncooperative fake sink is failure-notified and isolated from concurrent cleanup; this does not prove physical release. Voice remains default-disabled.
 
 The approved T-1 spike is ready to test whether the protected-input architecture in [Keyboard Customization](../architecture/keyboard-customization.md) is feasible. “Approved” selects a direction; it does not assert system-extension entitlement approval, successful installation, seizure release behavior, or working hardware interception.
 

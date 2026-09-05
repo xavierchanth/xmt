@@ -17,7 +17,7 @@ A relative or empty `XDG_CONFIG_HOME` is ignored in favour of `~/.config`. The f
 
 ## Schema
 
-The document is a JSON object with a required integer `version`. The only supported version is **1**; any other value is rejected. Both section objects are optional, and unknown keys anywhere are ignored, so a partial file is valid.
+The document is a JSON object with a required integer `version`. The only supported version is **1**; any other value is rejected. The `windowMover`, `voice`, and `keyboardCustomization` section objects are optional. Unknown object fields are ignored; keys inside the keyboard per-key timing map must name a supported physical position.
 
 ```json
 {
@@ -47,7 +47,9 @@ The document is a JSON object with a required integer `version`. The only suppor
 }
 ```
 
-Field meanings are owned by the modules: [Voice Transcription](voice-transcription.md) for the `voice` section, [Window Mover](window-mover.md) for `windowMover`.
+Field meanings are owned by the modules: [Voice Transcription](voice-transcription.md) for `voice`, [Window Mover](window-mover.md) for `windowMover`, and [Keyboard Customization configuration](keyboard-customization.md) for `keyboardCustomization`.
+
+Standard shortcut reconciliation preserves unchanged registrations and active holds. Changed or removed sources end only their owned holds; disabling an unrelated module does not end a Voice hold. Accepted Voice binding edits update local storage and the installation cache before the configuration snapshot is published.
 
 ### Shortcut values
 

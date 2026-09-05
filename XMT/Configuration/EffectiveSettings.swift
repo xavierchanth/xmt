@@ -326,6 +326,7 @@ enum VoiceHistoryPreferences {
 
 /// Persisted/UI values are partial by definition.
 struct SettingsValues: Equatable, Sendable {
+    var keyboardCustomization: KeyboardCustomizationDTO? = nil
     var windowMoverEnabled: Bool? = nil
     var windowMoverShortcut: ShortcutDTO? = nil
     var voiceEnabled: Bool? = nil
@@ -384,6 +385,7 @@ struct BuiltInSettings: Equatable, Sendable {
 }
 
 struct EffectiveSettings: Equatable, Sendable {
+    let keyboardCustomization: EffectiveKeyboardCustomizationSettings
     let windowMoverEnabled: ResolvedSetting<Bool>
     let windowMoverShortcut: ResolvedSetting<ShortcutDTO>
     let voiceEnabled: ResolvedSetting<Bool>
@@ -406,6 +408,7 @@ struct EffectiveSettings: Equatable, Sendable {
     let fallbackToSystemDefault: ResolvedSetting<Bool>
 
     enum Key: String, CaseIterable, Sendable {
+        case keyboardCustomization
         case windowMoverEnabled, windowMoverShortcut, voiceEnabled, holdToTalkShortcut, toggleRecordingShortcut, cancelShortcut, pasteLatestTranscriptShortcut, outputMode, autoPaste
         case historyEnabled, historyRetentionDays, historyMaxEntries, locale, fnHoldThresholdMs, maxSessionSeconds
         case inputDevicePriority, fallbackToSystemDefault
@@ -418,6 +421,7 @@ struct EffectiveSettings: Equatable, Sendable {
             return .init(value: fallback, source: .builtIn)
         }
         return .init(
+            keyboardCustomization: .resolve(file: config?.keyboardCustomization ?? .init(), local: local.keyboardCustomization ?? .init()),
             windowMoverEnabled: pick(config?.windowMover.enabled, local.windowMoverEnabled, builtIn.windowMoverEnabled),
             windowMoverShortcut: pick(config?.windowMover.shortcut, local.windowMoverShortcut, builtIn.windowMoverShortcut),
             voiceEnabled: pick(config?.voice.enabled, local.voiceEnabled, builtIn.voiceEnabled),
@@ -439,6 +443,7 @@ struct EffectiveSettings: Equatable, Sendable {
     /// Equality includes source, so management/source-only transitions are changes.
     func changedKeys(from old: Self) -> Set<Key> {
         var result = Set<Key>()
+        if keyboardCustomization != old.keyboardCustomization { result.insert(.keyboardCustomization) }
         if windowMoverEnabled != old.windowMoverEnabled { result.insert(.windowMoverEnabled) }
         if windowMoverShortcut != old.windowMoverShortcut { result.insert(.windowMoverShortcut) }
         if voiceEnabled != old.voiceEnabled { result.insert(.voiceEnabled) }

@@ -25,7 +25,9 @@ struct GeneralSettingsView: View {
             }
 
             Section("Permissions") {
-                AccessibilityStatusView(consumerDescription: "Window Mover uses Accessibility to move windows. Voice Transcription uses it only for optional Auto-paste; Fn gestures use Input Monitoring and recording uses Microphone access.")
+                AccessibilityStatusView(consumerDescription: XMTBuildFeatures.voice
+                    ? "Window Mover uses Accessibility to move windows. Voice Transcription uses it only for optional Auto-paste; Fn gestures use Input Monitoring and recording uses Microphone access."
+                    : "Window Mover uses Accessibility to move windows.")
             }
 
             Section("Configuration") {

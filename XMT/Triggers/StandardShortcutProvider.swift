@@ -48,7 +48,7 @@ final class StandardShortcutProvider {
     private let handler: Handler
     private var routing = InputRoutingState()
     private var registrations: [InputSourceID: StandardShortcutRegistration] = [:]
-    private var installationEpoch: UInt64 = 0
+    private var installationEpochs: [InputSourceID: UInt64] = [:]
 
     convenience init(handler: @escaping Handler) {
         self.init(backend: LiveStandardShortcutBackend(), handler: handler)
@@ -61,42 +61,60 @@ final class StandardShortcutProvider {
 
     func reconcile(_ replacement: [StandardShortcutRegistration]) throws {
         let snapshot = try InputRouteSnapshot(replacement.map(\.route))
-        for registration in registrations.values {
+        let replacements = Dictionary(uniqueKeysWithValues: replacement.map { ($0.route.source, $0) })
+        let previousRegistrations = registrations
+        let staleSources = Set(registrations.compactMap { source, registration in
+            guard let replacement = replacements[source] else { return source }
+            return replacement.name == registration.name && replacement.route == registration.route
+                ? nil : source
+        })
+        let newSources = Set(replacements.keys).subtracting(registrations.keys)
+        let enabledChangedSources = Set<InputSourceID>(replacements.compactMap { source, replacement in
+            guard let previous = registrations[source], previous.isEnabled != replacement.isEnabled else {
+                return nil
+            }
+            return source
+        })
+        let changedSources = staleSources.union(newSources).union(enabledChangedSources)
+        let disabledSources = Set(enabledChangedSources.filter {
+            previousRegistrations[$0]?.isEnabled == true && replacements[$0]?.isEnabled == false
+        })
+
+        for source in changedSources {
+            guard let registration = registrations[source] else { continue }
             backend.setEnabled(false, for: registration.name)
             backend.removeHandler(for: registration.name)
+            installationEpochs[source, default: 0] &+= 1
         }
-        deliver(routing.reconfigure(snapshot))
-        registrations.removeAll()
-        installationEpoch &+= 1
+        var events = routing.reconfigure(snapshot)
+        events += routing.interrupt(sources: disabledSources, reason: .activationChanged)
+        registrations = replacements
 
-        for registration in replacement {
-            let source = registration.route.source
-            let epoch = installationEpoch
-            backend.onKeyDown(for: registration.name) { [weak self] in
-                self?.receive(.down(source, isRepeat: false), installationEpoch: epoch)
-            }
-            backend.onKeyUp(for: registration.name) { [weak self] in
-                self?.receive(.up(source), installationEpoch: epoch)
-            }
-            registrations[source] = registration
-            backend.setEnabled(registration.isEnabled, for: registration.name)
+        for source in changedSources {
+            guard let registration = replacements[source] else { continue }
+            install(registration)
         }
+        deliver(events)
     }
 
     func setEnabled(_ enabled: Bool, sources: Set<InputSourceID>,
                     interruption: InputInterruption? = nil) {
-        let disablesActiveRegistration = !enabled && sources.contains {
-            registrations[$0]?.isEnabled == true
-        }
-        if disablesActiveRegistration, let interruption {
-            deliver(routing.interrupt(interruption))
-        }
+        let changedSources = Set(sources.filter { registrations[$0]?.isEnabled != enabled })
+        let disabledSources: Set<InputSourceID> = enabled ? [] : changedSources
+        let events = interruption.map {
+            routing.interrupt(sources: disabledSources, reason: $0)
+        } ?? []
         for source in sources {
             guard var registration = registrations[source] else { continue }
+            guard registration.isEnabled != enabled else { continue }
+            backend.setEnabled(false, for: registration.name)
+            backend.removeHandler(for: registration.name)
+            installationEpochs[source, default: 0] &+= 1
             registration.isEnabled = enabled
             registrations[source] = registration
-            backend.setEnabled(enabled, for: registration.name)
+            install(registration)
         }
+        deliver(events)
     }
 
     func stop() {
@@ -106,16 +124,29 @@ final class StandardShortcutProvider {
             backend.removeHandler(for: registration.name)
         }
         registrations.removeAll()
-        installationEpoch &+= 1
+        for source in Array(installationEpochs.keys) { installationEpochs[source, default: 0] &+= 1 }
         _ = routing.reconfigure(.empty)
     }
 
     private func receive(_ transition: InputSourceTransition, installationEpoch callbackEpoch: UInt64) {
-        guard callbackEpoch == installationEpoch else { return }
         let source: InputSourceID
         switch transition { case .down(let value, _), .up(let value): source = value }
+        guard callbackEpoch == installationEpochs[source] else { return }
         guard registrations[source]?.isEnabled == true else { return }
         deliver(routing.receive(transition, generation: routing.generation))
+    }
+
+    private func install(_ registration: StandardShortcutRegistration) {
+        let source = registration.route.source
+        let epoch = installationEpochs[source, default: 0]
+        installationEpochs[source] = epoch
+        backend.onKeyDown(for: registration.name) { [weak self] in
+            self?.receive(.down(source, isRepeat: false), installationEpoch: epoch)
+        }
+        backend.onKeyUp(for: registration.name) { [weak self] in
+            self?.receive(.up(source), installationEpoch: epoch)
+        }
+        backend.setEnabled(registration.isEnabled, for: registration.name)
     }
 
     private func deliver(_ events: [SemanticActionEvent]) {

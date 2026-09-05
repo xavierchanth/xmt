@@ -15,6 +15,7 @@ actor ConfigReloader {
     let url: URL
     private var local: SettingsValues
     private let builtIn: BuiltInSettings
+    private let includesVoiceBindings: Bool
     private let read: @Sendable (URL) throws -> Data
     private var applyCallbacks: [Apply] = []
     private var reloadTail: Task<Void, Never>?
@@ -23,10 +24,12 @@ actor ConfigReloader {
 
     init(url: URL = ConfigFile.defaultURL(), local: SettingsValues = .init(),
          builtIn: BuiltInSettings = .standard,
+         includesVoiceBindings: Bool = true,
          read: @escaping @Sendable (URL) throws -> Data = { try Data(contentsOf: $0) }) {
         self.url = url
         self.local = local
         self.builtIn = builtIn
+        self.includesVoiceBindings = includesVoiceBindings
         self.read = read
         self.effective = EffectiveSettings.resolve(config: nil, local: local, builtIn: builtIn)
     }
@@ -85,6 +88,8 @@ actor ConfigReloader {
         }
 
         let next = EffectiveSettings.resolve(config: candidate, local: localCandidate, builtIn: builtIn)
+        try localCandidate.keyboardCustomization?.validate()
+        _ = try KeyboardProductPolicyCompiler.compile(next.keyboardCustomization, revision: KeyboardPolicyRevision(1)!)
         for action in actions {
             let resolved: ResolvedSetting<ShortcutDTO>
             switch action { case .holdToTalk: resolved = next.holdToTalkShortcut; case .toggleRecording: resolved = next.toggleRecordingShortcut; case .cancel: resolved = next.cancelShortcut }
@@ -123,8 +128,10 @@ actor ConfigReloader {
             }
         }
         var allBindings: [(String, ShortcutDTO)] = [("windowMover.shortcut", next.windowMoverShortcut.value)]
-        allBindings += located.map { ($0.path, $0.binding) }
-        allBindings.append(("voice.pasteLatestTranscriptShortcut", next.pasteLatestTranscriptShortcut.value))
+        if includesVoiceBindings {
+            allBindings += located.map { ($0.path, $0.binding) }
+            allBindings.append(("voice.pasteLatestTranscriptShortcut", next.pasteLatestTranscriptShortcut.value))
+        }
         for later in allBindings.indices {
             for earlier in 0..<later where allBindings[later].1.conflicts(with: allBindings[earlier].1) {
                 let diagnostic = ConfigDiagnostic.invalidValue(path: allBindings[later].0, reason: "conflicts with \(allBindings[earlier].0)")

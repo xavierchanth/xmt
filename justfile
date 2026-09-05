@@ -2,6 +2,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 project := "XMT.xcodeproj"
 scheme := "XMT"
+features := ""
 build_dir := ".build/xcode"
 app := build_dir + "/Build/Products/Release/XMT.app"
 install_path := "/Applications/XMT.app"
@@ -17,7 +18,8 @@ build:
         -scheme "{{scheme}}" \
         -configuration Release \
         -destination "platform=macOS" \
-        -derivedDataPath "{{build_dir}}"
+        -derivedDataPath "{{build_dir}}" \
+        XMT_FEATURES="{{features}}"
 
 # Build and install XMT in /Applications, then launch and verify it.
 install: build
@@ -102,7 +104,8 @@ test:
         -scheme "{{scheme}}" \
         -configuration Debug \
         -destination "platform=macOS" \
-        -derivedDataPath "{{build_dir}}"
+        -derivedDataPath "{{build_dir}}" \
+        XMT_FEATURES="{{features}}"
 
 # Run all configured repository checks.
 check: docs-check test

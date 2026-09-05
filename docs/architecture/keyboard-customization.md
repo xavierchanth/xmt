@@ -19,9 +19,11 @@ Scope is enforced before key-state interpretation, not merely when emitting outp
 
 ## Event resolution and timing
 
-The initial resolver is timing-only; it does not use application context, words, chords, or predictions to decide tap versus hold. Tap, hold, and quick-tap timing is configurable per device and may be overridden per key. The resolver contains no hardcoded QMK timing assumptions or copied QMK defaults.
+Home-row resolution is timing-only; it does not use application context, words, or predictions. Caps additionally resolves as Hyper when another key is pressed, so Hyper shortcuts need not wait for the threshold. Hold and quick-tap timing is configurable per device and may be overridden per key. Caps quick-tap stays disabled so a recent Escape does not suppress a Hyper gesture.
 
-Input events become per-device key-state transitions. The resolver applies the effective timing policy, emits a resolved logical action, and only then sends virtual-keyboard output. Device removal, disabling a capability, lease loss, or teardown cancels unresolved state without inventing a tap.
+Hyper or a conventional physical modifier makes newly pressed home-row keys ordinary shortcut keys, with that interpretation fixed until release. Home-row-generated modifiers can stack. Physical and generated modifiers share output ownership, preserving held modifiers through either release order. Deferred taps retain event ordering relative to physical modifier transitions.
+
+Input events become per-device key-state transitions. The resolver applies the effective timing policy, emits a resolved logical action, and only then sends virtual-keyboard output. Timing updates preserve the policy captured by an existing gesture; structural updates cancel affected state without inventing a tap, and unchanged capability ownership remains intact. Device removal, lease loss, or teardown cancels unresolved state without inventing a tap.
 
 Caps Lock state is reconciled from keyboard events and system state changes. Reconciliation is event-driven, not polling. If observed Caps Lock state becomes stale or disagrees with the intended state after recovery or reconnection, the next relevant state event schedules an idempotent correction.
 

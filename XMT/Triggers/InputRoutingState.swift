@@ -71,6 +71,17 @@ struct InputRoute: Equatable, Sendable {
     let source: InputSourceID
     let action: ModuleActionID
     let activation: ActionActivation
+    /// The configured physical chord, when the provider uses a stable storage slot as its
+    /// source identity. This keeps a slot whose key changed from looking like an unchanged route.
+    let chord: ShortcutDTO?
+
+    init(source: InputSourceID, action: ModuleActionID, activation: ActionActivation,
+         chord: ShortcutDTO? = nil) {
+        self.source = source
+        self.action = action
+        self.activation = activation
+        self.chord = chord
+    }
 }
 
 enum InputRouteSnapshotError: Error, Equatable, Sendable {
@@ -184,13 +195,24 @@ struct InputRoutingState: Equatable, Sendable {
         }
     }
 
-    /// Replacement is an interruption boundary. Callers install providers for the returned
-    /// generation only after interpreting the balanced end events.
+    /// Replaces only routes whose full physical and semantic identity changed. Unchanged routes
+    /// retain pressed/hold ownership, so an identical configuration publication is idempotent.
     mutating func reconfigure(_ replacement: InputRouteSnapshot) -> [SemanticActionEvent] {
-        let events = endActiveHolds(reason: .reconfigured)
-        pressedSources.removeAll()
+        guard replacement != snapshot else { return [] }
+        let staleSources = Set(snapshot.routes.compactMap { route in
+            replacement.route(for: route.source) == route ? nil : route.source
+        })
+        let events = endActiveHolds(ownedBy: staleSources, reason: .reconfigured)
+        pressedSources.subtract(staleSources)
         snapshot = replacement
         generation &+= 1
+        return events
+    }
+
+    /// Interrupts only the supplied provider sources. Other modules and actions retain ownership.
+    mutating func interrupt(sources: Set<InputSourceID>, reason: InputInterruption) -> [SemanticActionEvent] {
+        let events = endActiveHolds(ownedBy: sources, reason: reason)
+        pressedSources.subtract(sources)
         return events
     }
 
@@ -205,6 +227,13 @@ struct InputRoutingState: Equatable, Sendable {
     private mutating func endActiveHolds(reason: InputInterruption) -> [SemanticActionEvent] {
         let actions = holdOwners.keys.sorted()
         holdOwners.removeAll()
+        return actions.map { .ended($0, reason: .interrupted(reason)) }
+    }
+
+    private mutating func endActiveHolds(ownedBy sources: Set<InputSourceID>,
+                                         reason: InputInterruption) -> [SemanticActionEvent] {
+        let actions = holdOwners.compactMap { sources.contains($0.value) ? $0.key : nil }.sorted()
+        for action in actions { holdOwners.removeValue(forKey: action) }
         return actions.map { .ended($0, reason: .interrupted(reason)) }
     }
 }

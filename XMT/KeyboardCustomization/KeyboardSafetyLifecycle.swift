@@ -178,6 +178,11 @@ struct KeyboardSafetyLifecycle: Equatable, Sendable {
     private(set) var breakerIsOpen = false
     private(set) var backoffIsActive = false
     private var nextAttemptSequence: UInt64 = 1
+    private var lostOutputGeneration: [KeyboardSafetySessionID: UInt64] = [:]
+    private var lostLeases: Set<KeyboardSafetyLeaseID> = []
+    private var disabledIntentRevision: [KeyboardSafetySessionID: KeyboardPolicyRevision] = [:]
+    private var lostWatchdogGeneration: [KeyboardSafetySessionID: UInt64] = [:]
+    private var lastStartedSession: KeyboardSafetySessionID?
 
     init(failureThreshold: KeyboardSafetyFailureThreshold) {
         self.failureThreshold = failureThreshold
@@ -224,10 +229,17 @@ struct KeyboardSafetyLifecycle: Equatable, Sendable {
         case .start(let session):
             guard activeSession != session else { break }
             releaseIfNeeded(into: &commands)
+            if lastStartedSession != session {
+                lostOutputGeneration.removeAll()
+                lostLeases.removeAll()
+                disabledIntentRevision.removeAll()
+                lostWatchdogGeneration.removeAll()
+                lastStartedSession = session
+                nextAttemptSequence = 1
+            }
             lifecycle = .running(session)
             output = nil; lease = nil; intentRevision = nil; watchdog = nil
             failuresSinceReset = 0; breakerIsOpen = false; backoffIsActive = false
-            nextAttemptSequence = 1
 
         case .stop:
             releaseIfNeeded(into: &commands)
@@ -236,46 +248,82 @@ struct KeyboardSafetyLifecycle: Equatable, Sendable {
             backoffIsActive = false
 
         case .outputReady(let endpoint) where endpoint.session == activeSession:
+            let floor = lostOutputGeneration[endpoint.session] ?? 0
+            guard endpoint.generation > floor else { break }
+            if let output, endpoint.generation < output.generation { break }
+            if output != nil, output != endpoint { releaseIfNeeded(into: &commands) }
             output = endpoint
         case .outputReady:
             break
 
-        case .outputLost(let endpoint) where endpoint == output:
-            output = nil
-            releaseIfNeeded(into: &commands)
+        case .outputLost(let endpoint) where endpoint.session == activeSession:
+            lostOutputGeneration[endpoint.session] = max(
+                lostOutputGeneration[endpoint.session] ?? 0,
+                endpoint.generation
+            )
+            if let current = output, current.generation <= endpoint.generation {
+                output = nil
+                releaseIfNeeded(into: &commands)
+            }
         case .outputLost:
             break
 
-        case .leaseGranted(let granted) where granted.session == activeSession:
+        case .leaseGranted(let granted) where granted.session == activeSession && !lostLeases.contains(granted):
+            if let current = lease, current != granted {
+                lostLeases.insert(current)
+                releaseIfNeeded(into: &commands)
+            }
             lease = granted
         case .leaseGranted:
             break
 
-        case .leaseLost(let lost) where lost == lease:
-            lease = nil
-            releaseIfNeeded(into: &commands)
+        case .leaseLost(let lost) where lost.session == activeSession:
+            lostLeases.insert(lost)
+            if lost == lease {
+                lease = nil
+                releaseIfNeeded(into: &commands)
+            }
         case .leaseLost:
             break
 
         case .intentEnabled(let session, let revision) where session == activeSession:
+            guard disabledIntentRevision[session].map({ revision > $0 }) ?? true,
+                  intentRevision.map({ revision >= $0 }) ?? true else { break }
+            if intentRevision != nil, intentRevision != revision { releaseIfNeeded(into: &commands) }
             intentRevision = revision
         case .intentEnabled:
             break
 
         case .intentDisabled(let session) where session == activeSession:
+            if let intentRevision {
+                disabledIntentRevision[session] = max(
+                    disabledIntentRevision[session] ?? intentRevision,
+                    intentRevision
+                )
+            }
             intentRevision = nil
             releaseIfNeeded(into: &commands)
         case .intentDisabled:
             break
 
         case .watchdogHealthy(let healthy) where healthy.session == activeSession:
+            let floor = lostWatchdogGeneration[healthy.session] ?? 0
+            guard healthy.generation > floor else { break }
+            if let watchdog, healthy.generation < watchdog.generation { break }
+            if watchdog != nil, watchdog != healthy { releaseIfNeeded(into: &commands) }
             watchdog = healthy
         case .watchdogHealthy:
             break
 
-        case .watchdogLost(let lost) where lost == watchdog:
-            watchdog = nil
-            releaseIfNeeded(into: &commands)
+        case .watchdogLost(let lost) where lost.session == activeSession:
+            lostWatchdogGeneration[lost.session] = max(
+                lostWatchdogGeneration[lost.session] ?? 0,
+                lost.generation
+            )
+            if let current = watchdog, current.generation <= lost.generation {
+                watchdog = nil
+                releaseIfNeeded(into: &commands)
+            }
         case .watchdogLost:
             break
 
@@ -283,6 +331,8 @@ struct KeyboardSafetyLifecycle: Equatable, Sendable {
             if ownership == .requested(id) {
                 ownership = .owned(id)
                 backoffIsActive = false
+            } else if ownership == .owned(id) {
+                break
             } else {
                 commands.append(.release(id))
             }

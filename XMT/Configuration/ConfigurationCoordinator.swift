@@ -14,7 +14,8 @@ final class ConfigurationCoordinator: ObservableObject {
     static let shared = ConfigurationCoordinator(localSettings: .shared)
 
     @Published private(set) var diagnostic: String?
-    private(set) var effective = EffectiveSettings.resolve(config: nil)
+    @Published private(set) var effective = EffectiveSettings.resolve(config: nil)
+    @Published private(set) var keyboardCommitIsActive = false
 
     private let logger = Logger(subsystem: "com.xavierchanth.xmt", category: "Configuration")
     private let localSettings: LocalSettingsRepository
@@ -70,6 +71,33 @@ final class ConfigurationCoordinator: ObservableObject {
         diagnostic = nil
     }
 
+    /// Single-flight editing uses the same validated publication transaction as shortcuts.
+    func updateKeyboardSettings(_ update: (inout KeyboardCustomizationDTO) -> Void) async {
+        guard !keyboardCommitIsActive else { return }
+        keyboardCommitIsActive = true
+        defer { keyboardCommitIsActive = false }
+        let original = localSettings.snapshot().keyboardCustomization ?? .init()
+        var proposed = original
+        update(&proposed)
+        let accepted = proposed
+        do {
+            _ = try await stageAndReload(beforePublish: { [weak self] result in
+                guard let self else { throw ConfigurationCoordinatorError.notReady }
+                try await self.persistKeyboardBeforePublish(result, original: original, accepted: accepted)
+            }, updatingLocal: { $0.keyboardCustomization = accepted })
+        } catch {
+            diagnostic = String(describing: error)
+        }
+    }
+
+    private func persistKeyboardBeforePublish(_ result: ConfigLoadResult, original: KeyboardCustomizationDTO,
+                                             accepted: KeyboardCustomizationDTO) throws {
+        guard result.effective.keyboardCustomization.permitsLocalChange(from: original, to: accepted) else {
+            throw ConfigDiagnostic.invalidValue(path: "keyboardCustomization", reason: "This setting is now managed by configuration. Reload and try again.")
+        }
+        try localSettings.persistKeyboardSettings(accepted)
+    }
+
     /// Settings callback that validates the cross-module collision boundary before the shared
     /// shortcut provider is reconfigured.
     func userChangedWindowMoverShortcut(_ shortcut: KeyboardShortcuts.Shortcut?) {
@@ -85,7 +113,7 @@ final class ConfigurationCoordinator: ObservableObject {
     private func configureAndReload() async {
         logger.notice("Resolving initial application configuration")
         let local = localSettings.snapshot()
-        let loader = ConfigReloader(local: local)
+        let loader = ConfigReloader(local: local, includesVoiceBindings: XMTBuildFeatures.voice)
         reloader = loader
         await loader.addApplyCallback { [weak self] result in
             await self?.publish(result.effective)

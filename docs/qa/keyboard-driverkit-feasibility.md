@@ -60,7 +60,7 @@ just build-keyboard-feasibility
 
 Observed properties of the produced bundle:
 
-- `XMTKeyboardOwner` and `XMTKeyboardWatchdog` are universal command-line executables with `arm64` and `x86_64` slices. Each reports wire protocol version `1` through its only diagnostic argument and otherwise exits immediately.
+- `XMTKeyboardOwner` and `XMTKeyboardWatchdog` are universal command-line executables with `arm64` and `x86_64` slices. Each reports wire protocol version `2` through its only diagnostic argument and otherwise exits immediately.
 - The shared contract rejects oversized payloads, unsupported versions, incorrect peer roles, cross-session lease use, malformed strict policy, and stale policy revisions in unit tests.
 - `iig` generated the interface from `XMTVirtualKeyboardDevice.iig` and the C++ implementation compiled and linked against `DriverKit` and `HIDDriverKit`.
 - The product is a universal `XMTVirtualKeyboard.dext` containing `arm64` and `x86_64` slices.

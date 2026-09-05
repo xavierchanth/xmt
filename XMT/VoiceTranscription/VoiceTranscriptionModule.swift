@@ -459,6 +459,22 @@ final class VoiceTranscriptionModule: ObservableObject {
         do {
             result = try await ConfigurationCoordinator.shared.stageAndReload(
                 requiringUnmanaged: [action],
+                beforePublish: { @MainActor [weak self] candidate in
+                    guard let self else { throw CancellationError() }
+                    let accepted: ResolvedSetting<[ShortcutDTO]>
+                    switch action {
+                    case .holdToTalk: accepted = candidate.effective.holdToTalkBindings
+                    case .toggleRecording: accepted = candidate.effective.toggleRecordingBindings
+                    case .cancel: accepted = candidate.effective.cancelBindings
+                    }
+                    guard !accepted.isManaged, accepted.value == bindings else {
+                        throw ConfigDiagnostic.invalidValue(
+                            path: "voice.\(action.rawValue)Bindings",
+                            reason: "became managed before the change completed"
+                        )
+                    }
+                    try self.persistVoiceBindings(bindings, action: action)
+                },
                 updatingLocal: { staged in
                     switch action {
                     case .holdToTalk: staged.holdToTalkBindings = bindings
@@ -479,13 +495,21 @@ final class VoiceTranscriptionModule: ObservableObject {
         let accepted: ResolvedSetting<[ShortcutDTO]>
         switch action { case .holdToTalk: accepted = result.effective.holdToTalkBindings; case .toggleRecording: accepted = result.effective.toggleRecordingBindings; case .cancel: accepted = result.effective.cancelBindings }
         guard !accepted.isManaged, accepted.value == bindings else { return "This binding became managed before the change completed." }
-        let key: String
-        switch action { case .holdToTalk: key = "hold"; unmanagedHoldBindings = bindings; case .toggleRecording: key = "toggle"; unmanagedToggleBindings = bindings; case .cancel: key = "cancel"; unmanagedCancelBindings = bindings }
-        let defaults = UserDefaults.standard
-        defaults.set(true, forKey: "voice.binding.\(key).explicit")
-        if let data = try? JSONEncoder().encode(bindings) { defaults.set(data, forKey: "voice.binding.\(key).value") }
         ConfigurationCoordinator.shared.clearDiagnostic()
         return nil
+    }
+
+    private func persistVoiceBindings(_ bindings: [ShortcutDTO], action: VoiceBindingAction) throws {
+        let data = try JSONEncoder().encode(bindings)
+        let key: String
+        switch action {
+        case .holdToTalk: key = "hold"; unmanagedHoldBindings = bindings
+        case .toggleRecording: key = "toggle"; unmanagedToggleBindings = bindings
+        case .cancel: key = "cancel"; unmanagedCancelBindings = bindings
+        }
+        let defaults = UserDefaults.standard
+        defaults.set(true, forKey: "voice.binding.\(key).explicit")
+        defaults.set(data, forKey: "voice.binding.\(key).value")
     }
 
     func restoreEffectivePasteLatestShortcut(_ shortcut: ResolvedSetting<ShortcutDTO>) {
@@ -507,7 +531,8 @@ final class VoiceTranscriptionModule: ObservableObject {
     func applyConfiguration(_ value: EffectiveSettings) {
         let changed = value.changedKeys(from: effective)
         effective = value; managedKeys = Set(EffectiveSettings.Key.allCases.filter { key in
-            switch key { case .voiceEnabled: return value.voiceEnabled.isManaged
+            switch key { case .keyboardCustomization: return false
+            case .voiceEnabled: return value.voiceEnabled.isManaged
             case .holdToTalkShortcut: return value.holdToTalkShortcut.isManaged
             case .toggleRecordingShortcut: return value.toggleRecordingShortcut.isManaged
             case .cancelShortcut: return value.cancelShortcut.isManaged

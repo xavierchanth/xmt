@@ -2,6 +2,7 @@
 extension LocalSettingsRepository {
     static let shared = LocalSettingsRepository(
         windowMover: WindowMoverModule.shared,
-        voice: VoiceTranscriptionModule.shared
+        voice: XMTBuildFeatures.voice ? VoiceTranscriptionModule.shared : nil,
+        keyboard: KeyboardSettingsStore.shared
     )
 }

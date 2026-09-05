@@ -7,6 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		KB200001 = {isa = PBXBuildFile; fileRef = KB100001; };
+		KB200002 = {isa = PBXBuildFile; fileRef = KB100001; };
+		KB200003 = {isa = PBXBuildFile; fileRef = KB100002; };
+		KB200004 = {isa = PBXBuildFile; fileRef = KB100002; };
+		KB200005 = {isa = PBXBuildFile; fileRef = KB100003; };
+		KB200006 = {isa = PBXBuildFile; fileRef = KB100004; };
 		AA000001 /* XMTApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100001 /* XMTApp.swift */; };
 		AA000002 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100002 /* AppDelegate.swift */; };
 		MR000001 /* ModuleCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = MR100001 /* ModuleCatalog.swift */; };
@@ -161,6 +167,10 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		KB100001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XMT/KeyboardCustomization/KeyboardProductSettings.swift; sourceTree = SOURCE_ROOT; };
+		KB100002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XMT/KeyboardCustomization/KeyboardSettingsStore.swift; sourceTree = SOURCE_ROOT; };
+		KB100003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XMT/Settings/KeyboardSettingsView.swift; sourceTree = SOURCE_ROOT; };
+		KB100004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XMTTests/KeyboardProductSettingsTests.swift; sourceTree = SOURCE_ROOT; };
 		AA100001 /* XMTApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XMTApp.swift; sourceTree = "<group>"; };
 		AA100002 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		MR100001 /* ModuleCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModuleCatalog.swift; sourceTree = "<group>"; };
@@ -550,6 +560,10 @@
 				KT100001 /* KeyboardTransformationPipeline.swift */,
 				EE10001 /* KeyboardDomain.swift */,
 				EE10002 /* KeyboardConfiguration.swift */,
+				KB100001,
+				KB100002,
+				KB100003,
+				KB100004,
 				EE10003 /* TapHoldResolver.swift */,
 				FF10001 /* DeviceIdentityMatcher.swift */,
 			);
@@ -765,6 +779,9 @@
 				H100023 /* TranscriptHistoryPanelController.swift in Sources */,
 				H100025 /* TranscriptHistoryPanelView.swift in Sources */,
 				AA000001 /* XMTApp.swift in Sources */,
+				KB200001,
+				KB200003,
+				KB200005,
 				AA000002 /* AppDelegate.swift in Sources */,
 				MR000001 /* ModuleCatalog.swift in Sources */,
 				MR000003 /* ModuleRegistry.swift in Sources */,
@@ -847,6 +864,9 @@
 				AA000019 /* WindowGeometry.swift in Sources */,
 				W000001 /* ScreenCoordinates.swift in Sources */,
 				AA000021 /* WindowGeometryTests.swift in Sources */,
+				KB200002,
+				KB200004,
+				KB200006,
 				B000029 /* FnEventObserver.swift in Sources */,
 				B000030 /* TriggerArbitrator.swift in Sources */,
 				B000031 /* TriggerEvents.swift in Sources */,
@@ -994,7 +1014,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited) $(XMT_FEATURES)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
@@ -1050,6 +1070,7 @@
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(XMT_FEATURES)";
 			};
 			name = Release;
 		};

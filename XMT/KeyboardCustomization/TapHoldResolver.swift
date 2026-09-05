@@ -19,6 +19,7 @@ import Foundation
 /// - Time is monotonic. An out-of-order timestamp is clamped, never trapped on.
 /// - No idle work is requested: `deadline` is nil whenever nothing is pending.
 struct TapHoldResolver {
+    static let maximumBufferedInputsPerDevice = 64
     private(set) var configuration: KeyboardConfiguration
 
     init(configuration: KeyboardConfiguration = .excludingEverything) {
@@ -57,15 +58,24 @@ struct TapHoldResolver {
         var holds: [KeyCode: ModifierSet] = [:]
         /// Physical key -> instant its last tap released, for quick tap.
         var lastTapEnd: [KeyCode: KeyboardInstant] = [:]
+        /// Physical downs observed from the seized device, including unresolved keys.
+        var pressed: Set<KeyCode> = []
+        /// Presses invalidated by a policy change remain consumed until their real key-up.
+        var suppressedUntilUp: Set<KeyCode> = []
 
         var isEmpty: Bool {
             pending == nil && inbox.isEmpty && down.isEmpty && holds.isEmpty && lastTapEnd.isEmpty
+                && pressed.isEmpty && suppressedUntilUp.isEmpty
         }
     }
 
     private var devices: [KeyboardDeviceID: DeviceState] = [:]
     /// Reference counts, so two keys holding Control emit one Control down.
     private var modifierCounts: [KeyModifier: Int] = [:]
+    private var physicalModifierCounts: [KeyModifier: Int] = [:]
+    private var hyperHoldCount = 0
+    private var syntheticModifierOutputs: Set<KeyModifier> = []
+    private var physicalModifierOutputs: Set<KeyCode> = []
     /// The same counting for ordinary keys: two devices — or two physical keys
     /// mapped to one output — can hold one virtual key, and it must be
     /// released once, by the last owner.
@@ -78,19 +88,20 @@ struct TapHoldResolver {
         let now = max(instant, lastInstant ?? instant)
         lastInstant = now
         var outputs: [KeyboardOutput] = []
+        var failure: KeyboardResolutionFailure?
 
         switch input {
         case .keyDown(let device, let key, let isRepeat):
             guard configuration.devices[device] != nil else {
                 return KeyboardResolution(outputs: [], deadline: nextDeadline(), isInScope: false)
             }
-            enqueue(.keyDown(key, isRepeat: isRepeat), device: device, at: now, into: &outputs)
+            failure = enqueue(.keyDown(key, isRepeat: isRepeat), device: device, at: now, into: &outputs)
 
         case .keyUp(let device, let key):
             guard configuration.devices[device] != nil else {
                 return KeyboardResolution(outputs: [], deadline: nextDeadline(), isInScope: false)
             }
-            enqueue(.keyUp(key), device: device, at: now, into: &outputs)
+            failure = enqueue(.keyUp(key), device: device, at: now, into: &outputs)
 
         case .deadline:
             for device in devices.keys.sorted() { drain(device, at: now, into: &outputs) }
@@ -101,14 +112,14 @@ struct TapHoldResolver {
         case .configurationReplaced(let replacement):
             // Reject atomically: invalid input cannot cancel active keys or replace last-known-good.
             guard let validated = try? replacement.validated() else { break }
-            cancelEverything(into: &outputs)
-            configuration = validated
+            replaceConfiguration(validated, into: &outputs)
 
         case .teardown:
             cancelEverything(into: &outputs)
         }
 
-        return KeyboardResolution(outputs: outputs, deadline: nextDeadline(), isInScope: true)
+        return KeyboardResolution(outputs: outputs, deadline: nextDeadline(), isInScope: true,
+                                  failure: failure)
     }
 
     /// The instant the caller must deliver `.deadline`, or nil for no timer.
@@ -119,11 +130,26 @@ struct TapHoldResolver {
     private mutating func enqueue(_ input: BufferedInput,
                                   device: KeyboardDeviceID,
                                   at now: KeyboardInstant,
-                                  into outputs: inout [KeyboardOutput]) {
+                                  into outputs: inout [KeyboardOutput]) -> KeyboardResolutionFailure? {
         var state = devices[device] ?? DeviceState()
+        switch input {
+        case .keyDown(let key, let isRepeat):
+            if state.suppressedUntilUp.contains(key) { devices[device] = state; return nil }
+            if !isRepeat { state.pressed.insert(key) }
+        case .keyUp(let key):
+            state.pressed.remove(key)
+            if state.suppressedUntilUp.remove(key) != nil { devices[device] = state; return nil }
+        }
+        guard state.inbox.count < Self.maximumBufferedInputsPerDevice else {
+            devices[device] = state
+            cancelEverything(into: &outputs)
+            configuration = .excludingEverything
+            return .inboxCapacityExceeded(device: device, limit: Self.maximumBufferedInputsPerDevice)
+        }
         state.inbox.append(Buffered(input: input, at: now))
         devices[device] = state
         drain(device, at: now, into: &outputs)
+        return nil
     }
 
     // MARK: - Resolution loop
@@ -140,6 +166,15 @@ struct TapHoldResolver {
 
         loop: while true {
             if let pending = state.pending {
+                if policy.productSemantics,
+                   pending.behavior.hold != .hyper,
+                   let head = state.inbox.first,
+                   head.at < pending.deadline,
+                   case .keyDown(let key, let repeatValue) = head.input,
+                   !repeatValue, key.physicalModifier != nil {
+                    resolveTap(pending, at: head.at, state: &state, into: &outputs)
+                    continue
+                }
                 switch decision(for: pending, in: state.inbox, now: now) {
                 case .tap(let index):
                     let instant = state.inbox[index].at
@@ -233,6 +268,7 @@ struct TapHoldResolver {
         state.pending = nil
         guard !pending.behavior.hold.isEmpty else { return }
         state.holds[pending.key] = pending.behavior.hold
+        if pending.behavior.hold == .hyper { hyperHoldCount += 1 }
         for modifier in pending.behavior.hold.ordered { retain(modifier, into: &outputs) }
     }
 
@@ -251,6 +287,11 @@ struct TapHoldResolver {
         }
         if state.holds[key] != nil { return }
 
+        if let modifier = key.physicalModifier {
+            retainPhysicalModifier(key, modifier: modifier, state: &state, into: &outputs)
+            return
+        }
+
         guard let behavior = policy.keys[key] else {
             retain(key, into: &outputs)
             state.down[key] = key
@@ -260,6 +301,15 @@ struct TapHoldResolver {
         if isRepeat { return }
 
         let timing = behavior.timing ?? policy.timing
+
+        if policy.productSemantics, behavior.tap != nil, !behavior.hold.isEmpty,
+           behavior.hold != .hyper,
+           (hyperHoldCount > 0 || !physicalModifierCounts.isEmpty) {
+            guard let tap = behavior.tap else { return }
+            retain(tap, into: &outputs)
+            state.down[key] = tap
+            return
+        }
 
         if let tap = behavior.tap,
            timing.quickTapMilliseconds > 0,
@@ -292,11 +342,16 @@ struct TapHoldResolver {
                                   state: inout DeviceState,
                                   into outputs: inout [KeyboardOutput]) {
         if let modifiers = state.holds.removeValue(forKey: key) {
+            if modifiers == .hyper { hyperHoldCount = max(0, hyperHoldCount - 1) }
             for modifier in modifiers.ordered.reversed() { relinquish(modifier, into: &outputs) }
             return
         }
         if let emitted = state.down.removeValue(forKey: key) {
-            relinquish(emitted, into: &outputs)
+            if let modifier = key.physicalModifier {
+                relinquishPhysicalModifier(key, modifier: modifier, into: &outputs)
+            } else {
+                relinquish(emitted, into: &outputs)
+            }
             state.lastTapEnd[key] = instant
             return
         }
@@ -334,17 +389,95 @@ struct TapHoldResolver {
     private mutating func retain(_ modifier: KeyModifier, into outputs: inout [KeyboardOutput]) {
         let count = (modifierCounts[modifier] ?? 0) + 1
         modifierCounts[modifier] = count
-        if count == 1 { outputs.append(.modifierDown(modifier)) }
+        if count == 1,
+           canonicalPhysicalCount(for: modifier) == 0,
+           (physicalModifierCounts[modifier] ?? 0) == 0 {
+            syntheticModifierOutputs.insert(modifier)
+            outputs.append(.modifierDown(modifier))
+        }
     }
 
     private mutating func relinquish(_ modifier: KeyModifier, into outputs: inout [KeyboardOutput]) {
         guard let count = modifierCounts[modifier], count > 0 else { return }
         if count == 1 {
             modifierCounts[modifier] = nil
-            outputs.append(.modifierUp(modifier))
+            if canonicalPhysicalCount(for: modifier) > 0 {
+                if syntheticModifierOutputs.remove(modifier) != nil {
+                    physicalModifierOutputs.insert(canonicalUsage(for: modifier))
+                }
+            } else if syntheticModifierOutputs.remove(modifier) != nil {
+                outputs.append(.modifierUp(modifier))
+            }
         } else {
             modifierCounts[modifier] = count - 1
         }
+    }
+
+    private mutating func retainPhysicalModifier(_ key: KeyCode, modifier: KeyModifier,
+                                                 state: inout DeviceState,
+                                                 into outputs: inout [KeyboardOutput]) {
+        physicalModifierCounts[modifier, default: 0] += 1
+        keyCounts[key, default: 0] += 1
+        state.down[key] = key
+        // A synthetic modifier uses the canonical left usage. Replaying the same physical usage
+        // would let its later up cancel the synthetic owner; the combined state already is down.
+        if !(key.isCanonicalSyntheticModifierUsage && syntheticModifierOutputs.contains(modifier)) {
+            physicalModifierOutputs.insert(key)
+            outputs.append(.keyDown(key))
+        }
+    }
+
+    private mutating func relinquishPhysicalModifier(_ key: KeyCode, modifier: KeyModifier,
+                                                     into outputs: inout [KeyboardOutput]) {
+        let isCanonical = key.isCanonicalSyntheticModifierUsage
+        if let keyCount = keyCounts[key] {
+            if keyCount == 1 {
+                keyCounts[key] = nil
+                if isCanonical, (modifierCounts[modifier] ?? 0) > 0 {
+                    if physicalModifierOutputs.remove(key) != nil {
+                        syntheticModifierOutputs.insert(modifier)
+                    }
+                } else if physicalModifierOutputs.contains(key) {
+                    // When a right-side physical usage was the only modifier output while a
+                    // synthetic owner waited, establish the canonical usage before releasing it.
+                    if !isCanonical, (modifierCounts[modifier] ?? 0) > 0,
+                       canonicalPhysicalCount(for: modifier) == 0,
+                       !syntheticModifierOutputs.contains(modifier) {
+                        syntheticModifierOutputs.insert(modifier)
+                        outputs.append(.modifierDown(modifier))
+                    }
+                    physicalModifierOutputs.remove(key)
+                    outputs.append(.keyUp(key))
+                }
+            } else {
+                keyCounts[key] = keyCount - 1
+            }
+        }
+        let physicalCount = physicalModifierCounts[modifier] ?? 0
+        if physicalCount <= 1 {
+            physicalModifierCounts[modifier] = nil
+            if (modifierCounts[modifier] ?? 0) > 0,
+               canonicalPhysicalCount(for: modifier) == 0,
+               !syntheticModifierOutputs.contains(modifier) {
+                syntheticModifierOutputs.insert(modifier)
+                outputs.append(.modifierDown(modifier))
+            }
+        } else {
+            physicalModifierCounts[modifier] = physicalCount - 1
+        }
+    }
+
+    private func canonicalUsage(for modifier: KeyModifier) -> KeyCode {
+        switch modifier {
+        case .control: KeyCode(0xE0)
+        case .shift: KeyCode(0xE1)
+        case .option: KeyCode(0xE2)
+        case .command: KeyCode(0xE3)
+        }
+    }
+
+    private func canonicalPhysicalCount(for modifier: KeyModifier) -> Int {
+        keyCounts[canonicalUsage(for: modifier)] ?? 0
     }
 
     // MARK: - Cancellation
@@ -356,11 +489,17 @@ struct TapHoldResolver {
         state.pending = nil
         state.inbox.removeAll()
         for key in state.down.keys.sorted() {
-            if let emitted = state.down[key] { relinquish(emitted, into: &outputs) }
+            guard let emitted = state.down[key] else { continue }
+            if let modifier = key.physicalModifier {
+                relinquishPhysicalModifier(key, modifier: modifier, into: &outputs)
+            } else {
+                relinquish(emitted, into: &outputs)
+            }
         }
         state.down.removeAll()
         for key in state.holds.keys.sorted().reversed() {
             guard let modifiers = state.holds[key] else { continue }
+            if modifiers == .hyper { hyperHoldCount = max(0, hyperHoldCount - 1) }
             for modifier in modifiers.ordered.reversed() { relinquish(modifier, into: &outputs) }
         }
         state.holds.removeAll()
@@ -377,11 +516,64 @@ struct TapHoldResolver {
             relinquish(modifier, into: &outputs)
         }
         modifierCounts.removeAll()
+        physicalModifierCounts.removeAll()
+        syntheticModifierOutputs.removeAll()
+        physicalModifierOutputs.removeAll()
+        hyperHoldCount = 0
         // Mirror modifier defence for ordinary keys: no malformed sequence may leave a key down.
         for key in keyCounts.keys.sorted().reversed() {
             keyCounts[key] = 1
             relinquish(key, into: &outputs)
         }
         keyCounts.removeAll()
+    }
+
+    // MARK: - Scoped configuration replacement
+
+    private mutating func replaceConfiguration(_ replacement: KeyboardConfiguration,
+                                               into outputs: inout [KeyboardOutput]) {
+        let oldConfiguration = configuration
+        for device in devices.keys.sorted() {
+            guard let oldPolicy = oldConfiguration.devices[device],
+                  let newPolicy = replacement.devices[device] else {
+                cancel(device, into: &outputs)
+                continue
+            }
+            guard oldPolicy != newPolicy, var state = devices[device] else { continue }
+
+            let knownKeys = Set(oldPolicy.keys.keys).union(newPolicy.keys.keys)
+            let affected = Set(knownKeys.filter { key in
+                !sameStructuralBehavior(oldPolicy.keys[key], newPolicy.keys[key])
+                    || oldPolicy.productSemantics != newPolicy.productSemantics
+            })
+            if let pending = state.pending, affected.contains(pending.key) { state.pending = nil }
+            state.inbox.removeAll { buffered in
+                switch buffered.input {
+                case .keyDown(let key, _), .keyUp(let key): affected.contains(key)
+                }
+            }
+            for key in affected.sorted() {
+                if let modifiers = state.holds.removeValue(forKey: key) {
+                    if modifiers == .hyper { hyperHoldCount = max(0, hyperHoldCount - 1) }
+                    for modifier in modifiers.ordered.reversed() { relinquish(modifier, into: &outputs) }
+                }
+                if let emitted = state.down.removeValue(forKey: key) {
+                    if let modifier = key.physicalModifier {
+                        relinquishPhysicalModifier(key, modifier: modifier, into: &outputs)
+                    } else {
+                        relinquish(emitted, into: &outputs)
+                    }
+                }
+                state.lastTapEnd.removeValue(forKey: key)
+                if state.pressed.contains(key) { state.suppressedUntilUp.insert(key) }
+            }
+            devices[device] = state
+        }
+        configuration = replacement
+        for device in devices.keys.sorted() { drain(device, at: lastInstant ?? .init(milliseconds: 0), into: &outputs) }
+    }
+
+    private func sameStructuralBehavior(_ lhs: KeyBehavior?, _ rhs: KeyBehavior?) -> Bool {
+        lhs?.tap == rhs?.tap && lhs?.hold == rhs?.hold
     }
 }

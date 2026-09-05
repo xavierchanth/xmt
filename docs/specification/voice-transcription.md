@@ -8,6 +8,8 @@ Normative language: **MUST**, **MUST NOT**, and **MAY** in this document describ
 
 ## Platform floor
 
+Voice is available only in builds with the `XMT_VOICE` compilation condition, enabled by passing `XMT_FEATURES=XMT_VOICE` to `xcodebuild`. The default build omits Voice registration, refresh and shutdown effects, shortcut routes, its Settings tab, and Voice/history menu items. The shell does not initialize the Voice module or history view model in that build. Persisted Voice data is retained, and a configuration value cannot override build-time availability. Shared source and SDK dependencies remain compiled; the following runtime behavior applies to Voice-enabled builds.
+
 The target's deployment target is macOS 26.0, and the speech types are compiled behind `@available(macOS 26.0, *)` with no alternative path for older systems. `SpeechAnalyzer`, `SpeechTranscriber`, and `AssetInventory` are used directly; there is no `SFSpeechRecognizer` fallback and no availability branch to remove later.
 
 ## Module lifecycle

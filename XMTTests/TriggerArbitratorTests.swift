@@ -322,6 +322,39 @@ final class TriggerArbitratorTests: XCTestCase {
         XCTAssertEqual(state.receive(.down(newSource, isRepeat: false), generation: state.generation), [.began(target)])
     }
 
+    func testInputRoutingUnchangedReloadPreservesActiveHold() throws {
+        let source = inputSource("standard.voice.hold")
+        let route = InputRoute(source: source, action: .voiceHoldToTalk, activation: .hold,
+                               chord: .key(key: "space", modifiers: ["control"]))
+        let snapshot = try InputRouteSnapshot([route])
+        var state = InputRoutingState(snapshot: snapshot)
+        let generation = state.generation
+
+        XCTAssertEqual(state.receive(.down(source, isRepeat: false), generation: generation), [.began(.voiceHoldToTalk)])
+        XCTAssertEqual(state.reconfigure(snapshot), [])
+        XCTAssertEqual(state.generation, generation)
+        XCTAssertEqual(state.receive(.up(source), generation: generation), [.ended(.voiceHoldToTalk, reason: .released)])
+    }
+
+    func testInputRoutingScopedInterruptionLeavesOtherHoldActive() throws {
+        let window = inputSource("standard.window.hold")
+        let voice = inputSource("standard.voice.hold")
+        var state = InputRoutingState(snapshot: try .init([
+            .init(source: window, action: .moveWindowToNextScreen, activation: .hold),
+            .init(source: voice, action: .voiceHoldToTalk, activation: .hold)
+        ]))
+        let generation = state.generation
+        _ = state.receive(.down(window, isRepeat: false), generation: generation)
+        _ = state.receive(.down(voice, isRepeat: false), generation: generation)
+
+        XCTAssertEqual(state.interrupt(sources: [window], reason: .moduleStopped(.windowMover)), [
+            .ended(.moveWindowToNextScreen, reason: .interrupted(.moduleStopped(.windowMover)))
+        ])
+        XCTAssertEqual(state.receive(.up(voice), generation: generation), [
+            .ended(.voiceHoldToTalk, reason: .released)
+        ])
+    }
+
     func testInputRoutingIdentifiersRejectEmptyAndPaddedValues() {
         XCTAssertNil(ModuleID(""))
         XCTAssertNil(ModuleID(" voice"))
@@ -332,12 +365,20 @@ final class TriggerArbitratorTests: XCTestCase {
 
     func testBuiltInModuleCatalogDeclaresCompleteActionOwnership() {
         let catalog = XMTModuleCatalog.builtIn
+        #if XMT_VOICE
         XCTAssertEqual(catalog.descriptors.map(\.id), [.voiceTranscription, .windowMover])
         XCTAssertEqual(catalog.descriptor(for: .windowMover)?.permissions, [.accessibility])
         XCTAssertEqual(
             Set(catalog.descriptor(for: .voiceTranscription)?.actions ?? []),
             [.voiceHoldToTalk, .voiceToggleRecording, .voiceCancel, .voicePasteLatest]
         )
+        XCTAssertTrue(XMTBuildFeatures.voice)
+        #else
+        XCTAssertFalse(XMTBuildFeatures.voice)
+        XCTAssertEqual(catalog.descriptors.map(\.id), [.windowMover])
+        XCTAssertNil(catalog.descriptor(for: .voiceTranscription))
+        XCTAssertEqual(catalog.descriptor(for: .windowMover)?.actions, [.moveWindowToNextScreen])
+        #endif
     }
 
     func testModuleDescriptorRejectsCrossModuleAndDuplicateActions() throws {
@@ -408,9 +449,11 @@ final class TriggerArbitratorTests: XCTestCase {
         )])
 
         backend.keyDown(name)
+        let staleDown = backend.downHandlers[name]?.last
         provider.setEnabled(false, sources: [source], interruption: .captureBegan)
         backend.keyUp(name)
         provider.setEnabled(true, sources: [source])
+        staleDown?()
         backend.keyDown(name)
         backend.keyUp(name)
 
@@ -420,6 +463,56 @@ final class TriggerArbitratorTests: XCTestCase {
             .began(.voiceHoldToTalk),
             .ended(.voiceHoldToTalk, reason: .released)
         ])
+    }
+
+    @MainActor
+    func testStandardShortcutProviderReconcileDisableBalancesUnchangedRoute() throws {
+        let backend = FakeStandardShortcutBackend()
+        let source = inputSource("standard.voice.hold.reconcile-disable")
+        let name = KeyboardShortcuts.Name("test.standard.voice.hold.reconcile-disable")
+        let route = InputRoute(source: source, action: .voiceHoldToTalk, activation: .hold)
+        var events: [SemanticActionEvent] = []
+        let provider = StandardShortcutProvider(backend: backend) { events.append($0) }
+        try provider.reconcile([.init(name: name, route: route, isEnabled: true)])
+        backend.keyDown(name)
+
+        try provider.reconcile([.init(name: name, route: route, isEnabled: false)])
+
+        XCTAssertEqual(events, [
+            .began(.voiceHoldToTalk),
+            .ended(.voiceHoldToTalk, reason: .interrupted(.activationChanged))
+        ])
+        XCTAssertEqual(backend.enabled[name], false)
+    }
+
+    @MainActor
+    func testStandardShortcutProviderReentrantActivationUpdateWinsAfterReconcile() throws {
+        let backend = FakeStandardShortcutBackend()
+        let source = inputSource("standard.voice.hold.reentrant")
+        let name = KeyboardShortcuts.Name("test.standard.voice.hold.reentrant")
+        var provider: StandardShortcutProvider!
+        provider = StandardShortcutProvider(backend: backend) { event in
+            if case .ended = event {
+                provider.setEnabled(false, sources: [source], interruption: .activationChanged)
+            }
+        }
+        try provider.reconcile([.init(
+            name: name,
+            route: .init(source: source, action: .voiceHoldToTalk, activation: .hold,
+                         chord: .key(key: "a", modifiers: ["control"])),
+            isEnabled: true
+        )])
+        backend.keyDown(name)
+
+        try provider.reconcile([.init(
+            name: name,
+            route: .init(source: source, action: .voiceHoldToTalk, activation: .hold,
+                         chord: .key(key: "b", modifiers: ["control"])),
+            isEnabled: true
+        )])
+
+        XCTAssertEqual(backend.enabled[name], false)
+        backend.keyDown(name)
     }
 
     @MainActor
@@ -447,6 +540,56 @@ final class TriggerArbitratorTests: XCTestCase {
         backend.keyDown(newName)
 
         XCTAssertEqual(events, [.invoked(.voicePasteLatest)])
+    }
+
+    @MainActor
+    func testStandardShortcutProviderChangedChordEndsHoldOnceAndRejectsOldCallbacks() throws {
+        let backend = FakeStandardShortcutBackend()
+        let source = inputSource("standard.voice.hold.0")
+        let name = KeyboardShortcuts.Name("test.standard.voice.hold.changed")
+        var events: [SemanticActionEvent] = []
+        let provider = StandardShortcutProvider(backend: backend) { events.append($0) }
+        let oldRoute = InputRoute(source: source, action: .voiceHoldToTalk, activation: .hold,
+                                  chord: .key(key: "a", modifiers: ["control"]))
+        try provider.reconcile([.init(name: name, route: oldRoute, isEnabled: true)])
+        backend.keyDown(name)
+        let staleUp = backend.upHandlers[name]?.last
+
+        let newRoute = InputRoute(source: source, action: .voiceHoldToTalk, activation: .hold,
+                                  chord: .key(key: "b", modifiers: ["control"]))
+        try provider.reconcile([.init(name: name, route: newRoute, isEnabled: true)])
+        staleUp?()
+        backend.keyUp(name)
+
+        XCTAssertEqual(events, [
+            .began(.voiceHoldToTalk),
+            .ended(.voiceHoldToTalk, reason: .interrupted(.reconfigured))
+        ])
+    }
+
+    @MainActor
+    func testStandardShortcutProviderRemovedHoldEndsOnceAndRejectsOldRelease() throws {
+        let backend = FakeStandardShortcutBackend()
+        let source = inputSource("standard.voice.hold.removed")
+        let name = KeyboardShortcuts.Name("test.standard.voice.hold.removed")
+        var events: [SemanticActionEvent] = []
+        let provider = StandardShortcutProvider(backend: backend) { events.append($0) }
+        try provider.reconcile([.init(
+            name: name,
+            route: .init(source: source, action: .voiceHoldToTalk, activation: .hold,
+                         chord: .key(key: "a", modifiers: ["control"])),
+            isEnabled: true
+        )])
+        backend.keyDown(name)
+        let staleUp = backend.upHandlers[name]?.last
+
+        try provider.reconcile([])
+        staleUp?()
+
+        XCTAssertEqual(events, [
+            .began(.voiceHoldToTalk),
+            .ended(.voiceHoldToTalk, reason: .interrupted(.reconfigured))
+        ])
     }
 
     private let inputs: [TriggerInput] = [

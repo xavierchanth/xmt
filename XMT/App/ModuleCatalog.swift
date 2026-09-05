@@ -1,5 +1,14 @@
 import Foundation
 
+/// Build-time availability, independent of persisted or file-managed enablement.
+enum XMTBuildFeatures {
+    #if XMT_VOICE
+    static let voice = true
+    #else
+    static let voice = false
+    #endif
+}
+
 enum XMTModulePermission: String, CaseIterable, Hashable, Sendable {
     case accessibility
     case inputMonitoring
@@ -74,14 +83,15 @@ struct XMTModuleCatalog: Equatable, Sendable {
             displayName: "Window Mover",
             permissions: [.accessibility],
             actions: [.moveWindowToNextScreen]
-        ),
+        )
+    ] + (XMTBuildFeatures.voice ? [
         XMTModuleDescriptor(
             validatedID: .voiceTranscription,
             displayName: "Voice Transcription",
             permissions: [.accessibility, .inputMonitoring, .microphone],
             actions: [.voiceHoldToTalk, .voiceToggleRecording, .voiceCancel, .voicePasteLatest]
         )
-    ])
+    ] : []))
 }
 
 private extension XMTModuleDescriptor {

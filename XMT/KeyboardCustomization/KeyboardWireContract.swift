@@ -281,7 +281,7 @@ extension KeyboardWireMessage: Codable {
 }
 
 struct KeyboardWireEnvelope: Codable, Equatable, Sendable {
-    static let currentVersion = 1
+    static let currentVersion = 2
 
     let protocolVersion: Int
     let messageID: UUID

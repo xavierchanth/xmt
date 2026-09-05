@@ -3,6 +3,28 @@ import XCTest
 
 @MainActor
 final class LocalSettingsRepositoryTests: XCTestCase {
+    func testAbsentVoicePreservesWindowSettingsAndDoesNotReserveVoiceShortcut() throws {
+        let window = WindowAdapter(settings: .init(enabled: true, shortcut: nil))
+        let repository = LocalSettingsRepository(windowMover: window, voice: nil)
+        let effective = EffectiveSettings.resolve(config: nil)
+        XCTAssertEqual(repository.snapshot().windowMoverEnabled, true)
+        XCTAssertNil(repository.snapshot().voiceEnabled)
+        let shortcut = try effective.pasteLatestTranscriptShortcut.value.keyboardShortcut()
+        XCTAssertTrue(repository.acceptWindowMoverShortcut(shortcut, effective: effective))
+        XCTAssertFalse(repository.acceptVoicePasteLatestShortcut(shortcut, effective: effective))
+        repository.restoreShortcutStorage(from: effective)
+        XCTAssertEqual(window.restoredManaged, [effective.windowMoverShortcut])
+    }
+
+    func testLoaderDoesNotReserveUnavailableVoiceBindings() async throws {
+        var local = SettingsValues()
+        local.windowMoverShortcut = BuiltInSettings.standard.pasteLatestTranscriptShortcut
+        let loader = ConfigReloader(local: local, includesVoiceBindings: false,
+                                    read: { _ in Data(#"{"version":1}"#.utf8) })
+        let result = try await loader.reload()
+        XCTAssertEqual(result.effective.windowMoverShortcut.value, local.windowMoverShortcut)
+    }
+
     func testSnapshotComposesModuleOwnedValues() {
         let window = WindowAdapter(
             settings: .init(enabled: false, shortcut: .key(key: "m", modifiers: ["command"]))

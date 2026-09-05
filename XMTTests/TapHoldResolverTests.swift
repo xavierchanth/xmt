@@ -15,6 +15,8 @@ enum TestKey {
     static let letterSemicolon = KeyCode(13)
     static let plain = KeyCode(20)
     static let otherPlain = KeyCode(21)
+    static let leftShift = KeyCode(0xE1)
+    static let rightShift = KeyCode(0xE5)
 }
 
 enum TestDevice {
@@ -27,6 +29,7 @@ func makeConfiguration(hold: Int = 200,
                        quickTap: Int = 0,
                        rollover: RolloverPolicy = .timeoutOnly,
                        devices: [KeyboardDeviceID] = [TestDevice.included],
+                       productSemantics: Bool = false,
                        extraKeys: [KeyCode: KeyBehavior] = [:]) -> KeyboardConfiguration {
     let timing = KeyTiming(holdMilliseconds: hold, quickTapMilliseconds: quickTap, rollover: rollover)
     var keys: [KeyCode: KeyBehavior] = [
@@ -36,7 +39,7 @@ func makeConfiguration(hold: Int = 200,
         TestKey.caps: KeyBehavior(tap: TestKey.escape, hold: .hyper),
     ]
     for (key, behavior) in extraKeys { keys[key] = behavior }
-    let policy = DeviceKeyboardPolicy(timing: timing, keys: keys)
+    let policy = DeviceKeyboardPolicy(timing: timing, keys: keys, productSemantics: productSemantics)
     return KeyboardConfiguration(devices: Dictionary(uniqueKeysWithValues: devices.map { ($0, policy) }))
 }
 
@@ -160,6 +163,118 @@ final class TapHoldResolverTests: XCTestCase {
         harness.send(.keyDown(device: TestDevice.included, key: TestKey.plain, isRepeat: false), at: 250)
         harness.send(.keyUp(device: TestDevice.included, key: TestKey.plain), at: 260)
         XCTAssertEqual(harness.take(), [.keyDown(TestKey.plain), .keyUp(TestKey.plain)])
+    }
+
+    func testProductHyperMakesEveryHomeRowModTapAnOrdinaryLatchedKey() {
+        var harness = ResolverHarness(configuration: makeConfiguration(hold: 200, productSemantics: true))
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.caps, isRepeat: false), at: 0)
+        harness.advance(to: 200)
+        _ = harness.take()
+
+        for (offset, pair) in [(TestKey.a, TestKey.letterA), (TestKey.s, TestKey.letterS),
+                               (TestKey.semicolon, TestKey.letterSemicolon)].enumerated() {
+            let time = 210 + offset * 10
+            harness.send(.keyDown(device: TestDevice.included, key: pair.0, isRepeat: false), at: time)
+            XCTAssertEqual(harness.take(), [.keyDown(pair.1)])
+            harness.send(.keyUp(device: TestDevice.included, key: pair.0), at: time + 1)
+            XCTAssertEqual(harness.take(), [.keyUp(pair.1)])
+        }
+    }
+
+    func testProductPhysicalShiftMakesHomeRowKeyImmediateAndPreservesShiftProvenance() {
+        var harness = ResolverHarness(configuration: makeConfiguration(hold: 200, productSemantics: true))
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.leftShift, isRepeat: false), at: 0)
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: false), at: 10)
+        XCTAssertEqual(harness.take(), [.keyDown(TestKey.leftShift), .keyDown(TestKey.letterA)])
+        harness.send(.keyUp(device: TestDevice.included, key: TestKey.a), at: 20)
+        harness.send(.keyUp(device: TestDevice.included, key: TestKey.leftShift), at: 30)
+        XCTAssertEqual(harness.take(), [.keyUp(TestKey.letterA), .keyUp(TestKey.leftShift)])
+    }
+
+    func testPhysicalModifierTransitionFlushesPendingTapBeforeModifierBecomesActive() {
+        var harness = ResolverHarness(configuration: makeConfiguration(hold: 200, productSemantics: true))
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: false), at: 0)
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.leftShift, isRepeat: false), at: 20)
+        XCTAssertEqual(harness.take(), [.keyDown(TestKey.letterA), .keyUp(TestKey.letterA),
+                                        .keyDown(TestKey.leftShift)])
+        harness.send(.keyUp(device: TestDevice.included, key: TestKey.a), at: 30)
+        harness.send(.keyUp(device: TestDevice.included, key: TestKey.leftShift), at: 40)
+        XCTAssertEqual(harness.take(), [.keyUp(TestKey.leftShift)])
+    }
+
+    func testPhysicalAndSyntheticShiftTransferOwnershipWithoutDroppingModifier() {
+        var harness = ResolverHarness(configuration: makeConfiguration(hold: 200))
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.leftShift, isRepeat: false), at: 0)
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.s, isRepeat: false), at: 10)
+        harness.advance(to: 210)
+        XCTAssertEqual(harness.take(), [.keyDown(TestKey.leftShift)])
+        harness.send(.keyUp(device: TestDevice.included, key: TestKey.leftShift), at: 220)
+        XCTAssertEqual(harness.take(), [], "canonical output stays down while the synthetic owner remains")
+        harness.send(.keyUp(device: TestDevice.included, key: TestKey.s), at: 230)
+        XCTAssertEqual(harness.take(), [.modifierUp(.shift)])
+    }
+
+    func testSyntheticCanonicalModifierTransfersToPhysicalOwnerWithoutPrematureUp() {
+        let leftControl = KeyCode(0xE0)
+        var harness = ResolverHarness(configuration: makeConfiguration(hold: 200))
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: false), at: 0)
+        harness.advance(to: 200)
+        XCTAssertEqual(harness.take(), [.modifierDown(.control)])
+        harness.send(.keyDown(device: TestDevice.included, key: leftControl, isRepeat: false), at: 210)
+        harness.send(.keyUp(device: TestDevice.included, key: TestKey.a), at: 220)
+        XCTAssertEqual(harness.take(), [], "physical left Control inherits the already-down canonical usage")
+        harness.send(.keyUp(device: TestDevice.included, key: leftControl), at: 230)
+        XCTAssertEqual(harness.take(), [.keyUp(leftControl)])
+    }
+
+    func testCapsStillFormsHyperWhenPhysicalModifierIsAlreadyDown() {
+        let caps = KeyBehavior(
+            tap: TestKey.escape,
+            hold: .hyper,
+            timing: .init(holdMilliseconds: 200, rollover: .otherKeyPress)
+        )
+        var harness = ResolverHarness(configuration: makeConfiguration(
+            hold: 200,
+            productSemantics: true,
+            extraKeys: [TestKey.caps: caps]
+        ))
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.leftShift, isRepeat: false), at: 0)
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.caps, isRepeat: false), at: 10)
+        harness.advance(to: 210)
+        XCTAssertEqual(harness.take(), [.keyDown(TestKey.leftShift), .modifierDown(.control),
+                                        .modifierDown(.option), .modifierDown(.command)])
+    }
+
+    func testModifierAtPendingDeadlineResolvesHomeRowAsHold() {
+        var resolver = TapHoldResolver(configuration: makeConfiguration(hold: 200, productSemantics: true))
+        _ = resolver.receive(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: false),
+                             at: .init(milliseconds: 0))
+        let result = resolver.receive(.keyDown(device: TestDevice.included, key: TestKey.leftShift, isRepeat: false),
+                                      at: .init(milliseconds: 200))
+        XCTAssertEqual(result.outputs, [.modifierDown(.control), .keyDown(TestKey.leftShift)])
+    }
+
+    func testRightPhysicalShiftRemainsDistinctWhileSyntheticShiftIsHeld() {
+        var harness = ResolverHarness(configuration: makeConfiguration(hold: 200, productSemantics: true))
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.s, isRepeat: false), at: 0)
+        harness.advance(to: 200)
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.rightShift, isRepeat: false), at: 210)
+        harness.send(.keyUp(device: TestDevice.included, key: TestKey.rightShift), at: 220)
+        harness.send(.keyUp(device: TestDevice.included, key: TestKey.s), at: 230)
+        XCTAssertEqual(harness.take(), [.modifierDown(.shift), .keyDown(TestKey.rightShift),
+                                        .keyUp(TestKey.rightShift), .modifierUp(.shift)])
+    }
+
+    func testProductHomeRowModifiersStillStackWithoutHyperOrPhysicalModifier() {
+        var harness = ResolverHarness(configuration: makeConfiguration(hold: 200, productSemantics: true))
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: false), at: 0)
+        harness.advance(to: 200)
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.s, isRepeat: false), at: 210)
+        harness.advance(to: 410)
+        XCTAssertEqual(harness.take(), [.modifierDown(.control), .modifierDown(.shift)])
+        harness.send(.keyUp(device: TestDevice.included, key: TestKey.s), at: 420)
+        harness.send(.keyUp(device: TestDevice.included, key: TestKey.a), at: 430)
+        XCTAssertEqual(harness.take(), [.modifierUp(.shift), .modifierUp(.control)])
     }
 
     // MARK: Quick tap
@@ -468,15 +583,27 @@ final class TapHoldResolverTests: XCTestCase {
         XCTAssertTrue(harness.lastResolution.isInScope)
     }
 
-    func testConfigurationReplacementCancelsPendingWithoutInventingATap() {
+    func testTimingOnlyConfigurationReplacementDoesNotReinterpretPendingKey() {
         var harness = ResolverHarness(configuration: makeConfiguration(hold: 200))
         harness.send(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: false), at: 0)
         harness.send(.configurationReplaced(makeConfiguration(hold: 300)), at: 50)
         XCTAssertEqual(harness.take(), [])
-        XCTAssertNil(harness.deadline)
-        harness.send(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: false), at: 60)
-        harness.advance(to: 360)
-        XCTAssertEqual(harness.take(), [.modifierDown(.control)], "the replacement's timing governs the next gesture")
+        XCTAssertEqual(harness.deadline, KeyboardInstant(milliseconds: 200))
+        harness.advance(to: 200)
+        XCTAssertEqual(harness.take(), [.modifierDown(.control)], "the held key keeps its original timing")
+    }
+
+    func testPerKeyTimingOnlyReplacementKeepsCapturedPendingDeadline() {
+        let original = KeyBehavior(tap: TestKey.letterA, hold: .control,
+                                   timing: .init(holdMilliseconds: 100))
+        let changed = KeyBehavior(tap: TestKey.letterA, hold: .control,
+                                  timing: .init(holdMilliseconds: 500))
+        var harness = ResolverHarness(configuration: makeConfiguration(extraKeys: [TestKey.a: original]))
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: false), at: 0)
+        harness.send(.configurationReplaced(makeConfiguration(extraKeys: [TestKey.a: changed])), at: 20)
+        XCTAssertEqual(harness.deadline, KeyboardInstant(milliseconds: 100))
+        harness.advance(to: 100)
+        XCTAssertEqual(harness.take(), [.modifierDown(.control)])
     }
 
     func testInvalidConfigurationReplacementPreservesLastKnownGoodAndActiveState() {
@@ -489,14 +616,62 @@ final class TapHoldResolverTests: XCTestCase {
         XCTAssertEqual(harness.take(), [.modifierDown(.control)])
     }
 
-    func testConfigurationReplacementDropsQuickTapHistory() {
+    func testUnchangedConfigurationReplacementPreservesQuickTapHistory() {
         var harness = ResolverHarness(configuration: makeConfiguration(hold: 200, quickTap: 150))
         harness.send(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: false), at: 0)
         harness.send(.keyUp(device: TestDevice.included, key: TestKey.a), at: 20)
         harness.send(.configurationReplaced(makeConfiguration(hold: 200, quickTap: 150)), at: 30)
         _ = harness.take()
         harness.send(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: false), at: 40)
+        XCTAssertEqual(harness.take(), [.keyDown(TestKey.letterA)])
+    }
+
+    func testCapabilityRemovalReleasesHeldOutputAndSuppressesUntilPhysicalUp() {
+        var harness = ResolverHarness(configuration: makeConfiguration(hold: 200))
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: false), at: 0)
+        harness.advance(to: 200)
+        _ = harness.take()
+        let replacement = makeConfiguration(hold: 200, extraKeys: [TestKey.a: KeyBehavior(tap: TestKey.letterA)])
+        harness.send(.configurationReplaced(replacement), at: 210)
+        XCTAssertEqual(harness.take(), [.modifierUp(.control)])
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: true), at: 220)
+        harness.send(.keyUp(device: TestDevice.included, key: TestKey.a), at: 230)
         XCTAssertEqual(harness.take(), [])
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: false), at: 240)
+        XCTAssertEqual(harness.take(), [.keyDown(TestKey.letterA)])
+    }
+
+    func testRemovingOneCapabilityLeavesIndependentHeldCapabilityActive() {
+        var harness = ResolverHarness(configuration: makeConfiguration(hold: 200))
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: false), at: 0)
+        harness.send(.keyDown(device: TestDevice.included, key: TestKey.s, isRepeat: false), at: 10)
+        harness.advance(to: 210)
+        _ = harness.take()
+        let replacement = makeConfiguration(
+            hold: 200,
+            extraKeys: [TestKey.a: KeyBehavior(tap: TestKey.letterA)]
+        )
+        harness.send(.configurationReplaced(replacement), at: 220)
+        XCTAssertEqual(harness.take(), [.modifierUp(.control)])
+        harness.send(.keyUp(device: TestDevice.included, key: TestKey.s), at: 230)
+        XCTAssertEqual(harness.take(), [.modifierUp(.shift)])
+    }
+
+    func testPendingInboxOverflowFailsClosedAndBalancesOutput() {
+        var resolver = TapHoldResolver(configuration: makeConfiguration(hold: 5_000))
+        _ = resolver.receive(.keyDown(device: TestDevice.included, key: TestKey.a, isRepeat: false),
+                             at: .init(milliseconds: 0))
+        var failure: KeyboardResolutionFailure?
+        for raw in 100...164 {
+            let result = resolver.receive(.keyDown(device: TestDevice.included, key: KeyCode(UInt16(raw)), isRepeat: false),
+                                          at: .init(milliseconds: raw))
+            failure = result.failure ?? failure
+        }
+        XCTAssertEqual(failure, .inboxCapacityExceeded(
+            device: TestDevice.included,
+            limit: TapHoldResolver.maximumBufferedInputsPerDevice
+        ))
+        XCTAssertEqual(resolver.configuration, .excludingEverything)
     }
 
     func testReplacementWithAnEmptyConfigurationStopsTransforming() {
@@ -560,6 +735,23 @@ final class TapHoldResolverTests: XCTestCase {
 
     func testValidConfigurationValidates() throws {
         XCTAssertEqual(try makeConfiguration().validated(), makeConfiguration())
+    }
+
+    func testLegacyPolicyDeviceWithoutSemanticMarkerDecodesAsLegacy() throws {
+        let data = Data(#"{"id":"keyboard","identity":{"builtIn":true,"vendorID":1,"productID":2,"serialNumber":"s","locationID":null,"transport":null},"timing":{"holdMilliseconds":200,"quickTapMilliseconds":0,"rollover":"timeoutOnly"},"keys":[]}"#.utf8)
+        let device = try JSONDecoder().decode(KeyboardPolicyDTO.Device.self, from: data)
+        XCTAssertFalse(device.productSemantics)
+        let roundTrip = try JSONDecoder().decode(
+            KeyboardPolicyDTO.Device.self,
+            from: JSONEncoder().encode(KeyboardPolicyDTO.Device(
+                id: device.id,
+                identity: device.identity,
+                timing: device.timing,
+                keys: device.keys,
+                productSemantics: true
+            ))
+        )
+        XCTAssertTrue(roundTrip.productSemantics)
     }
 
     func testNonPositiveHoldThresholdIsRejected() {

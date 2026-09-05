@@ -48,10 +48,14 @@ struct KeyBehavior: Equatable, Sendable {
 struct DeviceKeyboardPolicy: Equatable, Sendable {
     var timing: KeyTiming
     var keys: [KeyCode: KeyBehavior]
+    /// Enables the product's HRM interaction semantics. False preserves the legacy generic
+    /// resolver behavior used by older policies and fixtures.
+    var productSemantics: Bool
 
-    init(timing: KeyTiming, keys: [KeyCode: KeyBehavior] = [:]) {
+    init(timing: KeyTiming, keys: [KeyCode: KeyBehavior] = [:], productSemantics: Bool = false) {
         self.timing = timing
         self.keys = keys
+        self.productSemantics = productSemantics
     }
 }
 

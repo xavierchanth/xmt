@@ -12,6 +12,8 @@ Source layout by area: `XMT/App`, `XMT/WindowManagement`, `XMT/VoiceTranscriptio
 
 ## Building and testing
 
+Voice is disabled by default. Pass `XMT_FEATURES=XMT_VOICE` to `xcodebuild` to opt into its runtime and UI. Both flag configurations must continue to build and pass tests; shared Voice source and SDK dependencies remain compiled when the feature is off.
+
 ```bash
 just build        # Release build into .build/xcode
 just test         # unit tests through the shared XMT scheme

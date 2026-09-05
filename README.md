@@ -4,7 +4,15 @@ XMT is a personal macOS menu bar app that collects chosen macOS behavior changes
 
 ## What ships today
 
-Two modules are built in.
+Window Mover is available by default. Voice Transcription is disabled at build time unless explicitly enabled.
+
+To enable Voice, use `just features=XMT_VOICE build` (or `test`). With `xcodebuild`, pass `XMT_FEATURES=XMT_VOICE` when building or testing the `XMT` scheme. For example:
+
+```bash
+xcodebuild build -project XMT.xcodeproj -scheme XMT -configuration Release -destination 'platform=macOS' -derivedDataPath .build/xcode XMT_FEATURES=XMT_VOICE
+```
+
+Ordinary `just build` and `just test` leave Voice off. The flag gates module registration, shortcuts, settings, and Voice/history menu surfaces; shared Voice source, configuration types, and SDK dependencies still compile. Existing Voice preferences, recovery files, and transcripts are preserved. Configuration syntax remains validated, but unavailable Voice shortcuts do not reserve Window Mover bindings. This is a build-time feature gate, not a runtime preference.
 
 **Window Mover** — a global shortcut (default **Option-Space**) that moves the focused window to the next display, wrapping around, preserving relative geometry, and handling native full-screen windows. Specified in [the Window Mover specification](docs/specification/window-mover.md).
 

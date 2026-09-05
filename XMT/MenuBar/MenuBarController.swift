@@ -7,8 +7,10 @@ import OSLog
 @MainActor
 final class MenuBarController: NSObject, NSMenuDelegate {
     private let logger = Logger(subsystem: "com.xavierchanth.xmt", category: "MenuBar")
+    #if XMT_VOICE
     private let voice = VoiceTranscriptionModule.shared
     private let history = TranscriptHistoryViewModel.shared
+    #endif
     private let windowMover = WindowMoverModule.shared
     private let statusItem: NSStatusItem
     private let menu = NSMenu(title: "XMT")
@@ -32,7 +34,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         }
         button.image = statusImage()
         button.imagePosition = .imageOnly
-        button.toolTip = "XMT — window movement and voice transcription"
+        button.toolTip = XMTBuildFeatures.voice ? "XMT — window movement and voice transcription" : "XMT — window movement"
         button.setAccessibilityLabel("XMT menu")
     }
 
@@ -72,8 +74,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     private func observeState() {
-        [voice.objectWillChange.eraseToAnyPublisher(), history.objectWillChange.eraseToAnyPublisher(),
-         windowMover.objectWillChange.eraseToAnyPublisher()].forEach { publisher in
+        var publishers = [windowMover.objectWillChange.eraseToAnyPublisher()]
+        #if XMT_VOICE
+        publishers += [voice.objectWillChange.eraseToAnyPublisher(), history.objectWillChange.eraseToAnyPublisher()]
+        #endif
+        publishers.forEach { publisher in
             publisher.receive(on: RunLoop.main).sink { [weak self] _ in
                 // Published values are assigned after objectWillChange; update on the next turn.
                 DispatchQueue.main.async { self?.requestStructuralUpdate() }
@@ -87,8 +92,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         // AppKit explicitly provides this callback for synchronous refresh before tracking. Remove
         // and repopulate the supplied stable instance; never replace statusItem.menu here.
         populate(suppliedMenu)
+        #if XMT_VOICE
         guard history.isHistoryEnabled else { return }
         Task { await history.reload(limit: TranscriptHistorySnapshot.menuPreviewCount) }
+        #endif
     }
 
     func menuDidClose(_ suppliedMenu: NSMenu) {
@@ -104,10 +111,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private func populate(_ menu: NSMenu) {
         menu.removeAllItems()
         addWindowMoverItems(to: menu)
+        #if XMT_VOICE
         menu.addItem(.separator())
         addVoiceItems(to: menu)
         menu.addItem(.separator())
         addHistoryItems(to: menu)
+        #endif
         menu.addItem(.separator())
         menu.addItem(item("Settings…", action: #selector(showSettings), key: ","))
         menu.addItem(.separator())
@@ -122,6 +131,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(status)
     }
 
+    #if XMT_VOICE
     private func addVoiceItems(to menu: NSMenu) {
         let startingCount = menu.items.count
         switch voice.status {
@@ -163,6 +173,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         } else if history.hasEntries { menu.addItem(item("Clear History…", action: #selector(requestClear))) }
     }
 
+    #endif
+
     private func item(_ title: String, action: Selector, key: String = "") -> NSMenuItem {
         let result = NSMenuItem(title: title, action: action, keyEquivalent: key)
         result.target = self
@@ -176,6 +188,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     @objc private func toggleWindowMover() { windowMover.setEnabled(!windowMover.isEnabled) }
+    #if XMT_VOICE
     @objc private func stopRecording() { voice.stopRecording() }
     @objc private func retryPending() { voice.retryPending() }
     @objc private func deletePending() { voice.deletePending() }
@@ -186,6 +199,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     @objc private func requestClear() { history.requestClear() }
     @objc private func cancelClear() { history.cancelClear() }
     @objc private func confirmClear() { Task { await history.confirmClear() } }
+    #endif
     @objc private func showSettings() { SettingsWindowController.shared.show() }
     @objc private func quit() { NSApplication.shared.terminate(nil) }
 }

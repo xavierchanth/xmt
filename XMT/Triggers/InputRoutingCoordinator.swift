@@ -21,7 +21,7 @@ final class InputRoutingCoordinator {
     private init() {}
 
     func applyConfiguration(_ value: EffectiveSettings) {
-        voiceEnabled = value.voiceEnabled.value
+        voiceEnabled = XMTBuildFeatures.voice && value.voiceEnabled.value
         windowEnabled = value.windowMoverEnabled.value
         var registrations: [StandardShortcutRegistration] = []
         voiceSources.removeAll()
@@ -33,27 +33,31 @@ final class InputRoutingCoordinator {
             windowSources.insert(source)
             registrations.append(.init(
                 name: .moveToNextScreen,
-                route: .init(source: source, action: .moveWindowToNextScreen, activation: .release),
+                route: .init(source: source, action: .moveWindowToNextScreen, activation: .release,
+                             chord: value.windowMoverShortcut.value),
                 isEnabled: windowEnabled
             ))
         }
 
-        if case .key = value.pasteLatestTranscriptShortcut.value,
+        if XMTBuildFeatures.voice, case .key = value.pasteLatestTranscriptShortcut.value,
            let source = InputSourceID("standard.voice.paste-latest") {
             pasteLatestSources.insert(source)
             registrations.append(.init(
                 name: .pasteLatestTranscript,
-                route: .init(source: source, action: .voicePasteLatest, activation: .release),
+                route: .init(source: source, action: .voicePasteLatest, activation: .release,
+                             chord: value.pasteLatestTranscriptShortcut.value),
                 isEnabled: voiceEnabled
             ))
         }
 
-        appendVoiceRegistrations(value.holdToTalkBindings.value, action: .holdToTalk,
-                                 target: .voiceHoldToTalk, activation: .hold, into: &registrations)
-        appendVoiceRegistrations(value.toggleRecordingBindings.value, action: .toggleRecording,
-                                 target: .voiceToggleRecording, activation: .press, into: &registrations)
-        appendVoiceRegistrations(value.cancelBindings.value, action: .cancel,
-                                 target: .voiceCancel, activation: .press, into: &registrations)
+        if XMTBuildFeatures.voice {
+            appendVoiceRegistrations(value.holdToTalkBindings.value, action: .holdToTalk,
+                                     target: .voiceHoldToTalk, activation: .hold, into: &registrations)
+            appendVoiceRegistrations(value.toggleRecordingBindings.value, action: .toggleRecording,
+                                     target: .voiceToggleRecording, activation: .press, into: &registrations)
+            appendVoiceRegistrations(value.cancelBindings.value, action: .cancel,
+                                     target: .voiceCancel, activation: .press, into: &registrations)
+        }
 
         do {
             try standardProvider.reconcile(registrations)
@@ -91,7 +95,7 @@ final class InputRoutingCoordinator {
             voiceSources[action, default: []].insert(source)
             registrations.append(.init(
                 name: .voiceBindingSlot(action: action, index: index),
-                route: .init(source: source, action: target, activation: activation),
+                route: .init(source: source, action: target, activation: activation, chord: binding),
                 isEnabled: voiceActionIsEnabled(action)
             ))
         }

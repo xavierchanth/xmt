@@ -38,6 +38,24 @@ struct KeyCode: Hashable, Comparable, Sendable {
     let rawValue: UInt16
     init(_ rawValue: UInt16) { self.rawValue = rawValue }
     static func < (lhs: KeyCode, rhs: KeyCode) -> Bool { lhs.rawValue < rhs.rawValue }
+
+    /// USB HID keyboard-page modifier usages, retaining their left/right physical identity.
+    var physicalModifier: KeyModifier? {
+        switch rawValue {
+        case 0xE0, 0xE4: .control
+        case 0xE1, 0xE5: .shift
+        case 0xE2, 0xE6: .option
+        case 0xE3, 0xE7: .command
+        default: nil
+        }
+    }
+
+    var isCanonicalSyntheticModifierUsage: Bool {
+        switch rawValue {
+        case 0xE0, 0xE1, 0xE2, 0xE3: true
+        default: false
+        }
+    }
 }
 
 /// The four modifiers a hold can form. Canonical order is the emission order.
@@ -105,4 +123,11 @@ struct KeyboardResolution: Equatable, Sendable {
     /// scope: the caller forwards that event untouched and the engine kept no
     /// state for it.
     var isInScope: Bool = true
+    /// A resolver resource bound was exceeded. Any returned balancing output must be emitted
+    /// before the owner enters its fail-closed lifecycle.
+    var failure: KeyboardResolutionFailure?
+}
+
+enum KeyboardResolutionFailure: Equatable, Sendable {
+    case inboxCapacityExceeded(device: KeyboardDeviceID, limit: Int)
 }
